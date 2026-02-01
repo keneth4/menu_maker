@@ -78,6 +78,7 @@ Con una arquitectura basada en patrones de diseño sólidos, el producto puede e
 - Definir requisitos clave con casos de uso reales.
 - Diseñar wireframes y flujo del editor.
 - Prototipo inicial del menú estilo **Bar/Pub elegante**.
+- Configurar entorno de desarrollo dentro de contenedor Docker.
 
 ### Fase 2 — MVP funcional
 - Implementar editor con carga de assets.
