@@ -63,40 +63,93 @@ Se sugiere adoptar patrones de diseño reconocidos por su escalabilidad y manten
 - **Observer**: para actualizar la vista previa en tiempo real cuando cambia un asset.
 - **Builder**: para construir el menú exportable paso a paso con parámetros opcionales.
 
+### 2.5. Criterios técnicos clave
+- **Mobile-first**: toda decisión de interfaz, rendimiento y flujo se valida primero en móvil.
+- **Test-driven**: se escribe la prueba antes de la implementación (unit, integration y e2e).
+- **Assets GIF**: no se usan splats en runtime; se priorizan GIF/MP4/WEBM optimizados para carga rápida.
+- **Interactividad 360°**: el GIF/asset 360° puede responder a gestos horizontales para simular rotación.
+
+### 2.6. Stack recomendado (orientado a rendimiento móvil)
+- **Frontend**: Svelte + Vite + TypeScript (bundle ligero, excelente performance móvil).
+- **Estilos**: Tailwind CSS (consistencia visual y velocidad de iteración).
+- **Testing**: Vitest (unit/integration) + Playwright (e2e y mobile emulation).
+- **Exportación estática**: build a HTML/CSS/JS + assets (sin backend).
+- **Optimización assets**: pipeline de compresión (GIF/MP4/WEBM) y lazy loading.
+
 ---
 
-## 3. Conclusión
+## 3. Plan de desarrollo (etapas y milestones, test-driven)
+
+### Etapa 0 — Investigación y definición
+**Objetivo:** alinear visión, alcance del MVP y requisitos críticos de performance móvil.
+
+**Milestones**
+- Documento de requisitos (funcionales y no funcionales).
+- Benchmark de formatos (GIF/MP4/WEBM) y límites de peso por asset.
+- Lista inicial de assets requeridos para prototipo (fondos + 360°).
+
+**Assets requeridos (para iniciar el prototipo)**
+- 3–5 fondos animados (GIF/MP4/WEBM) del restaurante/bar.
+- 3–6 assets 360° por categoría (GIF/MP4/WEBM).
+- Textos base en al menos 2 idiomas (nombre + descripción + precio).
+
+**Pruebas**
+- Definir criterios de rendimiento (LCP, peso máximo de assets).
+
+### Etapa 1 — Base técnica y arquitectura
+**Objetivo:** construir la base del proyecto en contenedor y con arquitectura modular.
+
+**Milestones**
+- Stack definido (frontend, build, testing) enfocado a performance móvil.
+- Arquitectura basada en patrones (Factory Method, Strategy, Builder).
+- Pipeline de pruebas automatizado (unit/integration/e2e).
+
+**Pruebas**
+- Unit tests para compositores de plantilla.
+- Integration tests para pipeline de exportación.
+
+### Etapa 2 — MVP (plantilla Bar/Pub)
+**Objetivo:** primer menú interactivo con fondo animado y carrusel de bebidas.
+
+**Milestones**
+- Editor básico: cargar fondos y assets 360°.
+- Vista previa mobile-first con navegación por categorías.
+- Selector de idioma global con textos base.
+
+**Pruebas**
+- e2e de flujo editor → preview → export.
+- Tests de accesibilidad (contraste, navegación táctil).
+
+### Etapa 3 — Exportación y optimización
+**Objetivo:** generar sitios estáticos confiables y ligeros.
+
+**Milestones**
+- Exportación a ZIP (HTML + assets + manifest).
+- Optimización de assets (compresión y lazy loading).
+- Soporte offline básico (cache estático).
+
+**Pruebas**
+- Tests de peso máximo del bundle.
+- Tests de carga en dispositivos móviles de gama media.
+
+### Etapa 4 — Producto estable y escalable
+**Objetivo:** consolidar 5 plantillas y mejorar experiencia de edición.
+
+**Milestones**
+- 5 plantillas listas.
+- Multi-idioma completo por platillo.
+- Biblioteca de estilos y tipografías.
+
+**Pruebas**
+- Regression tests por plantilla.
+- Visual tests para layouts mobile.
+
+---
+
+## 4. Conclusión
 La propuesta de plataforma atiende una necesidad real: mejorar la presentación y percepción de valor en menús de restaurantes. El uso de animaciones 360° y wigglegramas aporta diferenciación visual clara, mientras que la exportación sin servidor elimina fricción técnica para el cliente final.
 
 Con una arquitectura basada en patrones de diseño sólidos, el producto puede escalar hacia nuevas plantillas, nuevos formatos de contenido y funciones comerciales (analytics, A/B testing, etc.).
-
----
-
-## 4. Plan de desarrollo
-
-### Fase 1 — Descubrimiento y prototipo
-- Definir requisitos clave con casos de uso reales.
-- Diseñar wireframes y flujo del editor.
-- Prototipo inicial del menú estilo **Bar/Pub elegante**.
-- Configurar entorno de desarrollo dentro de contenedor Docker.
-
-### Fase 2 — MVP funcional
-- Implementar editor con carga de assets.
-- Crear al menos 2 plantillas funcionales.
-- Renderizado de previews en tiempo real.
-- Exportación básica en HTML estático.
-
-### Fase 3 — Producto estable
-- Soporte multilenguaje completo.
-- Administración de plantillas (5 base).
-- Sistema de previsualización en mobile.
-- Optimización de rendimiento para animaciones.
-
-### Fase 4 — Escalamiento
-- Analíticas de interacción por platillo.
-- Integración con QR para acceso rápido.
-- Marketplace de templates premium.
-- Onboarding guiado para usuarios nuevos.
 
 ---
 
