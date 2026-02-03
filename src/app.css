@@ -11,6 +11,64 @@ body {
   margin: 0;
 }
 
+.project-pill {
+  min-width: 180px;
+  display: grid;
+  gap: 6px;
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  transition: border 200ms ease, transform 200ms ease;
+}
+
+.project-pill.active {
+  border-color: rgba(251, 191, 36, 0.5);
+  transform: translateY(-1px);
+}
+
+.project-pill:focus-visible {
+  outline: 2px solid rgba(251, 191, 36, 0.65);
+  outline-offset: 2px;
+}
+
+.editor-cta {
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(251, 191, 36, 0.16);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.editor-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.editor-input {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.editor-input:focus {
+  outline: 2px solid rgba(251, 191, 36, 0.4);
+  outline-offset: 2px;
+}
+
 .dish-frame {
   position: relative;
   width: 96px;

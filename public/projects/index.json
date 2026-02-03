@@ -1,0 +1,10 @@
+{
+  "projects": [
+    {
+      "slug": "demo",
+      "name": "Bar / Pub elegante",
+      "template": "bar-pub",
+      "cover": "/projects/demo/assets/backgrounds/background.webp"
+    }
+  ]
+}

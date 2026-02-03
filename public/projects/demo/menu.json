@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "slug": "demo",
+    "name": "Bar / Pub elegante",
+    "template": "bar-pub",
+    "locales": ["es", "en"],
+    "defaultLocale": "es",
+    "currency": "MXN"
+  },
+  "backgrounds": [
+    {
+      "id": "bg-main",
+      "label": "Fondo principal",
+      "src": "/projects/demo/assets/backgrounds/background.webp",
+      "type": "image",
+      "alt": "Fondo animado del bar"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cocktails",
+      "name": {
+        "es": "Cócteles",
+        "en": "Cocktails"
+      },
+      "items": [
+        {
+          "id": "negroni",
+          "name": {
+            "es": "Negroni Ahumado",
+            "en": "Smoked Negroni"
+          },
+          "description": {
+            "es": "Gin, vermut rojo, bitter.",
+            "en": "Gin, red vermouth, bitters."
+          },
+          "price": {
+            "amount": 180,
+            "currency": "MXN",
+            "display": "$180"
+          },
+          "media": {
+            "hero360": "/projects/demo/assets/dishes/sample360food.gif"
+          }
+        }
+      ]
+    },
+    {
+      "id": "special",
+      "name": {
+        "es": "Especial",
+        "en": "Special"
+      },
+      "items": [
+        {
+          "id": "tapas",
+          "name": {
+            "es": "Tapas de la casa",
+            "en": "House tapas"
+          },
+          "description": {
+            "es": "Aceituna, jamón ibérico, pan.",
+            "en": "Olives, Iberian ham, bread."
+          },
+          "price": {
+            "amount": 140,
+            "currency": "MXN",
+            "display": "$140"
+          },
+          "media": {
+            "hero360": "/projects/demo/assets/dishes/sample360food.gif"
+          }
+        }
+      ]
+    }
+  ],
+  "sound": {
+    "enabled": false,
+    "theme": "bar-amber",
+    "volume": 0.6,
+    "map": {
+      "tap": "/assets/sounds/tap.mp3",
+      "confirm": "/assets/sounds/confirm.mp3",
+      "success": "/assets/sounds/success.mp3"
+    }
+  }
+}
