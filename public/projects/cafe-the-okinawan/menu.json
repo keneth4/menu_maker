@@ -1,26 +1,29 @@
 {
   "meta": {
-    "slug": "demo",
-    "name": "Bar / Pub elegante",
-    "restaurantName": {
-      "es": "Bar Eclipse",
-      "en": "Eclipse Bar"
-    },
-    "title": {
-      "es": "Menú elegante",
-      "en": "Elegant menu"
-    },
+    "slug": "cafe-the-okinawan",
+    "name": "Café The Okinawan",
     "template": "bar-pub",
-    "locales": ["es", "en"],
+    "locales": [
+      "es",
+      "en"
+    ],
     "defaultLocale": "es",
-    "currency": "MXN",
-    "currencyPosition": "left"
+    "currency": "EUR",
+    "currencyPosition": "right",
+    "title": {
+      "es": "Winterlichter",
+      "en": ""
+    },
+    "restaurantName": {
+      "es": "Luisenpark",
+      "en": ""
+    }
   },
   "backgrounds": [
     {
       "id": "bg-main",
       "label": "Fondo principal",
-      "src": "/projects/demo/assets/backgrounds/background.webp",
+      "src": "/projects/cafe-the-okinawan/assets/backgrounds/background.webp",
       "type": "image",
       "alt": "Fondo animado del bar"
     }
@@ -49,7 +52,7 @@
             "display": "$180"
           },
           "media": {
-            "hero360": "/projects/demo/assets/dishes/sample360food.gif"
+            "hero360": "/projects/cafe-the-okinawan/assets/dishes/sample360food.gif"
           }
         }
       ]
@@ -77,7 +80,7 @@
             "display": "$140"
           },
           "media": {
-            "hero360": "/projects/demo/assets/dishes/sample360food.gif"
+            "hero360": "/projects/cafe-the-okinawan/assets/dishes/sample360food.gif"
           }
         }
       ]

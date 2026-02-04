@@ -1,10 +1,10 @@
 {
   "projects": [
     {
-      "slug": "demo",
-      "name": "Bar / Pub elegante",
+      "slug": "cafe-the-okinawan",
+      "name": "Café The Okinawan",
       "template": "bar-pub",
-      "cover": "/projects/demo/assets/backgrounds/background.webp"
+      "cover": "/projects/cafe-the-okinawan/assets/backgrounds/background.webp"
     }
   ]
 }

@@ -16,6 +16,7 @@
   let locale = "es";
   let loadError = "";
   let activeProject: MenuProject | null = null;
+  let showLanding = true;
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
   let deviceMode: "mobile" | "desktop" = "desktop";
@@ -108,6 +109,11 @@
       appTitle: "Menú Interactivo",
       studioTitle: "Menú Interactivo",
       studioSubtitle: "Centro de control del proyecto.",
+      landingTitle: "Menu Maker",
+      landingBy: "By keneth4",
+      landingCreate: "Crear proyecto",
+      landingOpen: "Abrir proyecto",
+      landingWizard: "Iniciar wizard",
       tabProject: "Proyecto",
       tabAssets: "Assets",
       tabEdit: "Edición",
@@ -214,6 +220,11 @@
       appTitle: "Interactive Menu",
       studioTitle: "Interactive Menu",
       studioSubtitle: "Project control center.",
+      landingTitle: "Menu Maker",
+      landingBy: "By keneth4",
+      landingCreate: "Create project",
+      landingOpen: "Open project",
+      landingWizard: "Run wizard",
       tabProject: "Project",
       tabAssets: "Assets",
       tabEdit: "Edit",
@@ -920,10 +931,20 @@ body {
   gap: 24px;
 }
 .menu-topbar {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: center;
+  align-items: flex-start;
   gap: 16px;
+  text-align: center;
+}
+.menu-title-block {
+  flex: 1;
+}
+.menu-lang {
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 .menu-eyebrow {
   font-size: 0.7rem;
@@ -1154,7 +1175,7 @@ const render = () => {
       <div class="menu-overlay"></div>
       <div class="menu-content">
         <header class="menu-topbar">
-          <div>
+          <div class="menu-title-block">
             <p class="menu-eyebrow">\${restaurantName}</p>
             <h1 class="menu-title">\${menuTitle || "Menu"}</h1>
           </div>
@@ -1613,6 +1634,7 @@ render();
       projects = [...projects, summary];
     }
     openError = "";
+    showLanding = false;
   };
 
   const createNewProject = async () => {
@@ -1631,6 +1653,27 @@ render();
     if (assetMode === "bridge") {
       await refreshBridgeEntries();
     }
+  };
+
+  const startCreateProject = async () => {
+    await createNewProject();
+    editorTab = "info";
+    editorOpen = true;
+    showLanding = false;
+  };
+
+  const startWizard = async () => {
+    await createNewProject();
+    editorTab = "wizard";
+    editorOpen = true;
+    showLanding = false;
+  };
+
+  const startOpenProject = () => {
+    editorTab = "info";
+    editorOpen = true;
+    showLanding = false;
+    openProjectDialog();
   };
 
   const openProjectDialog = () => {
@@ -2512,7 +2555,52 @@ render();
 </script>
 
 <main class="min-h-screen app-shell {layoutMode}">
-  {#if loadError}
+  <input
+    class="sr-only"
+    type="file"
+    accept=".json,.zip,application/zip"
+    bind:this={projectFileInput}
+    on:change={handleProjectFile}
+  />
+  {#if showLanding}
+    <section class="landing-screen">
+      <header class="landing-header">
+        <h1>{t("landingTitle")}</h1>
+        <p>{t("landingBy")}</p>
+      </header>
+      <div class="landing-actions">
+        <button type="button" class="landing-action" on:click={startCreateProject}>
+          <span class="landing-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14"></path>
+              <path d="M5 12h14"></path>
+            </svg>
+          </span>
+          <span>{t("landingCreate")}</span>
+        </button>
+        <button type="button" class="landing-action" on:click={startOpenProject}>
+          <span class="landing-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
+              <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
+            </svg>
+          </span>
+          <span>{t("landingOpen")}</span>
+        </button>
+        <button type="button" class="landing-action" on:click={startWizard}>
+          <span class="landing-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 4h8v8H4z"></path>
+              <path d="M12 12h8v8h-8z"></path>
+              <path d="M12 4h8v8h-8z"></path>
+              <path d="M4 12h8v8H4z"></path>
+            </svg>
+          </span>
+          <span>{t("landingWizard")}</span>
+        </button>
+      </div>
+    </section>
+  {:else if loadError}
     <div class="rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-sm text-red-100">
       {loadError}
     </div>
@@ -2670,13 +2758,6 @@ render();
                   <rect x="4" y="13" width="16" height="8" rx="2"></rect>
                 </svg>
               </button>
-              <input
-                class="sr-only"
-                type="file"
-                accept=".json,.zip,application/zip"
-                bind:this={projectFileInput}
-                on:change={handleProjectFile}
-              />
             </div>
 
             {#if openError}
@@ -2857,9 +2938,33 @@ render();
                         <p class="asset-meta">{row.entry.path}</p>
                       </div>
                       <div class="asset-actions">
-                        <button type="button" on:click={() => renameEntry(row.entry)}>{t("rename")}</button>
-                        <button type="button" on:click={() => moveEntry(row.entry)}>{t("move")}</button>
-                        <button type="button" on:click={() => deleteEntry(row.entry)}>{t("delete")}</button>
+                        <button
+                          type="button"
+                          class="asset-icon-btn"
+                          title={t("rename")}
+                          aria-label={t("rename")}
+                          on:click={() => renameEntry(row.entry)}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          class="asset-icon-btn"
+                          title={t("move")}
+                          aria-label={t("move")}
+                          on:click={() => moveEntry(row.entry)}
+                        >
+                          ⇄
+                        </button>
+                        <button
+                          type="button"
+                          class="asset-icon-btn danger"
+                          title={t("delete")}
+                          aria-label={t("delete")}
+                          on:click={() => deleteEntry(row.entry)}
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
                   {/each}
@@ -3342,7 +3447,7 @@ render();
               </div>
             {:else}
               <header class="menu-topbar">
-                <div>
+                <div class="menu-title-block">
                   {#if textOf(activeProject.meta.restaurantName)}
                     <p class="menu-eyebrow">{textOf(activeProject.meta.restaurantName)}</p>
                   {/if}
