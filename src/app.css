@@ -447,6 +447,7 @@ body {
   background: rgba(2, 6, 23, 0.9);
   display: flex;
   flex-direction: column;
+  font-family: var(--menu-font, "Fraunces", "Georgia", serif);
 }
 
 .menu-background {
@@ -653,7 +654,18 @@ body {
   width: 100%;
 }
 
+.carousel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .carousel-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.95rem;
   color: #f8fafc;
 }
@@ -666,6 +678,12 @@ body {
 .carousel-price {
   font-size: 0.9rem;
   color: #fbbf24;
+  text-align: right;
+}
+
+.vegan-icon {
+  font-size: 0.75rem;
+  opacity: 0.8;
 }
 
 .dish-modal {
@@ -721,6 +739,29 @@ body {
 .dish-modal__desc {
   font-size: 0.85rem;
   color: rgba(226, 232, 240, 0.75);
+}
+
+.dish-modal__long {
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.dish-modal__allergens {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(251, 191, 36, 0.7);
+}
+
+.dish-modal__badge {
+  align-self: start;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  color: #fde68a;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
 }
 
 .dish-modal__price {
@@ -1150,6 +1191,19 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.2em;
   color: rgba(226, 232, 240, 0.7);
+}
+
+.editor-field.editor-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editor-field.editor-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #fbbf24;
 }
 
 .editor-input {

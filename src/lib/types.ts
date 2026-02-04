@@ -16,12 +16,14 @@ export type MenuItem = {
   id: string;
   name: LocalizedText;
   description?: LocalizedText;
+  longDescription?: LocalizedText;
   price: {
     amount: number;
     currency: string;
     display?: string;
   };
   allergens?: string[];
+  vegan?: boolean;
   media: {
     hero360?: string;
     gallery?: string[];
@@ -53,6 +55,8 @@ export type MenuProject = {
     name: string;
     restaurantName?: LocalizedText;
     title?: LocalizedText;
+    fontFamily?: string;
+    fontSource?: string;
     template: string;
     locales: LocaleCode[];
     defaultLocale: LocaleCode;

@@ -17,6 +17,9 @@
   let loadError = "";
   let activeProject: MenuProject | null = null;
   let showLanding = true;
+  let previewFontStack = "";
+  let fontFaceCss = "";
+  let fontStyleEl: HTMLStyleElement | null = null;
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
   let deviceMode: "mobile" | "desktop" = "desktop";
@@ -81,6 +84,7 @@
   }[] = [];
   let uploadTargetPath = "";
   let uploadFolderOptions: { value: string; label: string }[] = [];
+  let fontChoice = "Fraunces";
 
   const languageOptions = [
     { code: "es", label: "Español" },
@@ -102,6 +106,14 @@
     { code: "JPY", label: "Yen", symbol: "¥" },
     { code: "COP", label: "Peso COP", symbol: "$" },
     { code: "ARS", label: "Peso ARS", symbol: "$" }
+  ];
+
+  const fontOptions = [
+    { value: "Fraunces", label: "Fraunces" },
+    { value: "Cinzel", label: "Cinzel" },
+    { value: "Cormorant Garamond", label: "Cormorant Garamond" },
+    { value: "Playfair Display", label: "Playfair Display" },
+    { value: "Poppins", label: "Poppins" }
   ];
 
   const uiCopy = {
@@ -160,6 +172,10 @@
       template: "Template",
       languages: "Idiomas disponibles",
       defaultLang: "Idioma default",
+      font: "Tipografía",
+      fontCustom: "Fuente personalizada",
+      fontCustomName: "Nombre de fuente",
+      fontCustomSrc: "Archivo de fuente",
       restaurantName: "Nombre del restaurante",
       menuTitle: "Título del menú",
       menuTitleFallback: "Menú",
@@ -177,6 +193,9 @@
       dishData: "Datos del platillo",
       name: "Nombre",
       description: "Descripción",
+      longDescription: "Historia / descripción larga",
+      allergensLabel: "Alérgenos",
+      veganLabel: "Vegano",
       price: "Precio",
       asset360: "Asset 360",
       addSection: "Agregar sección",
@@ -271,6 +290,10 @@
       template: "Template",
       languages: "Available languages",
       defaultLang: "Default language",
+      font: "Typography",
+      fontCustom: "Custom font",
+      fontCustomName: "Font name",
+      fontCustomSrc: "Font file",
       restaurantName: "Restaurant name",
       menuTitle: "Menu title",
       menuTitleFallback: "Menu",
@@ -288,6 +311,9 @@
       dishData: "Dish details",
       name: "Name",
       description: "Description",
+      longDescription: "History / long description",
+      allergensLabel: "Allergens",
+      veganLabel: "Vegan",
       price: "Price",
       asset360: "360 asset",
       addSection: "Add section",
@@ -382,6 +408,8 @@
     if (!draft.meta.currencyPosition) {
       draft.meta.currencyPosition = "left";
     }
+    const matchesFont = fontOptions.some((option) => option.value === draft.meta.fontFamily);
+    fontChoice = matchesFont ? draft.meta.fontFamily ?? "Fraunces" : "custom";
     const validWizardCategory = draft.categories.some((item) => item.id === wizardCategoryId);
     if (!wizardCategoryId || !validWizardCategory) {
       wizardCategoryId = draft.categories[0]?.id ?? "";
@@ -413,7 +441,17 @@
           group: "Platillos"
         }))
     );
-    projectAssets = [...backgrounds, ...dishes];
+    const fonts = draft.meta.fontSource
+      ? [
+          {
+            id: "font-source",
+            label: draft.meta.fontFamily ?? "Font",
+            src: draft.meta.fontSource ?? "",
+            group: "Fuentes"
+          }
+        ]
+      : [];
+    projectAssets = [...backgrounds, ...dishes, ...fonts];
   }
 
   $: assetOptions = rootFiles.length
@@ -629,6 +667,25 @@
   });
 
   $: activeProject = draft ?? project;
+  $: previewFontStack = activeProject ? buildFontStack(activeProject.meta.fontFamily) : "";
+  $: fontFaceCss = activeProject
+    ? buildFontFaceCss(activeProject.meta.fontFamily, activeProject.meta.fontSource)
+    : "";
+  $: if (typeof document !== "undefined") {
+    if (!fontFaceCss) {
+      if (fontStyleEl) {
+        fontStyleEl.remove();
+        fontStyleEl = null;
+      }
+    } else {
+      if (!fontStyleEl) {
+        fontStyleEl = document.createElement("style");
+        fontStyleEl.dataset.menuFont = "true";
+        document.head.appendChild(fontStyleEl);
+      }
+      fontStyleEl.textContent = fontFaceCss;
+    }
+  }
 
   const touchDraft = () => {
     if (draft) {
@@ -666,6 +723,12 @@
     if (!value.meta.restaurantName) {
       value.meta.restaurantName = createLocalized(locales);
     }
+    if (!value.meta.fontFamily) {
+      value.meta.fontFamily = "Fraunces";
+    }
+    if (value.meta.fontSource === undefined) {
+      value.meta.fontSource = "";
+    }
     if (!value.meta.currencyPosition) {
       value.meta.currencyPosition = "left";
     }
@@ -701,6 +764,8 @@
       name: "Nuevo proyecto",
       restaurantName: { es: "", en: "" },
       title: { es: "", en: "" },
+      fontFamily: "Fraunces",
+      fontSource: "",
       template: "",
       locales: ["es", "en"],
       defaultLocale: "es",
@@ -781,6 +846,9 @@
     const updatePath = (value: string) =>
       value.startsWith(fromPrefix) ? `${toPrefix}${value.slice(fromPrefix.length)}` : value;
 
+    if (draft.meta.fontSource) {
+      draft.meta.fontSource = updatePath(draft.meta.fontSource);
+    }
     draft.backgrounds = draft.backgrounds.map((bg) => ({
       ...bg,
       src: bg.src ? updatePath(bg.src) : bg.src
@@ -811,6 +879,9 @@
   };
 
   const applyImportedPaths = (data: MenuProject, slug: string) => {
+    if (data.meta.fontSource) {
+      data.meta.fontSource = mapImportedAssetPath(data.meta.fontSource, slug);
+    }
     data.backgrounds = data.backgrounds.map((bg) => ({
       ...bg,
       src: bg.src ? mapImportedAssetPath(bg.src, slug) : bg.src
@@ -908,6 +979,7 @@ body {
   min-height: 100vh;
   position: relative;
   overflow: hidden;
+  font-family: var(--menu-font, "Fraunces", "Georgia", serif);
 }
 .menu-background {
   position: absolute;
@@ -1039,9 +1111,16 @@ body {
   display: grid;
   gap: 6px;
 }
-.carousel-title { margin: 0; font-size: 0.95rem; }
+.carousel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.carousel-title { margin: 0; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px; }
 .carousel-desc { margin: 0; font-size: 0.75rem; color: rgba(226, 232, 240, 0.75); }
-.carousel-price { font-weight: 600; color: #fbbf24; }
+.carousel-price { font-weight: 600; color: #fbbf24; text-align: right; }
+.vegan-icon { font-size: 0.75rem; opacity: 0.8; }
 .dish-modal {
   position: fixed;
   inset: 0;
@@ -1087,6 +1166,9 @@ body {
 }
 .dish-modal__title { margin: 0; font-size: 1.2rem; }
 .dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
+.dish-modal__long { margin: 0; font-size: 0.8rem; color: rgba(226,232,240,0.7); }
+.dish-modal__allergens { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(251, 191, 36, 0.7); }
+.dish-modal__badge { align-self: start; border-radius: 999px; padding: 4px 10px; border: 1px solid rgba(251, 191, 36, 0.5); color: #fde68a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em; }
 .dish-modal__price { margin: 0; font-weight: 600; color: #fbbf24; }
 @media (min-width: 900px) {
   .menu-content {
@@ -1104,6 +1186,9 @@ const currencySymbols = {
 };
 const LOOP_COPIES = 5;
 let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
+const fontFamily = DATA.meta.fontFamily || "Fraunces";
+const fontSource = DATA.meta.fontSource || "";
+let fontInjected = false;
 const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
@@ -1113,6 +1198,25 @@ const formatPrice = (amount) => {
   const symbol = currencySymbols[DATA.meta.currency] || DATA.meta.currency;
   const position = DATA.meta.currencyPosition || "left";
   return position === "left" ? symbol + amount : amount + symbol;
+};
+const getFontStack = (family) => {
+  const cleaned = (family || "").replace(/"/g, "");
+  const primary = cleaned ? '"' + cleaned + '", ' : "";
+  return primary + '"Fraunces", "Georgia", serif';
+};
+const ensureFont = () => {
+  if (!fontSource || fontInjected) return;
+  const ext = fontSource.split(".").pop()?.toLowerCase();
+  let format = "";
+  if (ext === "woff2") format = "woff2";
+  if (ext === "woff") format = "woff";
+  if (ext === "otf") format = "opentype";
+  if (ext === "ttf") format = "truetype";
+  const formatLine = format ? ' format("' + format + '")' : "";
+  const style = document.createElement("style");
+  style.textContent = '@font-face { font-family: "' + fontFamily + '"; src: url("' + fontSource + '")' + formatLine + '; font-display: swap; }';
+  document.head.appendChild(style);
+  fontInjected = true;
 };
 
 const getLoopCopies = (count) => (count > 1 ? LOOP_COPIES : 1);
@@ -1147,9 +1251,11 @@ const buildCarousel = (category) => {
                 <img src="\${entry.item.media.hero360 || ""}" alt="\${textOf(entry.item.name)}" />
               </div>
               <div class="carousel-text">
-                <p class="carousel-title">\${textOf(entry.item.name)}</p>
+                <div class="carousel-row">
+                  <p class="carousel-title">\${textOf(entry.item.name)}\${entry.item.vegan ? '<span class="vegan-icon">🌿</span>' : ""}</p>
+                  <span class="carousel-price">\${formatPrice(entry.item.price.amount)}</span>
+                </div>
                 <p class="carousel-desc">\${textOf(entry.item.description)}</p>
-                <span class="carousel-price">\${formatPrice(entry.item.price.amount)}</span>
               </div>
             </button>
           \`
@@ -1169,6 +1275,7 @@ const render = () => {
     DATA.meta.title?.[locale] ??
     DATA.meta.title?.[DATA.meta.defaultLocale] ??
     "";
+  ensureFont();
   app.innerHTML = \`
     <div class="menu-preview">
       <div class="menu-background" style="background-image: url('\${bg}')"></div>
@@ -1191,6 +1298,10 @@ const render = () => {
       </div>
     </div>
   \`;
+  const preview = app.querySelector(".menu-preview");
+  if (preview) {
+    preview.style.setProperty("--menu-font", getFontStack(fontFamily));
+  }
   const localeSelect = document.getElementById("menu-locale");
   localeSelect?.addEventListener("change", (event) => {
     locale = event.target.value;
@@ -1264,6 +1375,10 @@ const bindCards = () => {
       const category = DATA.categories.find((item) => item.id === categoryId);
       const dish = category?.items.find((item) => item.id === itemId);
       if (!dish) return;
+      const allergenLabel = locale === "es" ? "Alérgenos" : "Allergens";
+      const veganLabel = locale === "es" ? "Vegano" : "Vegan";
+      const longDesc = textOf(dish.longDescription);
+      const allergens = dish.allergens?.length ? dish.allergens.join(", ") : "";
       modalContent.innerHTML = \`
         <button class="dish-modal__close" id="modal-close">✕</button>
         <div class="dish-modal__media">
@@ -1272,6 +1387,9 @@ const bindCards = () => {
         <div>
           <p class="dish-modal__title">\${textOf(dish.name)}</p>
           <p class="dish-modal__desc">\${textOf(dish.description)}</p>
+          \${longDesc ? '<p class="dish-modal__long">' + longDesc + '</p>' : ""}
+          \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
+          \${dish.vegan ? '<span class="dish-modal__badge">🌿 ' + veganLabel + '</span>' : ""}
           <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
         </div>
       \`;
@@ -1314,6 +1432,9 @@ render();
 
   const collectAssetPaths = (data: MenuProject) => {
     const assets = new Set<string>();
+    if (data.meta.fontSource) {
+      assets.add(data.meta.fontSource);
+    }
     data.backgrounds.forEach((bg) => {
       if (bg.src) assets.add(bg.src);
     });
@@ -1349,6 +1470,14 @@ render();
         zipPath: `${slug}/assets/${relativePath}`
       };
     });
+
+    if (exportProject.meta.fontSource) {
+      const normalized = normalizePath(exportProject.meta.fontSource);
+      const pair = assetPairs.find((item) => item.sourcePath === normalized);
+      if (pair) {
+        exportProject.meta.fontSource = `assets/${pair.relativePath}`;
+      }
+    }
 
     exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
       const normalized = normalizePath(bg.src || "");
@@ -1438,6 +1567,13 @@ render();
         const pair = assetPairs.find((item) => item.sourcePath === normalized);
         return { ...bg, src: pair ? pair.exportPath : bg.src };
       });
+      if (exportProject.meta.fontSource) {
+        const normalized = normalizePath(exportProject.meta.fontSource);
+        const pair = assetPairs.find((item) => item.sourcePath === normalized);
+        if (pair) {
+          exportProject.meta.fontSource = pair.exportPath;
+        }
+      }
       exportProject.categories = exportProject.categories.map((category) => ({
         ...category,
         items: category.items.map((item) => {
@@ -1950,6 +2086,29 @@ render();
     return "application/octet-stream";
   };
 
+  const getFontFormat = (value: string) => {
+    const ext = value.split(".").pop()?.toLowerCase();
+    if (!ext) return "";
+    if (ext === "woff2") return "woff2";
+    if (ext === "woff") return "woff";
+    if (ext === "otf") return "opentype";
+    if (ext === "ttf") return "truetype";
+    return "";
+  };
+
+  const buildFontStack = (family?: string) => {
+    const cleaned = (family || "").replace(/"/g, "").trim();
+    const primary = cleaned ? `"${cleaned}", ` : "";
+    return `${primary}"Fraunces", "Georgia", serif`;
+  };
+
+  const buildFontFaceCss = (family?: string, source?: string) => {
+    if (!family || !source) return "";
+    const format = getFontFormat(source);
+    const formatLine = format ? ` format("${format}")` : "";
+    return `@font-face { font-family: "${family}"; src: url("${source}")${formatLine}; font-display: swap; }`;
+  };
+
   const getDirectoryHandleByPath = async (
     path: string,
     create = false
@@ -2357,10 +2516,13 @@ render();
       id,
       name: createLocalized(draft.meta.locales),
       description: createLocalized(draft.meta.locales),
+      longDescription: createLocalized(draft.meta.locales),
       price: {
         amount: 0,
         currency: draft.meta.currency
       },
+      allergens: [],
+      vegan: false,
       media: {
         hero360: ""
       }
@@ -2401,10 +2563,13 @@ render();
       id,
       name: createLocalized(draft.meta.locales),
       description: createLocalized(draft.meta.locales),
+      longDescription: createLocalized(draft.meta.locales),
       price: {
         amount: 0,
         currency: draft.meta.currency
       },
+      allergens: [],
+      vegan: false,
       media: {
         hero360: ""
       }
@@ -2524,10 +2689,34 @@ render();
     return item.description;
   };
 
+  const ensureLongDescription = (item: MenuItem) => {
+    if (!item.longDescription) {
+      item.longDescription = {};
+    }
+    return item.longDescription;
+  };
+
   const handleDescriptionInput = (item: MenuItem, lang: string, event: Event) => {
     const input = event.currentTarget as HTMLTextAreaElement;
     const desc = ensureDescription(item);
     desc[lang] = input.value;
+    touchDraft();
+  };
+
+  const handleLongDescriptionInput = (item: MenuItem, lang: string, event: Event) => {
+    const input = event.currentTarget as HTMLTextAreaElement;
+    const desc = ensureLongDescription(item);
+    desc[lang] = input.value;
+    touchDraft();
+  };
+
+  const handleAllergensInput = (item: MenuItem, event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const values = input.value
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    item.allergens = values;
     touchDraft();
   };
 
@@ -2551,6 +2740,47 @@ render();
   const handleCurrencyChange = (event: Event) => {
     const input = event.currentTarget as HTMLSelectElement;
     setCurrency(input.value);
+  };
+
+  const handleFontChoice = (value: string) => {
+    if (!draft) return;
+    if (value === "custom") {
+      if (!draft.meta.fontFamily || fontOptions.some((opt) => opt.value === draft.meta.fontFamily)) {
+        draft.meta.fontFamily = "Custom Font";
+      }
+      if (draft.meta.fontSource === undefined) {
+        draft.meta.fontSource = "";
+      }
+    } else {
+      draft.meta.fontFamily = value;
+      draft.meta.fontSource = "";
+    }
+    touchDraft();
+  };
+
+  const handleFontSelect = (event: Event) => {
+    const input = event.currentTarget as HTMLSelectElement;
+    handleFontChoice(input.value);
+  };
+
+  const handleCustomFontNameInput = (event: Event) => {
+    if (!draft) return;
+    const input = event.currentTarget as HTMLInputElement;
+    draft.meta.fontFamily = input.value;
+    touchDraft();
+  };
+
+  const handleCustomFontSourceInput = (event: Event) => {
+    if (!draft) return;
+    const input = event.currentTarget as HTMLInputElement;
+    draft.meta.fontSource = input.value;
+    touchDraft();
+  };
+
+  const handleVeganToggle = (item: MenuItem, event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    item.vegan = input.checked;
+    touchDraft();
   };
 </script>
 
@@ -2843,6 +3073,40 @@ render();
                       : t("currencyLeft")}
                   </button>
                 </div>
+                <label class="editor-field">
+                  <span>{t("font")}</span>
+                  <select
+                    class="editor-select"
+                    bind:value={fontChoice}
+                    on:change={handleFontSelect}
+                  >
+                    {#each fontOptions as font}
+                      <option value={font.value}>{font.label}</option>
+                    {/each}
+                    <option value="custom">{t("fontCustom")}</option>
+                  </select>
+                </label>
+                {#if fontChoice === "custom"}
+                  <label class="editor-field">
+                    <span>{t("fontCustomName")}</span>
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={draft.meta.fontFamily ?? ""}
+                      on:input={handleCustomFontNameInput}
+                    />
+                  </label>
+                  <label class="editor-field">
+                    <span>{t("fontCustomSrc")}</span>
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={draft.meta.fontSource ?? ""}
+                      list="asset-files"
+                      on:input={handleCustomFontSourceInput}
+                    />
+                  </label>
+                {/if}
               </div>
             {/if}
           {:else if editorTab === "assets"}
@@ -3134,11 +3398,38 @@ render();
                             ></textarea>
                           </label>
                           <label class="editor-field">
+                            <span>{t("longDescription")} ({editLang.toUpperCase()})</span>
+                            <textarea
+                              class="editor-input"
+                              rows="3"
+                              value={selectedItem.longDescription?.[editLang] ?? ""}
+                              on:input={(event) =>
+                                handleLongDescriptionInput(selectedItem, editLang, event)}
+                            ></textarea>
+                          </label>
+                          <label class="editor-field">
                             <span>{t("price")}</span>
                             <input
                               type="number"
                               class="editor-input"
                               bind:value={selectedItem.price.amount}
+                            />
+                          </label>
+                          <label class="editor-field">
+                            <span>{t("allergensLabel")}</span>
+                            <input
+                              type="text"
+                              class="editor-input"
+                              value={(selectedItem.allergens ?? []).join(", ")}
+                              on:input={(event) => handleAllergensInput(selectedItem, event)}
+                            />
+                          </label>
+                          <label class="editor-field editor-inline">
+                            <span>{t("veganLabel")}</span>
+                            <input
+                              type="checkbox"
+                              checked={selectedItem.vegan ?? false}
+                              on:change={(event) => handleVeganToggle(selectedItem, event)}
                             />
                           </label>
                           <label class="editor-field">
@@ -3432,7 +3723,7 @@ render();
 
       <section class="preview-panel {layoutMode}">
         <section class="preview-shell {effectivePreview}">
-          <section class="menu-preview">
+          <section class="menu-preview" style={`--menu-font:${previewFontStack};`}>
             {#if activeProject.backgrounds[0]?.src}
               <div
                 class="menu-background"
@@ -3497,11 +3788,18 @@ render();
                             />
                           </div>
                           <div class="carousel-text">
-                            <p class="carousel-title">{textOf(entry.item.name)}</p>
+                            <div class="carousel-row">
+                              <p class="carousel-title">
+                                {textOf(entry.item.name)}
+                                {#if entry.item.vegan}
+                                  <span class="vegan-icon" title={t("veganLabel")}>🌿</span>
+                                {/if}
+                              </p>
+                              <span class="carousel-price">
+                                {formatPrice(entry.item.price.amount)}
+                              </span>
+                            </div>
                             <p class="carousel-desc">{textOf(entry.item.description)}</p>
-                            <span class="carousel-price">
-                              {formatPrice(entry.item.price.amount)}
-                            </span>
                           </div>
                         </button>
                       {/each}
@@ -3529,7 +3827,18 @@ render();
         <div class="dish-modal__content">
           <p class="dish-modal__title">{textOf(dish.name)}</p>
           <p class="dish-modal__desc">{textOf(dish.description)}</p>
-                    <p class="dish-modal__price">
+          {#if textOf(dish.longDescription)}
+            <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
+          {/if}
+          {#if dish.allergens?.length}
+            <p class="dish-modal__allergens">
+              {t("allergensLabel")}: {dish.allergens.join(", ")}
+            </p>
+          {/if}
+          {#if dish.vegan}
+            <span class="dish-modal__badge">🌿 {t("veganLabel")}</span>
+          {/if}
+          <p class="dish-modal__price">
             {formatPrice(dish.price.amount)}
           </p>
         </div>
