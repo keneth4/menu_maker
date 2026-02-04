@@ -471,6 +471,8 @@ body {
   justify-items: stretch;
 }
 
+/* EXPORT_SHARED_STYLES_START */
+
 .menu-preview {
   position: relative;
   min-height: 100%;
@@ -1560,3 +1562,5 @@ body {
     align-items: start;
   }
 }
+
+/* EXPORT_SHARED_STYLES_END */

@@ -11,6 +11,7 @@
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
   import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "./lib/types";
+  import appCssRaw from "./app.css?raw";
 
   let project: MenuProject | null = null;
   let draft: MenuProject | null = null;
@@ -1312,347 +1313,51 @@
     URL.revokeObjectURL(url);
   };
 
+  const EXPORT_SHARED_STYLE_START = "/* EXPORT_SHARED_STYLES_START */";
+  const EXPORT_SHARED_STYLE_END = "/* EXPORT_SHARED_STYLES_END */";
+
+  const getSharedExportStyles = () => {
+    const start = appCssRaw.indexOf(EXPORT_SHARED_STYLE_START);
+    const end = appCssRaw.indexOf(EXPORT_SHARED_STYLE_END);
+    if (start < 0 || end < 0 || end <= start) {
+      console.warn("Shared export style markers are missing in src/app.css");
+      return "";
+    }
+    return appCssRaw
+      .slice(start + EXPORT_SHARED_STYLE_START.length, end)
+      .trim();
+  };
+
   const buildExportStyles = () => `
 * { box-sizing: border-box; }
+html,
+body,
+#app {
+  height: 100%;
+}
+html,
 body {
   margin: 0;
-  font-family: "SF Pro Display", "Poppins", system-ui, sans-serif;
+  overflow: hidden;
+}
+body {
   background: #05060f;
   color: #e2e8f0;
-  min-height: 100dvh;
 }
-.menu-preview {
+#app {
   min-height: 100vh;
   min-height: 100dvh;
-  position: relative;
-  overflow: hidden;
-  font-family: var(--menu-font, "Fraunces", "Georgia", serif);
-}
-.menu-background {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0;
-  filter: blur(2px);
-  transform: scale(1.05);
-  transition: opacity 1200ms ease;
-}
-.menu-background.active {
-  opacity: 0.92;
-}
-.menu-overlay {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));
-}
-.menu-content {
-  position: relative;
-  z-index: 2;
-  padding: 32px 24px 40px;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 24px;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
-.menu-topbar {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 16px;
-  text-align: center;
-}
-.menu-title-block {
-  flex: 1;
-}
-.menu-lang {
-  position: absolute;
-  right: 0;
-  top: 0;
-}
-.menu-eyebrow {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.3em;
-  color: rgba(226, 232, 240, 0.7);
-}
-.menu-title {
-  margin: 4px 0 0;
-  font-size: clamp(1.4rem, 3vw, 2.2rem);
-}
-.menu-select {
-  background: rgba(15, 23, 42, 0.65);
-  color: #f8fafc;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.75rem;
-}
-.menu-scroll {
-  display: grid;
-  gap: 24px;
-  scroll-snap-type: y proximity;
-  scroll-behavior: smooth;
-  overflow-y: auto;
-  padding: 0 4px 20px;
-  scrollbar-width: none;
-}
-.menu-scroll::-webkit-scrollbar { display: none; }
-.menu-section {
-  --section-focus: 1;
-  transform: scale(var(--section-focus));
-  transform-origin: center center;
-  transition: transform 240ms ease;
-  scroll-snap-align: center;
-}
-.menu-section__head {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.3em;
-  color: rgba(226, 232, 240, 0.7);
-  text-align: center;
-}
-.menu-section__title { margin: 0; font-size: 0.75rem; }
-.menu-section__count { margin: 0; font-size: 0.65rem; }
-.menu-carousel {
-  --carousel-card: clamp(200px, 70vw, 260px);
-  --carousel-edge: max(24px, calc(50% - (var(--carousel-card) / 2)));
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 12px var(--carousel-edge) 16px;
-  scroll-snap-type: x mandatory;
-  scroll-padding-inline: var(--carousel-edge);
-  scrollbar-width: none;
-  align-items: center;
-}
-.menu-carousel::-webkit-scrollbar { display: none; }
-.template-jukebox .menu-scroll {
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-}
-.template-jukebox .menu-scroll::-webkit-scrollbar { display: none; }
-.template-jukebox .menu-section {
-  min-width: 100%;
-  scroll-snap-align: start;
-  transform: none;
-}
-.template-jukebox .menu-carousel {
-  --carousel-card: clamp(220px, 62vw, 300px);
-  --carousel-edge: max(20px, calc(50% - (var(--carousel-card) / 2)));
-}
-@media (max-width: 640px) {
-  .menu-carousel {
-    --carousel-card: clamp(160px, 60vw, 220px);
-    gap: 12px;
-  }
-}
-.carousel-card {
-  --fade: 1;
-  width: var(--carousel-card);
-  min-width: var(--carousel-card);
-  max-width: var(--carousel-card);
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
-  border-radius: 22px;
-  padding: 8px 6px 12px;
-  background: transparent;
-  border: none;
-  display: grid;
-  gap: 8px;
-  text-align: left;
-  justify-items: center;
-  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 220ms ease, filter 240ms ease;
-  transform-origin: center center;
-  opacity: 1;
-  filter: none;
-  transform: scale(1);
-  color: inherit;
-}
-.menu-preview.is-enhanced .carousel-card {
-  opacity: var(--fade);
-  filter: blur(calc((1 - var(--fade)) * 8px));
-  transform: scale(calc(0.4 + var(--fade) * 0.6));
-}
-.menu-preview.is-enhanced .carousel-card.active {
-  transform: scale(1);
-  opacity: 1;
-  filter: none;
-}
-.carousel-media {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  display: grid;
-  place-items: center;
-  margin-bottom: -10px;
-}
-.carousel-media img {
-  width: 75%;
-  height: 75%;
-  object-fit: contain;
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.35));
-}
-.carousel-text {
-  width: 100%;
-  border-radius: 18px;
-  padding: 12px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: grid;
-  gap: 6px;
-}
-.carousel-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.carousel-title { margin: 0; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px; }
-.carousel-desc { margin: 0; font-size: 0.75rem; color: rgba(226, 232, 240, 0.75); }
-.carousel-price { font-weight: 600; color: #fbbf24; text-align: right; }
-.vegan-icon { font-size: 0.75rem; opacity: 0.8; }
+${getSharedExportStyles()}
+
 .dish-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 6, 23, 0.75);
   display: none;
-  place-items: center;
-  z-index: 20;
-  padding: 20px;
 }
-.dish-modal.open { display: grid; }
-.dish-modal__card {
-  max-width: 420px;
-  width: 100%;
-  border-radius: 22px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 20px;
-  position: relative;
+.dish-modal.open {
   display: grid;
-  gap: 14px;
-  color: #e2e8f0;
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-}
-.dish-modal__header {
-  display: grid;
-  gap: 8px;
-  padding-right: 56px;
-  align-self: start;
-}
-.dish-modal__close {
-  background: transparent;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  color: #e2e8f0;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 0.95rem;
-  cursor: pointer;
-  line-height: 1;
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 3;
-}
-.dish-modal__media {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  display: grid;
-  place-items: center;
-}
-.dish-modal__media img {
-  width: 70%;
-  height: 70%;
-  object-fit: contain;
-}
-.dish-modal__title { margin: 0; font-size: 1.2rem; text-align: left; }
-.dish-modal__content { display: grid; gap: 12px; align-content: start; }
-.dish-modal__text { display: grid; gap: 12px; }
-.dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
-.dish-modal__long { margin: 0; font-size: 0.8rem; color: rgba(226,232,240,0.7); }
-.dish-modal__allergens { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(251, 191, 36, 0.7); }
-.dish-modal__badge { align-self: start; border-radius: 999px; padding: 4px 10px; border: 1px solid rgba(251, 191, 36, 0.5); color: #fde68a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em; }
-.dish-modal__price { margin: 0; justify-self: end; text-align: right; font-weight: 700; color: #fbbf24; }
-@media (min-width: 900px) {
-  .menu-content {
-    padding: 40px 48px 60px;
-  }
-}
-@media (orientation: landscape) and (max-height: 560px) {
-  .dish-modal {
-    padding: 8px;
-    align-items: center;
-  }
-  .dish-modal__card {
-    width: min(960px, 96vw);
-    max-height: calc(100dvh - 16px);
-    padding: 16px 18px 18px;
-    grid-template-columns: minmax(0, 1.2fr) minmax(230px, 0.8fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas:
-      "header media"
-      "content media";
-    gap: 10px 18px;
-    align-items: stretch;
-    overflow: hidden;
-  }
-  .dish-modal__header {
-    grid-area: header;
-    align-self: start;
-    padding-right: 62px;
-  }
-  .dish-modal__title {
-    padding-right: 8px;
-    font-size: clamp(1.2rem, 2.5vw, 1.7rem);
-  }
-  .dish-modal__content {
-    grid-area: content;
-    min-height: 0;
-    height: 100%;
-    overflow: hidden;
-    padding-right: 6px;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
-    align-content: stretch;
-  }
-  .dish-modal__text {
-    align-self: center;
-  }
-  .dish-modal__media {
-    grid-area: media;
-    align-self: stretch;
-    aspect-ratio: auto;
-    min-height: 0;
-    height: 100%;
-  }
-  .dish-modal__media img {
-    width: 96%;
-    height: 96%;
-    max-height: 100%;
-    object-fit: contain;
-  }
-  .dish-modal__close {
-    top: 10px;
-    right: 12px;
-  }
-  .dish-modal__price {
-    justify-self: end;
-    text-align: right;
-    align-self: end;
-    margin: 0;
-  }
 }
 `;
 
@@ -1783,11 +1488,11 @@ const getLoopedItems = (items) => {
 const buildCarousel = (category) => {
   const looped = getLoopedItems(category.items);
   return \`
-    <div class="menu-section__head" style="display:grid;justify-items:center;gap:2px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.8);text-align:center;">
-      <p class="menu-section__title" style="margin:0;font-size:0.75rem;">\${textOf(category.name)}</p>
-      <span class="menu-section__count" style="margin:0;font-size:0.65rem;">\${category.items.length} items</span>
+    <div class="menu-section__head">
+      <p class="menu-section__title">\${textOf(category.name)}</p>
+      <span class="menu-section__count">\${category.items.length} items</span>
     </div>
-    <div class="menu-carousel" data-category-id="\${category.id}" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;gap:16px;overflow-x:auto;overflow-y:hidden;padding:12px 24px 16px;scroll-snap-type:x mandatory;">
+    <div class="menu-carousel \${category.items.length <= 1 ? "single" : ""}" data-category-id="\${category.id}">
       \${looped
         .map(
           (entry) => \`
@@ -1822,198 +1527,39 @@ const render = () => {
   const templateClass = "template-" + (DATA.meta.template || "focus-rows");
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview \${templateClass}" style="position:relative;min-height:100vh;min-height:100dvh;overflow:hidden;color:#e2e8f0;">
+    <div class="menu-preview \${templateClass}">
       \${backgrounds
         .map(
           (item, index) =>
-            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="position:absolute;inset:0;z-index:0;background-image:url('\${item.src}');background-size:cover;background-position:center;background-repeat:no-repeat;filter:blur(2px);transform:scale(1.05);"></div>\`
+            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="background-image:url('\${item.src}');"></div>\`
         )
         .join("")}
-      <div class="menu-overlay" style="position:absolute;inset:0;z-index:1;background:radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));"></div>
-      <div class="menu-content" style="position:relative;z-index:2;padding:32px 24px 40px;display:grid;gap:24px;width:100%;max-width:100vw;overflow-x:hidden;box-sizing:border-box;">
-        <header class="menu-topbar" style="position:relative;display:flex;justify-content:center;align-items:flex-start;gap:16px;text-align:center;width:100%;">
-          <div class="menu-title-block" style="flex:1;">
-            <p class="menu-eyebrow" style="margin:0;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.7);">\${restaurantName}</p>
-            <h1 class="menu-title" style="margin:4px 0 0;font-size:clamp(1.4rem,3vw,2.2rem);color:#f8fafc;">\${menuTitle || "Menu"}</h1>
-          </div>
-          <div class="menu-lang" style="position:absolute;right:0;top:0;">
-            <select class="menu-select" id="menu-locale" style="background:rgba(15,23,42,0.65);color:#f8fafc;border:1px solid rgba(148,163,184,0.4);border-radius:999px;padding:6px 12px;font-size:0.75rem;">
-              \${DATA.meta.locales
-                .map((lang) => \`<option value="\${lang}" \${lang === locale ? "selected" : ""}>\${lang.toUpperCase()}</option>\`)
-                .join("")}
-            </select>
-          </div>
-        </header>
-        <div class="menu-scroll" style="display:grid;gap:24px;width:100%;min-width:0;overflow-x:hidden;">
-          \${DATA.categories
-            .map(
-              (category) =>
-                \`<section class="menu-section" style="display:grid;gap:12px;width:100%;min-width:0;overflow-x:hidden;">\${buildCarousel(
-                  category
-                )}</section>\`
-            )
-            .join("")}
+      <div class="menu-overlay"></div>
+      <header class="menu-topbar">
+        <div class="menu-title-block">
+          <p class="menu-eyebrow">\${restaurantName}</p>
+          <h1 class="menu-title">\${menuTitle || "Menu"}</h1>
         </div>
+        <div class="menu-lang">
+          <select class="menu-select" id="menu-locale">
+            \${DATA.meta.locales
+              .map((lang) => \`<option value="\${lang}" \${lang === locale ? "selected" : ""}>\${lang.toUpperCase()}</option>\`)
+              .join("")}
+          </select>
+        </div>
+      </header>
+      <div class="menu-scroll">
+        \${DATA.categories
+          .map(
+            (category) =>
+              \`<section class="menu-section">\${buildCarousel(
+                category
+              )}</section>\`
+          )
+          .join("")}
       </div>
     </div>
   \`;
-  const applyBaseStyles = () => {
-    const preview = app.querySelector(".menu-preview");
-    if (preview) {
-      preview.style.position = "relative";
-      preview.style.minHeight = "100vh";
-      preview.style.minHeight = "100dvh";
-      preview.style.overflow = "hidden";
-      preview.style.color = "#e2e8f0";
-    }
-    app.querySelectorAll(".menu-background").forEach((bgLayer) => {
-      bgLayer.style.position = "absolute";
-      bgLayer.style.inset = "0";
-      bgLayer.style.backgroundSize = "cover";
-      bgLayer.style.backgroundPosition = "center";
-      bgLayer.style.backgroundRepeat = "no-repeat";
-      bgLayer.style.zIndex = "0";
-    });
-    const overlay = app.querySelector(".menu-overlay");
-    if (overlay) {
-      overlay.style.position = "absolute";
-      overlay.style.inset = "0";
-      overlay.style.zIndex = "1";
-    }
-    const content = app.querySelector(".menu-content");
-    if (content) {
-      content.style.position = "relative";
-      content.style.zIndex = "2";
-      content.style.display = "grid";
-      content.style.gridTemplateRows = "auto minmax(0, 1fr)";
-      content.style.gap = "24px";
-      content.style.minHeight = "100vh";
-      content.style.minHeight = "100dvh";
-      content.style.overflow = "hidden";
-    }
-    const topbar = app.querySelector(".menu-topbar");
-    if (topbar) {
-      topbar.style.position = "relative";
-      topbar.style.display = "flex";
-      topbar.style.justifyContent = "center";
-      topbar.style.alignItems = "flex-start";
-      topbar.style.textAlign = "center";
-    }
-    const titleBlock = app.querySelector(".menu-title-block");
-    if (titleBlock) {
-      titleBlock.style.flex = "1";
-    }
-    const lang = app.querySelector(".menu-lang");
-    if (lang) {
-      lang.style.position = "absolute";
-      lang.style.right = "0";
-      lang.style.top = "0";
-    }
-    const scroll = app.querySelector(".menu-scroll");
-    if (scroll) {
-      scroll.style.display = "grid";
-      scroll.style.gap = "24px";
-      scroll.style.width = "100%";
-      scroll.style.minWidth = "0";
-      scroll.style.overflowX = "hidden";
-      scroll.style.overflowY = "auto";
-      scroll.style.padding = "0 4px 20px";
-    }
-    app.querySelectorAll(".menu-section").forEach((section) => {
-      section.style.display = "grid";
-      section.style.gap = "12px";
-      section.style.width = "100%";
-      section.style.minWidth = "0";
-      section.style.overflowX = "hidden";
-    });
-    app.querySelectorAll(".menu-section__head").forEach((head) => {
-      head.style.display = "grid";
-      head.style.justifyItems = "center";
-      head.style.gap = "2px";
-      head.style.textAlign = "center";
-    });
-    app.querySelectorAll(".menu-carousel").forEach((carousel) => {
-      carousel.style.display = "flex";
-      carousel.style.alignItems = "center";
-      carousel.style.gap = "16px";
-      carousel.style.overflowX = "auto";
-      carousel.style.overflowY = "hidden";
-      carousel.style.padding = "12px 24px 16px";
-      carousel.style.scrollSnapType = "x mandatory";
-      carousel.style.width = "100%";
-      carousel.style.maxWidth = "100%";
-      carousel.style.minWidth = "0";
-      carousel.style.boxSizing = "border-box";
-    });
-    app.querySelectorAll(".carousel-card").forEach((card) => {
-      card.style.flex = "0 0 220px";
-      card.style.width = "220px";
-      card.style.minWidth = "220px";
-      card.style.maxWidth = "220px";
-      card.style.display = "grid";
-      card.style.gap = "8px";
-      card.style.border = "none";
-      card.style.background = "transparent";
-      card.style.color = "#e2e8f0";
-      card.style.scrollSnapAlign = "center";
-      card.style.padding = "8px 6px 12px";
-      card.style.textAlign = "left";
-    });
-    app.querySelectorAll(".carousel-media").forEach((media) => {
-      media.style.width = "100%";
-      media.style.height = "180px";
-      media.style.display = "grid";
-      media.style.placeItems = "center";
-    });
-    app.querySelectorAll(".carousel-media img").forEach((image) => {
-      image.style.width = "75%";
-      image.style.height = "75%";
-      image.style.objectFit = "contain";
-    });
-    app.querySelectorAll(".carousel-text").forEach((text) => {
-      text.style.width = "100%";
-      text.style.borderRadius = "18px";
-      text.style.padding = "12px";
-      text.style.background = "rgba(15, 23, 42, 0.62)";
-      text.style.border = "1px solid rgba(255, 255, 255, 0.08)";
-      text.style.display = "grid";
-      text.style.gap = "6px";
-    });
-    app.querySelectorAll(".carousel-row").forEach((row) => {
-      row.style.display = "flex";
-      row.style.alignItems = "center";
-      row.style.justifyContent = "space-between";
-      row.style.gap = "12px";
-    });
-    app.querySelectorAll(".carousel-title").forEach((title) => {
-      title.style.margin = "0";
-      title.style.fontSize = "0.95rem";
-    });
-    app.querySelectorAll(".carousel-price").forEach((price) => {
-      price.style.fontWeight = "600";
-      price.style.color = "#fbbf24";
-      price.style.textAlign = "right";
-    });
-    app.querySelectorAll(".carousel-desc").forEach((desc) => {
-      desc.style.margin = "0";
-      desc.style.fontSize = "0.75rem";
-      desc.style.color = "rgba(226, 232, 240, 0.82)";
-    });
-
-    if (DATA.meta.template === "jukebox") {
-      if (scroll) {
-        scroll.style.display = "flex";
-        scroll.style.gap = "0";
-        scroll.style.overflowX = "auto";
-        scroll.style.overflowY = "hidden";
-        scroll.style.scrollSnapType = "x mandatory";
-      }
-      app.querySelectorAll(".menu-section").forEach((section) => {
-        section.style.minWidth = "100%";
-        section.style.scrollSnapAlign = "start";
-      });
-    }
-  };
   const preview = app.querySelector(".menu-preview");
   if (preview) {
     preview.style.setProperty("--menu-font", getFontStack(fontFamily));
@@ -2038,7 +1584,6 @@ const render = () => {
       applyBackgroundState();
     }, 9000);
   };
-  applyBaseStyles();
   applyBackgroundState();
   startBackgroundRotation();
   const localeSelect = document.getElementById("menu-locale");

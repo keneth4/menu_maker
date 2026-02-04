@@ -47,35 +47,21 @@
           "id": "dish-1770216523928-87jyg",
           "name": {
             "es": "Muffin de Pistache",
-            "en": "Pistaccio Muffin"
+            "en": "Pistachio Muffin"
           },
           "description": {
-            "es": "Pastelillo estilo muffin con relleno sabor Pistache.",
-            "en": "Muffin pastry with Pistaccio filling inside"
+            "es": "Muffin suave de vainilla con centro cremoso de pistache tostado.",
+            "en": "Soft vanilla muffin with a creamy roasted pistachio center."
           },
           "longDescription": {
-            "es": "Inspirado en las cafeterias de Melbourne, se sirve con microespuma fina para resaltar el perfil del grano.",
-            "en": "Inspired by Melbourne coffee bars, served with fine microfoam to highlight bean profile."
+            "es": "El pistache se cultiva desde hace milenios y en el Mediterráneo inspiró una gran tradición repostera; esta versión celebra su perfil tostado y aromático.",
+            "en": "Pistachios have been cultivated for millennia and inspired a rich Mediterranean pastry tradition; this version highlights their toasted, aromatic profile."
           },
           "price": {
             "amount": 35,
             "currency": "MXN"
           },
           "allergens": [
-            {
-              "id": "dairy",
-              "label": {
-                "es": "Lácteos",
-                "en": "Dairy"
-              }
-            },
-            {
-              "id": "nuts",
-              "label": {
-                "es": "Frutos secos",
-                "en": "Nuts"
-              }
-            },
             {
               "id": "gluten",
               "label": {
@@ -89,6 +75,20 @@
                 "es": "Huevo",
                 "en": "Egg"
               }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts"
+              }
             }
           ],
           "vegan": false,
@@ -99,16 +99,16 @@
         {
           "id": "dish-1770217436244",
           "name": {
-            "es": "Galletas Blanco & Negro",
-            "en": "Black & White Cookies"
+            "es": "Galleta Blanco y Negro",
+            "en": "Black-and-White Cookie"
           },
           "description": {
-            "es": "Galleta gruesa de masa semi-suave con trozos de chocolate dentro",
-            "en": "Thick semi-soft dough Cookie with chocolate pieces inside"
+            "es": "Galleta tipo pastel, suave y densa, con glaseado de vainilla y chocolate.",
+            "en": "Soft, cake-like cookie finished with vanilla and chocolate icing."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Este clásico neoyorquino se volvió popular a inicios del siglo XX y sigue siendo un símbolo de cafetería urbana.",
+            "en": "This New York classic rose to popularity in the early 20th century and remains an urban bakery icon."
           },
           "price": {
             "amount": 30,
@@ -145,16 +145,16 @@
         {
           "id": "dish-1770217647423",
           "name": {
-            "es": "Dona Morada",
-            "en": "Purple Donut"
+            "es": "Dona de Frutos Rojos",
+            "en": "Berry Glazed Donut"
           },
           "description": {
-            "es": "Deliciosa dona con relleno suave de moras y una cubierta de glaseado",
-            "en": "Delicious Donut with a soft berries filling and a glazed cover"
+            "es": "Dona esponjosa con relleno de frutos rojos y glaseado brillante de mora.",
+            "en": "Fluffy donut filled with mixed berries and finished with a glossy blackberry glaze."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Inspirada en la tradición de masas fritas que viajó de Europa a América, combina un interior ligero con un final frutal intenso.",
+            "en": "Inspired by the fried-dough tradition that traveled from Europe to the Americas, it pairs a light crumb with a bold berry finish."
           },
           "price": {
             "amount": 30,
@@ -181,13 +181,6 @@
                 "es": "Lácteos",
                 "en": "Dairy"
               }
-            },
-            {
-              "id": "nuts",
-              "label": {
-                "es": "Frutos secos",
-                "en": "Nuts"
-              }
             }
           ],
           "vegan": false,
@@ -198,16 +191,16 @@
         {
           "id": "dish-1770218071272",
           "name": {
-            "es": "HotCakes de Mora Azul",
+            "es": "Hotcakes de Arándano",
             "en": "Blueberry Pancakes"
           },
           "description": {
-            "es": "HotCakes esponjosos con mermelada de Mora Azul encima",
-            "en": "Fluffy Pancakes with Blueberry marmelade on top"
+            "es": "Hotcakes esponjosos con compota de arándano azul y mantequilla batida.",
+            "en": "Fluffy pancakes topped with blueberry compote and whipped butter."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Los hotcakes tienen raíces antiguas: en Grecia ya se preparaban versiones de sartén con harina y miel; hoy los servimos en clave brunch.",
+            "en": "Pancakes have ancient roots: Greek cooks were already making griddled versions with flour and honey; this is our brunch take."
           },
           "price": {
             "amount": 55,
@@ -244,16 +237,16 @@
         {
           "id": "dish-1770218671234",
           "name": {
-            "es": "Pay de caramelo",
-            "en": "Caramel Pie"
+            "es": "Pay de Caramelo",
+            "en": "Salted Caramel Pie"
           },
           "description": {
-            "es": "Dulce pay con relleno y cubierta de sabor caramelo",
-            "en": "Sweet Pie with caramel flavored filling and cover"
+            "es": "Pay de mantequilla con relleno de caramelo y crema ligeramente salada.",
+            "en": "Buttery pie with a silky caramel filling and a lightly salted cream finish."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Retoma la estructura clásica de un pie horneado y la lleva a un perfil dulce-salado para equilibrar cada bocado.",
+            "en": "It keeps the classic baked pie structure and leans into a sweet-salty profile for balance in every bite."
           },
           "price": {
             "amount": 45,
@@ -290,16 +283,16 @@
         {
           "id": "dish-1770219007092",
           "name": {
-            "es": "Pastel de Pay de Queso con Moras",
-            "en": "Cheescake Pie & Berries Cake"
+            "es": "Cheesecake de Moras (Entero)",
+            "en": "Whole Mixed-Berry Cheesecake"
           },
           "description": {
-            "es": "Pastel completo sabor Pay de Queso con Moras",
-            "en": "Whole Cheescake Pie & Berries Cake"
+            "es": "Cheesecake completo de textura cremosa, con coulis de moras y base crujiente.",
+            "en": "Whole creamy cheesecake with mixed-berry coulis and a crisp crust."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "El cheesecake nace en la Antigüedad griega y evolucionó hasta estilos modernos como el neoyorquino; esta versión privilegia cremosidad y fruta.",
+            "en": "Cheesecake traces back to ancient Greece and later evolved into modern styles like New York’s; this version focuses on creaminess and fruit."
           },
           "price": {
             "amount": 350,
@@ -314,13 +307,6 @@
               }
             },
             {
-              "id": "dairy",
-              "label": {
-                "es": "Lácteos",
-                "en": "Dairy"
-              }
-            },
-            {
               "id": "egg",
               "label": {
                 "es": "Huevo",
@@ -328,10 +314,10 @@
               }
             },
             {
-              "id": "nuts",
+              "id": "dairy",
               "label": {
-                "es": "Frutos secos",
-                "en": "Nuts"
+                "es": "Lácteos",
+                "en": "Dairy"
               }
             }
           ],
@@ -343,16 +329,16 @@
         {
           "id": "dish-1770219339360",
           "name": {
-            "es": "Pay de Queso con Frambuesa",
-            "en": "Raspberry Cheescake"
+            "es": "Cheesecake de Frambuesa",
+            "en": "Raspberry Cheesecake"
           },
           "description": {
-            "es": "Delicioso Pay de Queso con corteza crujiente y un toque de crema batida y frambuesas frescas",
-            "en": "Delicious Cheescake with a crunchy crust and a touch of whipped cream and fresh raspberries"
+            "es": "Rebanada de cheesecake con frambuesa, base de galleta y acabado de crema ligera.",
+            "en": "Cheesecake slice with raspberry, cookie crust, and a light cream finish."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Un clásico de cafetería contemporánea: queso crema, fruta ácida y una base crujiente para dar contraste.",
+            "en": "A contemporary coffee-shop classic: cream cheese, tart fruit, and a crisp crust for contrast."
           },
           "price": {
             "amount": 35,
@@ -367,17 +353,17 @@
               }
             },
             {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
               "id": "dairy",
               "label": {
                 "es": "Lácteos",
                 "en": "Dairy"
-              }
-            },
-            {
-              "id": "nuts",
-              "label": {
-                "es": "Frutos secos",
-                "en": "Nuts"
               }
             }
           ],
@@ -389,16 +375,16 @@
         {
           "id": "dish-1770219635727",
           "name": {
-            "es": "Sandwich de helado Napolitano",
-            "en": "Ice-cream Sandwich"
+            "es": "Sándwich de Helado Napolitano",
+            "en": "Neapolitan Ice Cream Sandwich"
           },
           "description": {
-            "es": "Helado en forma de Sandwich con galleta sabor a chocolate y helado de estilo Napolitano",
-            "en": "Napolitan Style ice-cream Sandwich with chocolate flavored cookie"
+            "es": "Helado napolitano entre galletas de chocolate suave, servido bien frío.",
+            "en": "Neapolitan ice cream between soft chocolate cookies, served extra cold."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Los sándwiches de helado se popularizaron en Nueva York a finales del siglo XIX; esta versión retoma ese formato con sabor clásico.",
+            "en": "Ice cream sandwiches became popular in New York in the late 19th century; this version keeps that classic format and flavor."
           },
           "price": {
             "amount": 30,
@@ -411,9 +397,23 @@
                 "es": "Gluten",
                 "en": "Gluten"
               }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
             }
           ],
-          "vegan": true,
+          "vegan": false,
           "media": {
             "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/ice-cream-sandwich.webp"
           }
@@ -430,16 +430,16 @@
         {
           "id": "dish-1770216523929-l8vq2",
           "name": {
-            "es": "Sandwich con Tocino",
-            "en": "Bacon Sandwich"
+            "es": "Sándwich de Tocino y Jamón",
+            "en": "Bacon & Ham Sandwich"
           },
           "description": {
-            "es": "Clásico Sandwich de jamón con Tocino",
-            "en": "Classic Ham sandwich with Bacon"
+            "es": "Pan tostado con jamón, tocino crujiente, jitomate y aderezo cremoso.",
+            "en": "Toasted bread with ham, crispy bacon, tomato, and a creamy dressing."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "De inspiración deli, prioriza contraste de texturas entre pan dorado, proteína ahumada y frescura vegetal.",
+            "en": "Deli-inspired and texture-driven: toasted bread, smoky protein, and fresh vegetables in balance."
           },
           "price": {
             "amount": 40,
@@ -452,6 +452,13 @@
                 "es": "Gluten",
                 "en": "Gluten"
               }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
             }
           ],
           "vegan": false,
@@ -462,16 +469,16 @@
         {
           "id": "dish-1770220621189",
           "name": {
-            "es": "Sandwich de pechuga de Pollo",
+            "es": "Sándwich de Pollo Jerk",
             "en": "Jerk Chicken Sandwich"
           },
           "description": {
-            "es": "Medio Sandwich rellenado generosamente con pechuga de pollo.",
-            "en": "Half Sandwich bun generously filled with jerk chicken"
+            "es": "Pechuga de pollo marinada con especias jerk, lechuga fresca y mayonesa de la casa.",
+            "en": "Chicken breast marinated in jerk spices with crisp lettuce and house mayo."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "El estilo jerk nació en Jamaica con técnicas indígenas y maroon; su sello es el picor aromático del allspice y el chile.",
+            "en": "Jerk cooking was born in Jamaica from Indigenous and Maroon techniques, known for the aromatic heat of allspice and chile."
           },
           "price": {
             "amount": 55,
@@ -484,6 +491,13 @@
                 "es": "Gluten",
                 "en": "Gluten"
               }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
             }
           ],
           "vegan": false,
@@ -494,16 +508,16 @@
         {
           "id": "dish-1770220835963",
           "name": {
-            "es": "Sandwich de Pechuga Empanizada",
-            "en": "Breaded Chicken Sandwich"
+            "es": "Sándwich de Pollo Empanizado",
+            "en": "Crispy Breaded Chicken Sandwich"
           },
           "description": {
-            "es": "Sandwich de pechuga de pollo empanizada estilo mexicano",
-            "en": "Mexican Style breaded chicken breast sandwich"
+            "es": "Filete de pollo empanizado y crujiente, con lechuga, jitomate y mayonesa.",
+            "en": "Crispy breaded chicken fillet with lettuce, tomato, and mayo."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "Basado en la tradición de la milanesa y el pan crujiente, busca un bocado jugoso por dentro y dorado por fuera.",
+            "en": "Built on the tradition of breaded cutlets and crusty bread, aiming for juicy inside and golden crunch outside."
           },
           "price": {
             "amount": 50,
@@ -516,6 +530,13 @@
                 "es": "Gluten",
                 "en": "Gluten"
               }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
             }
           ],
           "vegan": false,
@@ -526,16 +547,16 @@
         {
           "id": "dish-1770221040005",
           "name": {
-            "es": "Torta de jamón de Pavo",
-            "en": "Turkey Ham Sandwich"
+            "es": "Torta de Jamón de Pavo",
+            "en": "Turkey Ham Torta"
           },
           "description": {
-            "es": "Clásica torta de jamón de pavo, servida generosamente con aguacate",
-            "en": "Classic Turkey ham Sandwich, generously served with avocado"
+            "es": "Bolillo crujiente con jamón de pavo, aguacate, jitomate y frijoles refritos.",
+            "en": "Crisp bolillo roll with turkey ham, avocado, tomato, and refried beans."
           },
           "longDescription": {
-            "es": "",
-            "en": ""
+            "es": "La torta mexicana se apoya en el bolillo, pan introducido en la CDMX del siglo XIX con influencia francesa; hoy es emblema callejero.",
+            "en": "The Mexican torta relies on bolillo bread, introduced in 19th-century Mexico City with French influence; today it is a street-food staple."
           },
           "price": {
             "amount": 50,
