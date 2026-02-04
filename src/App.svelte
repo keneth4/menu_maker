@@ -1,9 +1,12 @@
 <svelte:head>
   <title>{t("appTitle")}</title>
+  {#if builtInFontHref}
+    <link rel="stylesheet" href={builtInFontHref} />
+  {/if}
 </svelte:head>
 
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
@@ -19,6 +22,7 @@
   let showLanding = true;
   let previewFontStack = "";
   let fontFaceCss = "";
+  let builtInFontHref = "";
   let fontStyleEl: HTMLStyleElement | null = null;
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
@@ -39,6 +43,7 @@
   let languageMenuOpen = false;
   let uiLang: "es" | "en" = "es";
   let editLang = "es";
+  let editPanel: "identity" | "section" | "dish" = "identity";
   let wizardLang = "es";
   let wizardCategoryId = "";
   let wizardItemId = "";
@@ -85,6 +90,10 @@
   let uploadTargetPath = "";
   let uploadFolderOptions: { value: string; label: string }[] = [];
   let fontChoice = "Fraunces";
+  let previewBackgrounds: { id: string; src: string }[] = [];
+  let activeBackgroundIndex = 0;
+  let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
+  let backgroundRotationCount = 0;
 
   const languageOptions = [
     { code: "es", label: "Español" },
@@ -115,6 +124,16 @@
     { value: "Playfair Display", label: "Playfair Display" },
     { value: "Poppins", label: "Poppins" }
   ];
+
+  const builtInFontSources: Record<string, string> = {
+    Fraunces: "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;700&display=swap",
+    Cinzel: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap",
+    "Cormorant Garamond":
+      "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;700&display=swap",
+    "Playfair Display":
+      "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap",
+    Poppins: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap"
+  };
 
   const menuTerms = {
     es: { allergens: "Alérgenos", vegan: "Vegano" },
@@ -327,6 +346,12 @@
       currencyLeft: "Izquierda (€150)",
       currencyRight: "Derecha (150€)",
       editLang: "Idioma de edición",
+      editIdentity: "Identidad",
+      editSections: "Secciones",
+      editDishes: "Platillos",
+      editHierarchyHint: "Jerarquía: Sección > Platillo",
+      sectionHint: "Renombra y organiza las secciones del menú.",
+      dishHint: "Edita platillos dentro de la sección seleccionada.",
       section: "Sección",
       sectionName: "Nombre de sección",
       deleteSection: "Eliminar sección",
@@ -448,6 +473,12 @@
       currencyLeft: "Left (€150)",
       currencyRight: "Right (150€)",
       editLang: "Editing language",
+      editIdentity: "Identity",
+      editSections: "Sections",
+      editDishes: "Dishes",
+      editHierarchyHint: "Hierarchy: Section > Dish",
+      sectionHint: "Rename and organize menu sections.",
+      dishHint: "Edit dishes inside the selected section.",
       section: "Section",
       sectionName: "Section name",
       deleteSection: "Delete section",
@@ -578,7 +609,7 @@
         .filter((item) => item.media.hero360)
         .map((item) => ({
           id: `dish-${item.id}`,
-          label: textOf(item.name),
+          label: getLocalizedValue(item.name, editLang, draft.meta.defaultLocale),
           src: item.media.hero360 ?? "",
           group: "Platillos"
         }))
@@ -819,11 +850,23 @@
     }
   });
 
+  onDestroy(() => {
+    clearBackgroundRotation();
+  });
+
   $: activeProject = draft ?? project;
   $: previewFontStack = activeProject ? buildFontStack(activeProject.meta.fontFamily) : "";
   $: fontFaceCss = activeProject
     ? buildFontFaceCss(activeProject.meta.fontFamily, activeProject.meta.fontSource)
     : "";
+  $: builtInFontHref = activeProject ? getBuiltinFontHref(activeProject.meta.fontFamily) : "";
+  $: previewBackgrounds =
+    activeProject?.backgrounds
+      ?.filter((item) => item.src && item.src.trim().length > 0)
+      .map((item, index) => ({
+        id: item.id || `bg-${index}`,
+        src: item.src
+      })) ?? [];
   $: if (typeof document !== "undefined") {
     if (!fontFaceCss) {
       if (fontStyleEl) {
@@ -838,6 +881,35 @@
       }
       fontStyleEl.textContent = fontFaceCss;
     }
+  }
+
+  const clearBackgroundRotation = () => {
+    if (backgroundRotationTimer) {
+      window.clearInterval(backgroundRotationTimer);
+      backgroundRotationTimer = null;
+    }
+    backgroundRotationCount = 0;
+  };
+
+  const syncBackgroundRotation = (count: number) => {
+    if (count < 2) {
+      clearBackgroundRotation();
+      activeBackgroundIndex = 0;
+      return;
+    }
+    if (activeBackgroundIndex >= count) {
+      activeBackgroundIndex = 0;
+    }
+    if (backgroundRotationTimer && backgroundRotationCount === count) return;
+    clearBackgroundRotation();
+    backgroundRotationCount = count;
+    backgroundRotationTimer = window.setInterval(() => {
+      activeBackgroundIndex = (activeBackgroundIndex + 1) % count;
+    }, 9000);
+  };
+
+  $: if (typeof window !== "undefined") {
+    syncBackgroundRotation(previewBackgrounds.length);
   }
 
   const touchDraft = () => {
@@ -1237,9 +1309,11 @@ body {
   font-family: "SF Pro Display", "Poppins", system-ui, sans-serif;
   background: #05060f;
   color: #e2e8f0;
+  min-height: 100dvh;
 }
 .menu-preview {
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
   overflow: hidden;
   font-family: var(--menu-font, "Fraunces", "Georgia", serif);
@@ -1249,9 +1323,13 @@ body {
   inset: 0;
   background-size: cover;
   background-position: center;
-  opacity: 0.92;
+  opacity: 0;
   filter: blur(2px);
   transform: scale(1.05);
+  transition: opacity 1200ms ease;
+}
+.menu-background.active {
+  opacity: 0.92;
 }
 .menu-overlay {
   position: absolute;
@@ -1436,6 +1514,8 @@ body {
   display: grid;
   gap: 12px;
   color: #e2e8f0;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
 }
 .dish-modal__close {
   position: absolute;
@@ -1459,6 +1539,7 @@ body {
   object-fit: contain;
 }
 .dish-modal__title { margin: 0; font-size: 1.2rem; text-align: center; }
+.dish-modal__content { display: grid; gap: 10px; }
 .dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
 .dish-modal__long { margin: 0; font-size: 0.8rem; color: rgba(226,232,240,0.7); }
 .dish-modal__allergens { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(251, 191, 36, 0.7); }
@@ -1467,6 +1548,46 @@ body {
 @media (min-width: 900px) {
   .menu-content {
     padding: 40px 48px 60px;
+  }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .dish-modal {
+    padding: 10px;
+    align-items: stretch;
+  }
+  .dish-modal__card {
+    width: min(900px, 94vw);
+    max-height: calc(100dvh - 20px);
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+    grid-template-areas:
+      "close close"
+      "title title"
+      "content media"
+      "price media";
+    align-items: start;
+  }
+  .dish-modal__close {
+    grid-area: close;
+    position: static;
+    justify-self: end;
+  }
+  .dish-modal__title {
+    grid-area: title;
+    text-align: left;
+    padding-right: 12px;
+  }
+  .dish-modal__content {
+    grid-area: content;
+  }
+  .dish-modal__media {
+    grid-area: media;
+    align-self: stretch;
+    aspect-ratio: auto;
+    min-height: 170px;
+  }
+  .dish-modal__price {
+    grid-area: price;
+    justify-self: start;
   }
 }
 `;
@@ -1482,7 +1603,23 @@ const LOOP_COPIES = 5;
 let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
 const fontFamily = DATA.meta.fontFamily || "Fraunces";
 const fontSource = DATA.meta.fontSource || "";
+const builtInFontSources = {
+  Fraunces: "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;700&display=swap",
+  Cinzel: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap",
+  "Cormorant Garamond":
+    "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;700&display=swap",
+  "Playfair Display":
+    "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap",
+  Poppins: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap"
+};
+const builtInFontHref = builtInFontSources[fontFamily] || "";
+const backgrounds = (DATA.backgrounds || []).filter(
+  (item) => item?.src && String(item.src).trim().length > 0
+);
+let activeBackgroundIndex = 0;
+let backgroundTimer;
 let fontInjected = false;
+let fontLinkInjected = false;
 const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
@@ -1534,18 +1671,33 @@ const getFontStack = (family) => {
   return primary + '"Fraunces", "Georgia", serif';
 };
 const ensureFont = () => {
-  if (!fontSource || fontInjected) return;
-  const ext = fontSource.split(".").pop()?.toLowerCase();
-  let format = "";
-  if (ext === "woff2") format = "woff2";
-  if (ext === "woff") format = "woff";
-  if (ext === "otf") format = "opentype";
-  if (ext === "ttf") format = "truetype";
-  const formatLine = format ? ' format("' + format + '")' : "";
-  const style = document.createElement("style");
-  style.textContent = '@font-face { font-family: "' + fontFamily + '"; src: url("' + fontSource + '")' + formatLine + '; font-display: swap; }';
-  document.head.appendChild(style);
-  fontInjected = true;
+  if (fontSource && !fontInjected) {
+    const ext = fontSource.split(".").pop()?.toLowerCase();
+    let format = "";
+    if (ext === "woff2") format = "woff2";
+    if (ext === "woff") format = "woff";
+    if (ext === "otf") format = "opentype";
+    if (ext === "ttf") format = "truetype";
+    const formatLine = format ? ' format("' + format + '")' : "";
+    const style = document.createElement("style");
+    style.textContent =
+      '@font-face { font-family: "' +
+      fontFamily +
+      '"; src: url("' +
+      fontSource +
+      '")' +
+      formatLine +
+      '; font-display: swap; }';
+    document.head.appendChild(style);
+    fontInjected = true;
+  }
+  if (!fontSource && builtInFontHref && !fontLinkInjected) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = builtInFontHref;
+    document.head.appendChild(link);
+    fontLinkInjected = true;
+  }
 };
 
 const getLoopCopies = (count) => (count > 1 ? LOOP_COPIES : 1);
@@ -1595,7 +1747,6 @@ const buildCarousel = (category) => {
 };
 
 const render = () => {
-  const bg = DATA.backgrounds?.[0]?.src || "";
   const restaurantName =
     DATA.meta.restaurantName?.[locale] ??
     DATA.meta.restaurantName?.[DATA.meta.defaultLocale] ??
@@ -1607,8 +1758,13 @@ const render = () => {
   const templateClass = "template-" + (DATA.meta.template || "focus-rows");
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview \${templateClass}" style="position:relative;min-height:100vh;overflow:hidden;color:#e2e8f0;">
-      <div class="menu-background" style="position:absolute;inset:0;z-index:0;background-image:url('\${bg}');background-size:cover;background-position:center;opacity:0.92;filter:blur(2px);transform:scale(1.05);"></div>
+    <div class="menu-preview \${templateClass}" style="position:relative;min-height:100vh;min-height:100dvh;overflow:hidden;color:#e2e8f0;">
+      \${backgrounds
+        .map(
+          (item, index) =>
+            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="position:absolute;inset:0;z-index:0;background-image:url('\${item.src}');background-size:cover;background-position:center;filter:blur(2px);transform:scale(1.05);"></div>\`
+        )
+        .join("")}
       <div class="menu-overlay" style="position:absolute;inset:0;z-index:1;background:radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));"></div>
       <div class="menu-content" style="position:relative;z-index:2;padding:32px 24px 40px;display:grid;gap:24px;width:100%;max-width:100vw;overflow-x:hidden;box-sizing:border-box;">
         <header class="menu-topbar" style="position:relative;display:flex;justify-content:center;align-items:flex-start;gap:16px;text-align:center;width:100%;">
@@ -1642,17 +1798,17 @@ const render = () => {
     if (preview) {
       preview.style.position = "relative";
       preview.style.minHeight = "100vh";
+      preview.style.minHeight = "100dvh";
       preview.style.overflow = "hidden";
       preview.style.color = "#e2e8f0";
     }
-    const bgLayer = app.querySelector(".menu-background");
-    if (bgLayer) {
+    app.querySelectorAll(".menu-background").forEach((bgLayer) => {
       bgLayer.style.position = "absolute";
       bgLayer.style.inset = "0";
       bgLayer.style.backgroundSize = "cover";
       bgLayer.style.backgroundPosition = "center";
       bgLayer.style.zIndex = "0";
-    }
+    });
     const overlay = app.querySelector(".menu-overlay");
     if (overlay) {
       overlay.style.position = "absolute";
@@ -1791,7 +1947,29 @@ const render = () => {
   if (preview) {
     preview.style.setProperty("--menu-font", getFontStack(fontFamily));
   }
+  const applyBackgroundState = () => {
+    const layers = Array.from(app.querySelectorAll(".menu-background"));
+    layers.forEach((layer, index) => {
+      layer.classList.toggle("active", index === activeBackgroundIndex);
+    });
+  };
+  const startBackgroundRotation = () => {
+    if (backgroundTimer) {
+      window.clearInterval(backgroundTimer);
+      backgroundTimer = undefined;
+    }
+    if (backgrounds.length < 2) {
+      applyBackgroundState();
+      return;
+    }
+    backgroundTimer = window.setInterval(() => {
+      activeBackgroundIndex = (activeBackgroundIndex + 1) % backgrounds.length;
+      applyBackgroundState();
+    }, 9000);
+  };
   applyBaseStyles();
+  applyBackgroundState();
+  startBackgroundRotation();
   const localeSelect = document.getElementById("menu-locale");
   localeSelect?.addEventListener("change", (event) => {
     locale = event.target.value;
@@ -1930,7 +2108,7 @@ const bindCards = () => {
         <div class="dish-modal__media">
           <img src="\${dish.media.hero360 || ""}" alt="\${textOf(dish.name)}" />
         </div>
-        <div>
+        <div class="dish-modal__content">
           <p class="dish-modal__desc">\${textOf(dish.description)}</p>
           \${longDesc ? '<p class="dish-modal__long">' + longDesc + '</p>' : ""}
           \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
@@ -2325,6 +2503,7 @@ Windows:
     activeSlug = data.meta.slug || "importado";
     lastSaveName = sourceName || `${activeSlug}.zip`;
     locale = data.meta.defaultLocale || "es";
+    editPanel = "identity";
     initCarouselIndices(data);
     const existing = projects.find((item) => item.slug === activeSlug);
     const summary = {
@@ -2358,6 +2537,7 @@ Windows:
     activeSlug = empty.meta.slug;
     locale = uiLang;
     editLang = uiLang;
+    editPanel = "identity";
     wizardLang = uiLang;
     lastSaveName = "";
     needsAssets = false;
@@ -2721,6 +2901,11 @@ Windows:
     const cleaned = (family || "").replace(/"/g, "").trim();
     const primary = cleaned ? `"${cleaned}", ` : "";
     return `${primary}"Fraunces", "Georgia", serif`;
+  };
+
+  const getBuiltinFontHref = (family?: string) => {
+    if (!family) return "";
+    return builtInFontSources[family] ?? "";
   };
 
   const buildFontFaceCss = (family?: string, source?: string) => {
@@ -3538,6 +3723,15 @@ Windows:
     touchDraft();
   };
 
+  const cycleEditLang = () => {
+    if (!draft) return;
+    const locales = draft.meta.locales;
+    if (!locales.length) return;
+    const currentIndex = locales.indexOf(editLang);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % locales.length : 0;
+    editLang = locales[nextIndex];
+  };
+
   const handleCurrencyChange = (event: Event) => {
     const input = event.currentTarget as HTMLSelectElement;
     setCurrency(input.value);
@@ -4092,94 +4286,83 @@ Windows:
 
             {#if draft}
               <div class="edit-shell">
-                <div class="edit-row">
-                  <label class="editor-field">
-                    <span>{t("editLang")}</span>
-                    <select bind:value={editLang} class="editor-select">
-                      {#each draft.meta.locales as lang}
-                        <option value={lang}>{lang.toUpperCase()}</option>
-                      {/each}
-                    </select>
-                  </label>
-                </div>
-                <div class="edit-block">
-                  <p class="edit-block__title">{t("restaurantName")}</p>
-                  <label class="editor-field">
+                <div class="edit-subtabs">
+                  <button
+                    class="edit-subtab {editPanel === 'identity' ? 'active' : ''}"
+                    type="button"
+                    on:click={() => (editPanel = 'identity')}
+                  >
+                    {t("editIdentity")}
+                  </button>
+                  <button
+                    class="edit-subtab {editPanel === 'section' ? 'active' : ''}"
+                    type="button"
+                    on:click={() => (editPanel = 'section')}
+                  >
+                    {t("editSections")}
+                  </button>
+                  <button
+                    class="edit-subtab {editPanel === 'dish' ? 'active' : ''}"
+                    type="button"
+                    on:click={() => (editPanel = 'dish')}
+                  >
+                    {t("editDishes")}
+                  </button>
+                  <button
+                    class="edit-lang-chip"
+                    type="button"
+                    aria-label={t("editLang")}
+                    title={t("editLang")}
+                    on:click={cycleEditLang}
+                  >
+                    <span aria-hidden="true">🌐</span>
                     <span>{editLang.toUpperCase()}</span>
-                    <input
-                      type="text"
-                      class="editor-input"
-                      value={draft.meta.restaurantName?.[editLang] ?? ""}
-                      on:input={(event) => {
-                        const name = ensureRestaurantName();
-                        if (!name) return;
-                        handleLocalizedInput(name, editLang, event);
-                      }}
-                    />
-                  </label>
+                  </button>
                 </div>
-                <div class="edit-block">
-                  <p class="edit-block__title">{t("menuTitle")}</p>
-                  <label class="editor-field">
-                    <span>{editLang.toUpperCase()}</span>
-                    <input
-                      type="text"
-                      class="editor-input"
-                      value={draft.meta.title?.[editLang] ?? ""}
-                      on:input={(event) => {
-                        const title = ensureMetaTitle();
-                        if (!title) return;
-                        handleLocalizedInput(title, editLang, event);
-                      }}
-                    />
-                  </label>
-                </div>
-                <div class="edit-row">
-                  <label class="editor-field">
-                    <span>{t("section")}</span>
-                    <select bind:value={selectedCategoryId} class="editor-select">
-                      {#each draft.categories as category}
-                        <option value={category.id}>{textOf(category.name)}</option>
-                      {/each}
-                    </select>
-                  </label>
-                  <div class="edit-actions">
-                    <button
-                      class="editor-outline"
-                      type="button"
-                      aria-label={t("addSection")}
-                      title={t("addSection")}
-                      on:click={addSection}
-                    >
-                      <span class="btn-icon">＋</span>
-                    </button>
-                    <button class="editor-outline danger" type="button" on:click={deleteSection}>
-                      {t("deleteSection")}
-                    </button>
-                  </div>
-                </div>
+                <p class="edit-hierarchy">{t("editHierarchyHint")}</p>
 
-                {#if selectedCategory}
+                {#if editPanel === "identity"}
                   <div class="edit-block">
-                    <p class="edit-block__title">{t("sectionName")}</p>
+                    <p class="edit-block__title">{t("restaurantName")}</p>
                     <label class="editor-field">
                       <span>{editLang.toUpperCase()}</span>
                       <input
                         type="text"
                         class="editor-input"
-                        value={selectedCategory.name?.[editLang] ?? ""}
-                        on:input={(event) =>
-                          handleLocalizedInput(selectedCategory.name, editLang, event)}
+                        value={draft.meta.restaurantName?.[editLang] ?? ""}
+                        on:input={(event) => {
+                          const name = ensureRestaurantName();
+                          if (!name) return;
+                          handleLocalizedInput(name, editLang, event);
+                        }}
                       />
                     </label>
                   </div>
-
+                  <div class="edit-block">
+                    <p class="edit-block__title">{t("menuTitle")}</p>
+                    <label class="editor-field">
+                      <span>{editLang.toUpperCase()}</span>
+                      <input
+                        type="text"
+                        class="editor-input"
+                        value={draft.meta.title?.[editLang] ?? ""}
+                        on:input={(event) => {
+                          const title = ensureMetaTitle();
+                          if (!title) return;
+                          handleLocalizedInput(title, editLang, event);
+                        }}
+                      />
+                    </label>
+                  </div>
+                {:else}
                   <div class="edit-row">
                     <label class="editor-field">
-                      <span>{t("dish")}</span>
-                      <select bind:value={selectedItemId} class="editor-select">
-                        {#each selectedCategory.items as item}
-                          <option value={item.id}>{textOf(item.name)}</option>
+                      <span>{t("section")}</span>
+                      <select bind:value={selectedCategoryId} class="editor-select">
+                        {#each draft.categories as category}
+                          <option value={category.id}>
+                            {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale)}
+                          </option>
                         {/each}
                       </select>
                     </label>
@@ -4187,129 +4370,176 @@ Windows:
                       <button
                         class="editor-outline"
                         type="button"
-                        aria-label={t("prevDish")}
-                        title={t("prevDish")}
-                        on:click={goPrevDish}
-                      >
-                        <span class="btn-icon">◀</span>
-                      </button>
-                      <button
-                        class="editor-outline"
-                        type="button"
-                        aria-label={t("nextDish")}
-                        title={t("nextDish")}
-                        on:click={goNextDish}
-                      >
-                        <span class="btn-icon">▶</span>
-                      </button>
-                      <button
-                        class="editor-outline"
-                        type="button"
-                        aria-label={t("addDish")}
-                        title={t("addDish")}
-                        on:click={addDish}
+                        aria-label={t("addSection")}
+                        title={t("addSection")}
+                        on:click={addSection}
                       >
                         <span class="btn-icon">＋</span>
                       </button>
-                      <button class="editor-outline danger" type="button" on:click={deleteDish}>
-                        {t("delete")}
+                      <button class="editor-outline danger" type="button" on:click={deleteSection}>
+                        {t("deleteSection")}
                       </button>
                     </div>
                   </div>
 
-                  {#if selectedItem}
+                  {#if editPanel === "section" && selectedCategory}
+                    <p class="edit-hint">{t("sectionHint")}</p>
                     <div class="edit-block">
-                      <p class="edit-block__title">{t("dishData")}</p>
-                      <div class="edit-item">
-                        <div class="edit-item__media">
-                          <img src={selectedItem.media.hero360 ?? ""} alt={textOf(selectedItem.name)} />
-                        </div>
-                        <div class="edit-item__content">
-                          <label class="editor-field">
-                            <span>{t("name")} ({editLang.toUpperCase()})</span>
-                            <input
-                              type="text"
-                              class="editor-input"
-                              value={selectedItem.name?.[editLang] ?? ""}
-                              on:input={(event) =>
-                                handleLocalizedInput(selectedItem.name, editLang, event)}
-                            />
-                          </label>
-                          <label class="editor-field">
-                            <span>{t("description")} ({editLang.toUpperCase()})</span>
-                            <textarea
-                              class="editor-input"
-                              rows="2"
-                              value={selectedItem.description?.[editLang] ?? ""}
-                              on:input={(event) =>
-                                handleDescriptionInput(selectedItem, editLang, event)}
-                            ></textarea>
-                          </label>
-                          <label class="editor-field">
-                            <span>{t("longDescription")} ({editLang.toUpperCase()})</span>
-                            <textarea
-                              class="editor-input"
-                              rows="3"
-                              value={selectedItem.longDescription?.[editLang] ?? ""}
-                              on:input={(event) =>
-                                handleLongDescriptionInput(selectedItem, editLang, event)}
-                            ></textarea>
-                          </label>
-                          <label class="editor-field">
-                            <span>{t("price")}</span>
-                            <input
-                              type="number"
-                              class="editor-input"
-                              bind:value={selectedItem.price.amount}
-                            />
-                          </label>
-                          <div class="editor-field">
-                            <span>{t("commonAllergens")}</span>
-                            <div class="allergen-checklist">
-                              {#each commonAllergenCatalog as allergen}
-                                <label class="allergen-option">
-                                  <input
-                                    type="checkbox"
-                                    checked={isCommonAllergenChecked(selectedItem, allergen.id)}
-                                    on:change={(event) =>
-                                      handleCommonAllergenToggle(selectedItem, allergen.id, event)}
-                                  />
-                                  <span>{getCommonAllergenLabel(allergen, editLang)}</span>
-                                </label>
-                              {/each}
-                            </div>
-                          </div>
-                          <label class="editor-field">
-                            <span>{t("customAllergens")} ({editLang.toUpperCase()})</span>
-                            <input
-                              type="text"
-                              class="editor-input"
-                              value={getCustomAllergensInput(selectedItem, editLang)}
-                              on:input={(event) =>
-                                handleCustomAllergensInput(selectedItem, editLang, event)}
-                            />
-                            <small class="editor-hint">{t("customAllergensHint")}</small>
-                          </label>
-                          <label class="editor-field editor-inline">
-                            <span>{t("veganLabel")}</span>
-                            <input
-                              type="checkbox"
-                              checked={selectedItem.vegan ?? false}
-                              on:change={(event) => handleVeganToggle(selectedItem, event)}
-                            />
-                          </label>
-                          <label class="editor-field">
-                            <span>{t("asset360")}</span>
-                            <input
-                              type="text"
-                              class="editor-input"
-                              bind:value={selectedItem.media.hero360}
-                              list="asset-files"
-                            />
-                          </label>
-                        </div>
+                      <p class="edit-block__title">{t("sectionName")}</p>
+                      <label class="editor-field">
+                        <span>{editLang.toUpperCase()}</span>
+                        <input
+                          type="text"
+                          class="editor-input"
+                          value={selectedCategory.name?.[editLang] ?? ""}
+                          on:input={(event) =>
+                            handleLocalizedInput(selectedCategory.name, editLang, event)}
+                        />
+                      </label>
+                    </div>
+                  {/if}
+
+                  {#if editPanel === "dish" && selectedCategory}
+                    <p class="edit-hint">{t("dishHint")}</p>
+                    <div class="edit-row">
+                      <label class="editor-field">
+                        <span>{t("dish")}</span>
+                        <select bind:value={selectedItemId} class="editor-select">
+                          {#each selectedCategory.items as item}
+                            <option value={item.id}>
+                              {getLocalizedValue(item.name, editLang, draft.meta.defaultLocale)}
+                            </option>
+                          {/each}
+                        </select>
+                      </label>
+                      <div class="edit-actions">
+                        <button
+                          class="editor-outline"
+                          type="button"
+                          aria-label={t("prevDish")}
+                          title={t("prevDish")}
+                          on:click={goPrevDish}
+                        >
+                          <span class="btn-icon">◀</span>
+                        </button>
+                        <button
+                          class="editor-outline"
+                          type="button"
+                          aria-label={t("nextDish")}
+                          title={t("nextDish")}
+                          on:click={goNextDish}
+                        >
+                          <span class="btn-icon">▶</span>
+                        </button>
+                        <button
+                          class="editor-outline"
+                          type="button"
+                          aria-label={t("addDish")}
+                          title={t("addDish")}
+                          on:click={addDish}
+                        >
+                          <span class="btn-icon">＋</span>
+                        </button>
+                        <button class="editor-outline danger" type="button" on:click={deleteDish}>
+                          {t("delete")}
+                        </button>
                       </div>
                     </div>
+
+                    {#if selectedItem}
+                      <div class="edit-block">
+                        <p class="edit-block__title">{t("dishData")}</p>
+                        <div class="edit-item">
+                          <div class="edit-item__media">
+                            <img src={selectedItem.media.hero360 ?? ""} alt={textOf(selectedItem.name)} />
+                          </div>
+                          <div class="edit-item__content">
+                            <label class="editor-field">
+                              <span>{t("name")} ({editLang.toUpperCase()})</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                value={selectedItem.name?.[editLang] ?? ""}
+                                on:input={(event) =>
+                                  handleLocalizedInput(selectedItem.name, editLang, event)}
+                              />
+                            </label>
+                            <label class="editor-field">
+                              <span>{t("description")} ({editLang.toUpperCase()})</span>
+                              <textarea
+                                class="editor-input"
+                                rows="2"
+                                value={selectedItem.description?.[editLang] ?? ""}
+                                on:input={(event) =>
+                                  handleDescriptionInput(selectedItem, editLang, event)}
+                              ></textarea>
+                            </label>
+                            <label class="editor-field">
+                              <span>{t("longDescription")} ({editLang.toUpperCase()})</span>
+                              <textarea
+                                class="editor-input"
+                                rows="3"
+                                value={selectedItem.longDescription?.[editLang] ?? ""}
+                                on:input={(event) =>
+                                  handleLongDescriptionInput(selectedItem, editLang, event)}
+                              ></textarea>
+                            </label>
+                            <label class="editor-field">
+                              <span>{t("price")}</span>
+                              <input
+                                type="number"
+                                class="editor-input"
+                                bind:value={selectedItem.price.amount}
+                              />
+                            </label>
+                            <div class="editor-field">
+                              <span>{t("commonAllergens")}</span>
+                              <div class="allergen-checklist">
+                                {#each commonAllergenCatalog as allergen}
+                                  <label class="allergen-option">
+                                    <input
+                                      type="checkbox"
+                                      checked={isCommonAllergenChecked(selectedItem, allergen.id)}
+                                      on:change={(event) =>
+                                        handleCommonAllergenToggle(selectedItem, allergen.id, event)}
+                                    />
+                                    <span>{getCommonAllergenLabel(allergen, editLang)}</span>
+                                  </label>
+                                {/each}
+                              </div>
+                            </div>
+                            <label class="editor-field">
+                              <span>{t("customAllergens")} ({editLang.toUpperCase()})</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                value={getCustomAllergensInput(selectedItem, editLang)}
+                                on:input={(event) =>
+                                  handleCustomAllergensInput(selectedItem, editLang, event)}
+                              />
+                              <small class="editor-hint">{t("customAllergensHint")}</small>
+                            </label>
+                            <label class="editor-field editor-inline">
+                              <span>{t("veganLabel")}</span>
+                              <input
+                                type="checkbox"
+                                checked={selectedItem.vegan ?? false}
+                                on:change={(event) => handleVeganToggle(selectedItem, event)}
+                              />
+                            </label>
+                            <label class="editor-field">
+                              <span>{t("asset360")}</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                bind:value={selectedItem.media.hero360}
+                                list="asset-files"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    {/if}
                   {/if}
                 {/if}
               </div>
@@ -4484,7 +4714,9 @@ Windows:
                         <span>{t("wizardCategory")}</span>
                         <select bind:value={wizardCategoryId} class="editor-select">
                           {#each draft.categories as category}
-                            <option value={category.id}>{textOf(category.name)}</option>
+                            <option value={category.id}>
+                              {getLocalizedValue(category.name, wizardLang, draft.meta.defaultLocale)}
+                            </option>
                           {/each}
                         </select>
                       </label>
@@ -4501,7 +4733,9 @@ Windows:
                           <span>{t("dish")}</span>
                           <select bind:value={wizardItemId} class="editor-select">
                             {#each wizardCategory.items as item}
-                              <option value={item.id}>{textOf(item.name)}</option>
+                              <option value={item.id}>
+                                {getLocalizedValue(item.name, wizardLang, draft.meta.defaultLocale)}
+                              </option>
                             {/each}
                           </select>
                         </label>
@@ -4593,11 +4827,13 @@ Windows:
           class={`menu-preview template-${activeProject.meta.template || "focus-rows"}`}
           style={`--menu-font:${previewFontStack};`}
         >
-            {#if activeProject.backgrounds[0]?.src}
-              <div
-                class="menu-background"
-                style={`background-image: url('${activeProject.backgrounds[0]?.src}');`}
-              ></div>
+            {#if previewBackgrounds.length}
+              {#each previewBackgrounds as background, index (`${background.id}-${index}`)}
+                <div
+                  class={`menu-background ${index === activeBackgroundIndex ? "active" : ""}`}
+                  style={`background-image: url('${background.src}');`}
+                ></div>
+              {/each}
             {/if}
             <div class="menu-overlay"></div>
 
