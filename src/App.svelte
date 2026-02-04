@@ -1,12 +1,13 @@
 <svelte:head>
-  <title>Menú Interactivo</title>
+  <title>{t("appTitle")}</title>
 </svelte:head>
 
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
+  import { createZipBlob } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
-  import type { MenuProject } from "./lib/types";
+  import type { MenuCategory, MenuItem, MenuProject } from "./lib/types";
 
   let project: MenuProject | null = null;
   let draft: MenuProject | null = null;
@@ -15,14 +16,544 @@
   let locale = "es";
   let loadError = "";
   let activeProject: MenuProject | null = null;
+  let editorOpen = false;
+  let previewMode: "device" | "mobile" | "full" = "device";
+  let deviceMode: "mobile" | "desktop" = "desktop";
+  let editorTab: "info" | "assets" | "edit" | "wizard" = "info";
+  let wizardStep = 0;
+  let projectFileInput: HTMLInputElement | null = null;
+  let assetUploadInput: HTMLInputElement | null = null;
+  let openError = "";
+  let lastSaveName = "";
+  let exportError = "";
+  let exportStatus = "";
+  let activeItem: { category: string; itemId: string } | null = null;
+  let carouselActive: Record<string, number> = {};
+  let carouselRaf: Record<string, number | null> = {};
+  let carouselSnapTimeout: Record<string, number | null> = {};
+  let languageMenuOpen = false;
+  let uiLang: "es" | "en" = "es";
+  let editLang = "es";
+  let wizardLang = "es";
+  let wizardCategoryId = "";
+  let wizardItemId = "";
+  let selectedCategoryId = "";
+  let selectedItemId = "";
+  let wizardStatus = {
+    structure: false,
+    identity: false,
+    categories: false,
+    dishes: false,
+    preview: false
+  };
+  let wizardProgress = 0;
+  let selectedCategory: MenuCategory | null = null;
+  let selectedItem: MenuItem | null = null;
+  let wizardCategory: MenuCategory | null = null;
+  let wizardItem: MenuItem | null = null;
+  let projectAssets: { id: string; label: string; src: string; group: string }[] = [];
+  let selectedAssetIds: string[] = [];
+  let rootHandle: FileSystemDirectoryHandle | null = null;
+  let bridgeAvailable = false;
+  let assetMode: "filesystem" | "bridge" | "none" = "none";
+  let bridgeProjectSlug = "";
+  let fsEntries: {
+    id: string;
+    name: string;
+    path: string;
+    kind: "file" | "directory";
+    handle: FileSystemHandle | null;
+    parent: FileSystemDirectoryHandle | null;
+    source: "filesystem" | "bridge";
+  }[] = [];
+  let fsError = "";
+  let rootFiles: string[] = [];
+  let assetOptions: string[] = [];
+  let rootLabel = "";
+  let expandedPaths: Record<string, boolean> = {};
+  let treeRows: {
+    entry: (typeof fsEntries)[number];
+    depth: number;
+    hasChildren: boolean;
+    expanded: boolean;
+  }[] = [];
+
+  const languageOptions = [
+    { code: "es", label: "Español" },
+    { code: "en", label: "English" },
+    { code: "fr", label: "Français" },
+    { code: "pt", label: "Português" },
+    { code: "it", label: "Italiano" },
+    { code: "de", label: "Deutsch" },
+    { code: "ja", label: "日本語" },
+    { code: "ko", label: "한국어" },
+    { code: "zh", label: "中文" }
+  ];
+
+  const currencyOptions = [
+    { code: "MXN", label: "Peso MXN", symbol: "$" },
+    { code: "USD", label: "US Dollar", symbol: "$" },
+    { code: "EUR", label: "Euro", symbol: "€" },
+    { code: "GBP", label: "Pound", symbol: "£" },
+    { code: "JPY", label: "Yen", symbol: "¥" },
+    { code: "COP", label: "Peso COP", symbol: "$" },
+    { code: "ARS", label: "Peso ARS", symbol: "$" }
+  ];
+
+  const uiCopy = {
+    es: {
+      appTitle: "Menú Interactivo",
+      studioTitle: "Menú Interactivo",
+      studioSubtitle: "Centro de control del proyecto.",
+      tabProject: "Proyecto",
+      tabAssets: "Assets",
+      tabEdit: "Edición",
+      tabWizard: "Wizard",
+      open: "Abrir proyecto",
+      save: "Guardar proyecto",
+      export: "Exportar sitio",
+      toggleView: "Cambiar vista",
+      toggleLang: "Cambiar idioma UI",
+      openEditor: "Abrir editor",
+      closeEditor: "Cerrar editor",
+      loadingProject: "Cargando proyecto...",
+      uploadAssets: "Subir assets",
+      uploadHint: "Arrastra archivos o usa el botón para subir.",
+      promptMoveTo: "Mover a (ruta dentro de la carpeta raíz)",
+      step: "Paso",
+      wizardProgress: "Progreso",
+      wizardNext: "Siguiente",
+      wizardBack: "Anterior",
+      wizardComplete: "Completo",
+      wizardMissingBackground: "Agrega al menos un fondo con src.",
+      wizardMissingCategories: "Crea al menos una sección con nombre.",
+      wizardMissingDishes: "Agrega al menos un platillo con nombre y precio.",
+      exporting: "Exportando...",
+      exportReady: "Exportación lista.",
+      exportFailed: "No se pudo exportar.",
+      tipRotate: "Consejo: gira el dispositivo a horizontal para ver el layout completo.",
+      selectFolder: "Seleccionar carpeta",
+      newFolder: "Nueva carpeta",
+      rootTitle: "Carpeta raíz del proyecto",
+      rootNone: "Sin carpeta seleccionada",
+      dragDrop: "Arrastra archivos aquí o usa el botón de seleccionar carpeta.",
+      selectAll: "Seleccionar todo",
+      clear: "Limpiar",
+      move: "Mover",
+      delete: "Eliminar",
+      rename: "Renombrar",
+      pickRootHint: "Selecciona una carpeta raíz para ver tus assets.",
+      rootEmpty: "Sin archivos en la carpeta seleccionada.",
+      filesCount: "archivos",
+      projectName: "Nombre del proyecto",
+      template: "Template",
+      languages: "Idiomas disponibles",
+      defaultLang: "Idioma default",
+      currency: "Moneda",
+      currencyPos: "Posición del símbolo",
+      currencyLeft: "Izquierda (€150)",
+      currencyRight: "Derecha (150€)",
+      editLang: "Idioma de edición",
+      section: "Sección",
+      sectionName: "Nombre de sección",
+      deleteSection: "Eliminar sección",
+      dish: "Platillo",
+      dishData: "Datos del platillo",
+      name: "Nombre",
+      description: "Descripción",
+      price: "Precio",
+      asset360: "Asset 360",
+      addSection: "Agregar sección",
+      addDish: "Agregar platillo",
+      prevDish: "Platillo anterior",
+      nextDish: "Platillo siguiente",
+      wizardPick: "Elige una estructura base para comenzar.",
+      wizardTip: "Tip: si ya tienes categorías, el template solo cambia el estilo.",
+      wizardIdentity: "Define identidad y fondos.",
+      wizardCategories: "Crea categorías principales.",
+      wizardDishes: "Agrega platillos y sus GIFs 360.",
+      wizardPreview: "Revisa el preview final.",
+      wizardStepStructure: "Estructura",
+      wizardStepIdentity: "Identidad",
+      wizardStepCategories: "Categorías",
+      wizardStepDishes: "Platillos",
+      wizardStepPreview: "Preview",
+      wizardAddBg: "+ Fondo",
+      wizardLabel: "Label",
+      wizardSrc: "Src",
+      wizardLanguage: "Idioma",
+      wizardCategory: "Categoría",
+      wizardAddCategory: "+ Categoría",
+      wizardAddDish: "+ Platillo",
+      wizardExportNote: "El exportador del sitio estático se agregará en este paso.",
+      backgroundLabel: "Fondo",
+      errOpenProject: "No se pudo abrir el archivo",
+      errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
+      errOpenFolder: "No se pudo abrir la carpeta.",
+      errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
+      promptNewFolder: "Nombre de la nueva carpeta",
+      promptRename: "Nuevo nombre",
+      promptSaveName: "Nombre del archivo del proyecto"
+    },
+    en: {
+      appTitle: "Interactive Menu",
+      studioTitle: "Interactive Menu",
+      studioSubtitle: "Project control center.",
+      tabProject: "Project",
+      tabAssets: "Assets",
+      tabEdit: "Edit",
+      tabWizard: "Wizard",
+      open: "Open project",
+      save: "Save project",
+      export: "Export site",
+      toggleView: "Toggle view",
+      toggleLang: "Toggle UI language",
+      openEditor: "Open editor",
+      closeEditor: "Close editor",
+      loadingProject: "Loading project...",
+      uploadAssets: "Upload assets",
+      uploadHint: "Drag files here or use the upload button.",
+      promptMoveTo: "Move to (path inside root folder)",
+      step: "Step",
+      wizardProgress: "Progress",
+      wizardNext: "Next",
+      wizardBack: "Back",
+      wizardComplete: "Complete",
+      wizardMissingBackground: "Add at least one background with src.",
+      wizardMissingCategories: "Create at least one section with a name.",
+      wizardMissingDishes: "Add at least one dish with name and price.",
+      exporting: "Exporting...",
+      exportReady: "Export ready.",
+      exportFailed: "Export failed.",
+      tipRotate: "Tip: rotate the device to landscape to see the full layout.",
+      selectFolder: "Select folder",
+      newFolder: "New folder",
+      rootTitle: "Project root folder",
+      rootNone: "No folder selected",
+      dragDrop: "Drag files here or use the select folder button.",
+      selectAll: "Select all",
+      clear: "Clear",
+      move: "Move",
+      delete: "Delete",
+      rename: "Rename",
+      pickRootHint: "Select a root folder to see your assets.",
+      rootEmpty: "No files in the selected folder.",
+      filesCount: "files",
+      projectName: "Project name",
+      template: "Template",
+      languages: "Available languages",
+      defaultLang: "Default language",
+      currency: "Currency",
+      currencyPos: "Symbol position",
+      currencyLeft: "Left (€150)",
+      currencyRight: "Right (150€)",
+      editLang: "Editing language",
+      section: "Section",
+      sectionName: "Section name",
+      deleteSection: "Delete section",
+      dish: "Dish",
+      dishData: "Dish details",
+      name: "Name",
+      description: "Description",
+      price: "Price",
+      asset360: "360 asset",
+      addSection: "Add section",
+      addDish: "Add dish",
+      prevDish: "Previous dish",
+      nextDish: "Next dish",
+      wizardPick: "Choose a base structure to start.",
+      wizardTip: "Tip: if you already have categories, the template only changes layout.",
+      wizardIdentity: "Define identity and backgrounds.",
+      wizardCategories: "Create main categories.",
+      wizardDishes: "Add dishes and their 360 GIFs.",
+      wizardPreview: "Review the final preview.",
+      wizardStepStructure: "Structure",
+      wizardStepIdentity: "Identity",
+      wizardStepCategories: "Categories",
+      wizardStepDishes: "Dishes",
+      wizardStepPreview: "Preview",
+      wizardAddBg: "+ Background",
+      wizardLabel: "Label",
+      wizardSrc: "Src",
+      wizardLanguage: "Language",
+      wizardCategory: "Category",
+      wizardAddCategory: "+ Category",
+      wizardAddDish: "+ Dish",
+      wizardExportNote: "The static site exporter will be added in this step.",
+      backgroundLabel: "Background",
+      errOpenProject: "Unable to open the file",
+      errNoFolder: "Your browser doesn't support local folder access.",
+      errOpenFolder: "Unable to open the folder.",
+      errMoveFolder: "Your browser doesn't support moving files by folder.",
+      promptNewFolder: "New folder name",
+      promptRename: "New name",
+      promptSaveName: "Project file name"
+    }
+  };
+
+  type UiKey = keyof (typeof uiCopy)["es"];
+  let t: (key: UiKey) => string = (key) => uiCopy.es[key];
+  let selectedLabel: (count: number) => string = (count) => `${count} seleccionados`;
+  $: t = (key) => uiCopy[uiLang]?.[key] ?? key;
+  $: selectedLabel = (count) =>
+    uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
+
+  type TemplateOption = {
+    id: string;
+    label: Record<string, string>;
+    categories: Record<string, string[]>;
+  };
+
+  const templateOptions: TemplateOption[] = [
+    {
+      id: "bar-pub",
+      label: { es: "Bar / Pub", en: "Bar / Pub" },
+      categories: { es: ["Cócteles", "Especiales"], en: ["Cocktails", "Specials"] }
+    },
+    {
+      id: "cafe-brunch",
+      label: { es: "Cafe / Brunch", en: "Cafe / Brunch" },
+      categories: { es: ["Cafe", "Brunch", "Postres"], en: ["Cafe", "Brunch", "Desserts"] }
+    },
+    {
+      id: "street-food",
+      label: { es: "Street Food", en: "Street Food" },
+      categories: { es: ["Street Food", "Sides", "Bebidas"], en: ["Street Food", "Sides", "Drinks"] }
+    }
+  ];
+
+  $: if (draft) {
+    const validCategory = draft.categories.some((item) => item.id === selectedCategoryId);
+    if (!selectedCategoryId || !validCategory) {
+      selectedCategoryId = draft.categories[0]?.id ?? "";
+    }
+    selectedCategory = draft.categories.find((item) => item.id === selectedCategoryId) ?? null;
+    const validItem = selectedCategory?.items.some((item) => item.id === selectedItemId);
+    if (!selectedItemId || !validItem) {
+      selectedItemId = selectedCategory?.items[0]?.id ?? "";
+    }
+    selectedItem =
+      selectedCategory?.items.find((item) => item.id === selectedItemId) ?? null;
+
+    if (!draft.meta.locales.includes(editLang)) {
+      editLang = draft.meta.defaultLocale;
+    }
+    if (!draft.meta.locales.includes(wizardLang)) {
+      wizardLang = draft.meta.defaultLocale;
+    }
+    if (!draft.meta.currencyPosition) {
+      draft.meta.currencyPosition = "left";
+    }
+    const validWizardCategory = draft.categories.some((item) => item.id === wizardCategoryId);
+    if (!wizardCategoryId || !validWizardCategory) {
+      wizardCategoryId = draft.categories[0]?.id ?? "";
+    }
+    wizardCategory = draft.categories.find((item) => item.id === wizardCategoryId) ?? null;
+    const validWizardItem = wizardCategory?.items.some((item) => item.id === wizardItemId);
+    if (!wizardItemId || !validWizardItem) {
+      wizardItemId = wizardCategory?.items[0]?.id ?? "";
+    }
+    wizardItem =
+      wizardCategory?.items.find((item) => item.id === wizardItemId) ?? null;
+  }
+
+  $: if (draft) {
+    const backgrounds =
+      draft.backgrounds?.map((asset) => ({
+        id: `bg-${asset.id}`,
+        label: asset.label,
+        src: asset.src,
+        group: "Fondos"
+      })) ?? [];
+    const dishes = draft.categories.flatMap((category) =>
+      category.items
+        .filter((item) => item.media.hero360)
+        .map((item) => ({
+          id: `dish-${item.id}`,
+          label: textOf(item.name),
+          src: item.media.hero360 ?? "",
+          group: "Platillos"
+        }))
+    );
+    projectAssets = [...backgrounds, ...dishes];
+  }
+
+  $: assetOptions = rootFiles.length
+    ? rootFiles
+    : projectAssets.map((asset) => asset.src).filter(Boolean);
+  $: rootLabel = rootHandle
+    ? rootHandle.name
+    : bridgeAvailable
+      ? `Container · ${getProjectSlug()}`
+      : t("rootNone");
+  $: if (assetMode === "bridge") {
+    const slug = getProjectSlug();
+    if (slug && slug !== bridgeProjectSlug) {
+      void refreshBridgeEntries();
+    }
+  }
+
+  const buildTreeRows = () => {
+    if (!fsEntries.length) {
+      treeRows = [];
+      return;
+    }
+    const entryMap = new Map<string, (typeof fsEntries)[number]>();
+    fsEntries.forEach((entry) => entryMap.set(entry.path, entry));
+
+    const childrenMap = new Map<string, Set<string>>();
+    const ensureChildren = (parent: string) => {
+      if (!childrenMap.has(parent)) childrenMap.set(parent, new Set());
+      return childrenMap.get(parent)!;
+    };
+
+    fsEntries.forEach((entry) => {
+      const parts = entry.path.split("/").filter(Boolean);
+      let parent = "";
+      parts.forEach((part, index) => {
+        const current = parts.slice(0, index + 1).join("/");
+        ensureChildren(parent).add(current);
+        parent = current;
+      });
+    });
+
+    const getEntry = (path: string) => {
+      const existing = entryMap.get(path);
+      if (existing) return existing;
+      const name = path.split("/").filter(Boolean).pop() ?? path;
+      return {
+        id: path,
+        name,
+        path,
+        kind: "directory",
+        handle: null,
+        parent: null,
+        source: assetMode === "filesystem" ? "filesystem" : "bridge"
+      } as (typeof fsEntries)[number];
+    };
+
+    const rows: {
+      entry: (typeof fsEntries)[number];
+      depth: number;
+      hasChildren: boolean;
+      expanded: boolean;
+    }[] = [];
+
+    const sortPaths = (a: string, b: string) => {
+      const entryA = getEntry(a);
+      const entryB = getEntry(b);
+      if (entryA.kind !== entryB.kind) {
+        return entryA.kind === "directory" ? -1 : 1;
+      }
+      return entryA.name.localeCompare(entryB.name);
+    };
+
+    const walk = (parent: string, depth: number) => {
+      const children = Array.from(childrenMap.get(parent) ?? []).sort(sortPaths);
+      children.forEach((child) => {
+        const entry = getEntry(child);
+        const hasChildren = (childrenMap.get(child)?.size ?? 0) > 0;
+        const expanded = expandedPaths[child] ?? (depth === 0);
+        rows.push({ entry, depth, hasChildren, expanded });
+        if (entry.kind === "directory" && expanded) {
+          walk(child, depth + 1);
+        }
+      });
+    };
+
+    walk("", 0);
+    treeRows = rows;
+  };
+
+  $: if (fsEntries) {
+    fsEntries.forEach((entry) => {
+      if (entry.kind === "directory" && expandedPaths[entry.path] === undefined) {
+        const isTopLevel = !entry.path.includes("/");
+        expandedPaths = { ...expandedPaths, [entry.path]: isTopLevel };
+      }
+    });
+    buildTreeRows();
+  }
+
+  $: effectivePreview =
+    previewMode === "device" ? (deviceMode === "mobile" ? "mobile" : "full") : previewMode;
+  $: editorLocked = deviceMode === "desktop" && effectivePreview === "mobile";
+  $: layoutMode = editorLocked ? "split" : "full";
+  $: editorVisible = editorLocked ? true : editorOpen;
+  $: showEditorToggle = !editorLocked;
+
+  $: if (draft) {
+    const defaultLocale = draft.meta.defaultLocale || "es";
+    const hasTemplate = Boolean(draft.meta.template);
+    const hasBackground = draft.backgrounds.some((bg) => bg.src && bg.src.trim().length > 0);
+    const hasCategories =
+      draft.categories.length > 0 &&
+      draft.categories.every((category) => category.name?.[defaultLocale]?.trim());
+    const dishCount = draft.categories.reduce((acc, category) => acc + category.items.length, 0);
+    const hasDishes =
+      dishCount > 0 &&
+      draft.categories.every((category) =>
+        category.items.every(
+          (item) =>
+            item.name?.[defaultLocale]?.trim() &&
+            typeof item.price?.amount === "number" &&
+            item.price.amount > 0
+        )
+      );
+    wizardStatus = {
+      structure: hasTemplate,
+      identity: hasBackground,
+      categories: hasCategories,
+      dishes: hasDishes,
+      preview: hasTemplate && hasBackground && hasCategories && hasDishes
+    };
+    const completed = [
+      wizardStatus.structure,
+      wizardStatus.identity,
+      wizardStatus.categories,
+      wizardStatus.dishes,
+      wizardStatus.preview
+    ].filter(Boolean).length;
+    wizardProgress = completed / wizardSteps.length;
+  } else {
+    wizardStatus = {
+      structure: false,
+      identity: false,
+      categories: false,
+      dishes: false,
+      preview: false
+    };
+    wizardProgress = 0;
+  }
 
   onMount(async () => {
     try {
+      const query = window.matchMedia("(min-width: 900px)");
+      const updateDeviceMode = () => {
+        deviceMode = query.matches ? "desktop" : "mobile";
+        void syncCarousels();
+      };
+      updateDeviceMode();
+      query.addEventListener?.("change", updateDeviceMode);
+      query.addListener?.(updateDeviceMode);
+
+      try {
+        const response = await fetch("/api/assets/ping");
+        bridgeAvailable = response.ok;
+      } catch {
+        bridgeAvailable = false;
+      }
+      updateAssetMode();
+      if (assetMode === "bridge") {
+        await refreshBridgeEntries();
+      }
+
       projects = await loadProjects();
       activeSlug = projects[0]?.slug ?? activeSlug;
       project = await loadProject(activeSlug);
       draft = cloneProject(project);
       locale = project.meta.defaultLocale;
+      initCarouselIndices(project);
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Error desconocido";
     }
@@ -42,6 +573,10 @@
       draft = cloneProject(project);
       locale = project.meta.defaultLocale;
       loadError = "";
+      initCarouselIndices(project);
+      if (assetMode === "bridge") {
+        await refreshBridgeEntries();
+      }
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Error desconocido";
     }
@@ -54,174 +589,2282 @@
     return JSON.parse(JSON.stringify(value)) as MenuProject;
   };
 
-  const updateLocales = (value: string) => {
+  const toggleLanguage = (code: string) => {
     if (!draft) return;
-    const parsed = value
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-    draft.meta.locales = parsed.length ? parsed : draft.meta.locales;
+    const set = new Set(draft.meta.locales);
+    if (set.has(code)) {
+      set.delete(code);
+    } else {
+      set.add(code);
+    }
+    if (set.size === 0) {
+      set.add(draft.meta.defaultLocale || "es");
+    }
+    draft.meta.locales = Array.from(set);
+    if (!draft.meta.locales.includes(draft.meta.defaultLocale)) {
+      draft.meta.defaultLocale = draft.meta.locales[0];
+    }
   };
 
-  const handleLocalesInput = (event: Event) => {
-    const input = event.currentTarget as HTMLInputElement;
-    updateLocales(input.value);
+  const setCurrency = (code: string) => {
+    if (!draft) return;
+    draft.meta.currency = code;
   };
 
-  const downloadProject = () => {
+  const toggleCurrencyPosition = () => {
+    if (!draft) return;
+    draft.meta.currencyPosition = draft.meta.currencyPosition === "right" ? "left" : "right";
+  };
+
+  const slugifyName = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+
+  const normalizeFileName = (value: string) => {
+    const sanitized = value.replace(/[\\/:*?"<>|]/g, "").trim();
+    if (!sanitized) return "";
+    return sanitized.toLowerCase().endsWith(".json") ? sanitized : `${sanitized}.json`;
+  };
+
+  const getSuggestedFileName = () => {
+    if (lastSaveName) return lastSaveName;
+    const baseName = draft?.meta.name?.trim() || draft?.meta.slug || "menu";
+    const slug = slugifyName(baseName) || "menu";
+    return `${slug}.json`;
+  };
+
+  const downloadProject = (fileName: string) => {
     if (!draft) return;
     const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${draft.meta.slug}-menu.json`;
+    anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
   };
+
+  const saveProject = async () => {
+    if (!draft) return;
+    const suggested = getSuggestedFileName();
+    const response = window.prompt(t("promptSaveName"), suggested);
+    if (!response) return;
+    const fileName = normalizeFileName(response) || suggested;
+    lastSaveName = fileName;
+    if (rootHandle) {
+      const fileHandle = await rootHandle.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(draft, null, 2));
+      await writable.close();
+      await refreshRootEntries();
+      return;
+    }
+    downloadProject(fileName);
+  };
+
+  const buildExportStyles = () => `
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "SF Pro Display", "Poppins", system-ui, sans-serif;
+  background: #05060f;
+  color: #e2e8f0;
+}
+.menu-preview {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+.menu-background {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.92;
+  filter: blur(2px);
+  transform: scale(1.05);
+}
+.menu-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));
+}
+.menu-content {
+  position: relative;
+  z-index: 2;
+  padding: 32px 24px 40px;
+  display: grid;
+  gap: 24px;
+}
+.menu-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.menu-eyebrow {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: rgba(226, 232, 240, 0.7);
+}
+.menu-title {
+  margin: 4px 0 0;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+}
+.menu-select {
+  background: rgba(15, 23, 42, 0.65);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+}
+.menu-scroll {
+  display: grid;
+  gap: 24px;
+}
+.menu-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: rgba(226, 232, 240, 0.7);
+}
+.menu-section__title { font-size: 0.75rem; }
+.menu-section__count { font-size: 0.65rem; }
+.menu-carousel {
+  --carousel-card: clamp(200px, 70vw, 260px);
+  --carousel-edge: max(24px, calc(50% - (var(--carousel-card) / 2)));
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 12px var(--carousel-edge) 16px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--carousel-edge);
+  scrollbar-width: none;
+  align-items: flex-start;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.menu-carousel::-webkit-scrollbar { display: none; }
+.carousel-card {
+  --fade: 1;
+  width: var(--carousel-card);
+  min-width: var(--carousel-card);
+  max-width: var(--carousel-card);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  border-radius: 22px;
+  padding: 8px 6px 12px;
+  background: transparent;
+  border: none;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  justify-items: center;
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 220ms ease, filter 240ms ease;
+  transform-origin: center center;
+  opacity: var(--fade);
+  filter: blur(calc((1 - var(--fade)) * 3px));
+  color: inherit;
+}
+.carousel-card.active { transform: scale(0.95); opacity: 1; filter: none; }
+.carousel-media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  margin-bottom: -10px;
+}
+.carousel-media img {
+  width: 75%;
+  height: 75%;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.35));
+}
+.carousel-text {
+  width: 100%;
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 6px;
+}
+.carousel-title { margin: 0; font-size: 0.95rem; }
+.carousel-desc { margin: 0; font-size: 0.75rem; color: rgba(226, 232, 240, 0.75); }
+.carousel-price { font-weight: 600; color: #fbbf24; }
+.dish-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.75);
+  display: none;
+  place-items: center;
+  z-index: 20;
+  padding: 20px;
+}
+.dish-modal.open { display: grid; }
+.dish-modal__card {
+  max-width: 420px;
+  width: 100%;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 20px;
+  position: relative;
+  display: grid;
+  gap: 12px;
+  color: #e2e8f0;
+}
+.dish-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.dish-modal__media {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+.dish-modal__media img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+}
+.dish-modal__title { margin: 0; font-size: 1.2rem; }
+.dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
+.dish-modal__price { margin: 0; font-weight: 600; color: #fbbf24; }
+@media (min-width: 900px) {
+  .menu-content {
+    padding: 40px 48px 60px;
+  }
+}
+`;
+
+  const buildExportScript = (data: MenuProject) => {
+    const payload = JSON.stringify(data);
+    return `
+const DATA = ${payload};
+const currencySymbols = {
+  MXN: "$", USD: "$", EUR: "€", GBP: "£", JPY: "¥", COP: "$", ARS: "$"
+};
+const LOOP_COPIES = 5;
+let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
+const app = document.getElementById("app");
+const modal = document.getElementById("dish-modal");
+const modalContent = document.getElementById("dish-modal-content");
+
+const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
+const formatPrice = (amount) => {
+  const symbol = currencySymbols[DATA.meta.currency] || DATA.meta.currency;
+  const position = DATA.meta.currencyPosition || "left";
+  return position === "left" ? symbol + amount : amount + symbol;
+};
+
+const getLoopCopies = (count) => (count > 1 ? LOOP_COPIES : 1);
+const getLoopStart = (count) => count * Math.floor(getLoopCopies(count) / 2);
+const getLoopedItems = (items) => {
+  if (items.length <= 1) {
+    return items.map((item, index) => ({ item, loopIndex: index, key: item.id + "-0" }));
+  }
+  const copies = getLoopCopies(items.length);
+  const looped = [];
+  for (let copy = 0; copy < copies; copy += 1) {
+    items.forEach((item, index) => {
+      looped.push({ item, loopIndex: copy * items.length + index, key: item.id + "-" + copy });
+    });
+  }
+  return looped;
+};
+
+const buildCarousel = (category) => {
+  const looped = getLoopedItems(category.items);
+  return \`
+    <div class="menu-section__head">
+      <p class="menu-section__title">\${textOf(category.name)}</p>
+      <span class="menu-section__count">\${category.items.length} items</span>
+    </div>
+    <div class="menu-carousel" data-category-id="\${category.id}">
+      \${looped
+        .map(
+          (entry) => \`
+            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}">
+              <div class="carousel-media">
+                <img src="\${entry.item.media.hero360 || ""}" alt="\${textOf(entry.item.name)}" />
+              </div>
+              <div class="carousel-text">
+                <p class="carousel-title">\${textOf(entry.item.name)}</p>
+                <p class="carousel-desc">\${textOf(entry.item.description)}</p>
+                <span class="carousel-price">\${formatPrice(entry.item.price.amount)}</span>
+              </div>
+            </button>
+          \`
+        )
+        .join("")}
+    </div>
+  \`;
+};
+
+const render = () => {
+  const bg = DATA.backgrounds?.[0]?.src || "";
+  app.innerHTML = \`
+    <div class="menu-preview">
+      <div class="menu-background" style="background-image: url('\${bg}')"></div>
+      <div class="menu-overlay"></div>
+      <div class="menu-content">
+        <header class="menu-topbar">
+          <div>
+            <p class="menu-eyebrow">\${DATA.meta.name}</p>
+            <h1 class="menu-title">\${DATA.meta.name}</h1>
+          </div>
+          <select class="menu-select" id="menu-locale">
+            \${DATA.meta.locales
+              .map((lang) => \`<option value="\${lang}" \${lang === locale ? "selected" : ""}>\${lang.toUpperCase()}</option>\`)
+              .join("")}
+          </select>
+        </header>
+        <div class="menu-scroll">
+          \${DATA.categories.map((category) => \`<section class="menu-section">\${buildCarousel(category)}</section>\`).join("")}
+        </div>
+      </div>
+    </div>
+  \`;
+  const localeSelect = document.getElementById("menu-locale");
+  localeSelect?.addEventListener("change", (event) => {
+    locale = event.target.value;
+    render();
+  });
+  bindCarousels();
+  bindCards();
+};
+
+const centerCarousel = (container, index, behavior = "auto") => {
+  const cards = Array.from(container.querySelectorAll(".carousel-card"));
+  const target = cards[index];
+  if (!target) return;
+  const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+  container.scrollTo({ left: targetLeft, behavior });
+};
+
+const applyFade = (container, activeIndex) => {
+  const cards = Array.from(container.querySelectorAll(".carousel-card"));
+  cards.forEach((card, index) => {
+    const distance = Math.abs(activeIndex - index);
+    const fade = Math.max(0, 1 - distance * 0.2);
+    card.style.setProperty("--fade", fade.toString());
+    card.classList.toggle("active", distance === 0);
+  });
+};
+
+const bindCarousels = () => {
+  const carousels = Array.from(document.querySelectorAll(".menu-carousel"));
+  carousels.forEach((container) => {
+    const id = container.dataset.categoryId;
+    const category = DATA.categories.find((item) => item.id === id);
+    const count = category?.items.length || 0;
+    const start = getLoopStart(count);
+    applyFade(container, start);
+    centerCarousel(container, start, "auto");
+    let timeout;
+    container.addEventListener("scroll", () => {
+      if (timeout) window.clearTimeout(timeout);
+      const cards = Array.from(container.querySelectorAll(".carousel-card"));
+      const center = container.scrollLeft + container.clientWidth / 2;
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      cards.forEach((card, index) => {
+        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+        const distance = Math.abs(center - cardCenter);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+      applyFade(container, closestIndex);
+      timeout = window.setTimeout(() => {
+        let finalIndex = closestIndex;
+        if (count > 1) {
+          const normalized = ((closestIndex % count) + count) % count;
+          finalIndex = getLoopStart(count) + normalized;
+        }
+        centerCarousel(container, finalIndex, finalIndex === closestIndex ? "smooth" : "auto");
+        applyFade(container, finalIndex);
+      }, 160);
+    });
+  });
+};
+
+const bindCards = () => {
+  document.querySelectorAll(".carousel-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const categoryId = card.closest(".menu-carousel")?.dataset.categoryId;
+      const itemId = card.dataset.item;
+      const category = DATA.categories.find((item) => item.id === categoryId);
+      const dish = category?.items.find((item) => item.id === itemId);
+      if (!dish) return;
+      modalContent.innerHTML = \`
+        <button class="dish-modal__close" id="modal-close">✕</button>
+        <div class="dish-modal__media">
+          <img src="\${dish.media.hero360 || ""}" alt="\${textOf(dish.name)}" />
+        </div>
+        <div>
+          <p class="dish-modal__title">\${textOf(dish.name)}</p>
+          <p class="dish-modal__desc">\${textOf(dish.description)}</p>
+          <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
+        </div>
+      \`;
+      modal.classList.add("open");
+      modal.querySelector("#modal-close")?.addEventListener("click", closeModal);
+    });
+  });
+};
+
+const closeModal = () => {
+  modal.classList.remove("open");
+};
+
+modal?.addEventListener("click", (event) => {
+  if (event.target === modal) closeModal();
+});
+
+render();
+`;
+  };
+
+  const buildExportHtml = () => `
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Menu Export</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="dish-modal" class="dish-modal">
+      <div id="dish-modal-content" class="dish-modal__card"></div>
+    </div>
+    <script src="app.js"><\\/script>
+  </body>
+</html>
+`;
+
+  const collectAssetPaths = (data: MenuProject) => {
+    const assets = new Set<string>();
+    data.backgrounds.forEach((bg) => {
+      if (bg.src) assets.add(bg.src);
+    });
+    data.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        if (item.media.hero360) assets.add(item.media.hero360);
+      });
+    });
+    return Array.from(assets)
+      .map((path) => normalizePath(path))
+      .filter((path) => path && !path.startsWith("http"));
+  };
+
+  const exportStaticSite = async () => {
+    if (!draft) return;
+    exportError = "";
+    exportStatus = t("exporting");
+    try {
+      const encoder = new TextEncoder();
+      const entries: { name: string; data: Uint8Array }[] = [];
+      const menuData = JSON.stringify(draft, null, 2);
+      entries.push({ name: "menu.json", data: encoder.encode(menuData) });
+      entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
+      entries.push({ name: "app.js", data: encoder.encode(buildExportScript(draft)) });
+      entries.push({ name: "index.html", data: encoder.encode(buildExportHtml()) });
+
+      const assets = collectAssetPaths(draft);
+      if (assetMode === "filesystem" && rootHandle) {
+        for (const assetPath of assets) {
+          try {
+            const fileHandle = await getFileHandleByPath(assetPath);
+            const file = await fileHandle.getFile();
+            const buffer = await file.arrayBuffer();
+            entries.push({ name: assetPath, data: new Uint8Array(buffer) });
+          } catch (error) {
+            console.warn("Missing asset", assetPath, error);
+          }
+        }
+      } else if (assetMode === "bridge") {
+        for (const assetPath of assets) {
+          try {
+            const slug = getProjectSlug();
+            const prefix = `projects/${slug}/assets/`;
+            const bridgePath = assetPath.startsWith(prefix)
+              ? assetPath.slice(prefix.length)
+              : assetPath;
+            const response = await fetch(
+              `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
+                bridgePath
+              )}`
+            );
+            if (!response.ok) continue;
+            const buffer = await response.arrayBuffer();
+            entries.push({ name: assetPath, data: new Uint8Array(buffer) });
+          } catch (error) {
+            console.warn("Missing asset", assetPath, error);
+          }
+        }
+      }
+
+      const blob = createZipBlob(entries);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${draft.meta.slug || "menu"}-export.zip`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      exportStatus = t("exportReady");
+    } catch (error) {
+      exportStatus = "";
+      exportError = error instanceof Error ? error.message : t("exportFailed");
+    }
+  };
+
+  const toggleEditor = () => {
+    editorOpen = !editorOpen;
+  };
+
+  const togglePreviewMode = () => {
+    if (previewMode === "device") {
+      previewMode = deviceMode === "mobile" ? "full" : "mobile";
+    } else {
+      previewMode = "device";
+    }
+    if (deviceMode === "mobile" && previewMode === "full") {
+      void tryLockLandscape();
+    }
+    if (deviceMode === "mobile" && previewMode === "device") {
+      screen.orientation?.unlock?.();
+    }
+    if (previewMode === "device" && !editorLocked) {
+      editorOpen = false;
+    }
+    void syncCarousels();
+  };
+
+  const tryLockLandscape = async () => {
+    try {
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock("landscape");
+      }
+    } catch {
+      // Ignore failures; browser may require fullscreen or user gesture.
+    }
+  };
+
+  let wizardSteps: string[] = [];
+  $: wizardSteps = [
+    t("wizardStepStructure"),
+    t("wizardStepIdentity"),
+    t("wizardStepCategories"),
+    t("wizardStepDishes"),
+    t("wizardStepPreview")
+  ];
+
+  const LOOP_COPIES = 5;
+
+  const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
+
+  const getLoopStart = (count: number) => count * Math.floor(getLoopCopies(count) / 2);
+
+  const getLoopedItems = (items: MenuItem[]) => {
+    if (items.length === 0) return [];
+    if (items.length === 1) {
+      return [
+        {
+          item: items[0],
+          loopIndex: 0,
+          sourceIndex: 0,
+          key: `${items[0].id}-0`
+        }
+      ];
+    }
+    const copies = getLoopCopies(items.length);
+    const looped: { item: MenuItem; loopIndex: number; sourceIndex: number; key: string }[] = [];
+    for (let copy = 0; copy < copies; copy += 1) {
+      items.forEach((item, index) => {
+        looped.push({
+          item,
+          loopIndex: copy * items.length + index,
+          sourceIndex: index,
+          key: `${item.id}-${copy}`
+        });
+      });
+    }
+    return looped;
+  };
+
+  const goToStep = (index: number) => {
+    wizardStep = index;
+  };
+
+  const isWizardStepValid = (index: number) => {
+    if (index === 0) return wizardStatus.structure;
+    if (index === 1) return wizardStatus.identity;
+    if (index === 2) return wizardStatus.categories;
+    if (index === 3) return wizardStatus.dishes;
+    return wizardStatus.preview;
+  };
+
+  const goNextStep = () => {
+    if (wizardStep >= wizardSteps.length - 1) return;
+    if (!isWizardStepValid(wizardStep)) return;
+    wizardStep += 1;
+  };
+
+  const goPrevStep = () => {
+    if (wizardStep <= 0) return;
+    wizardStep -= 1;
+  };
+
+  const setEditorTab = (tab: "info" | "assets" | "edit" | "wizard") => {
+    editorTab = tab;
+  };
+
+  const openProjectDialog = () => {
+    projectFileInput?.click();
+  };
+
+  const handleProjectFile = async (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as MenuProject;
+      project = data;
+      draft = cloneProject(data);
+      activeSlug = data.meta.slug || "importado";
+      lastSaveName = file.name;
+      locale = data.meta.defaultLocale || "es";
+      initCarouselIndices(data);
+      const existing = projects.find((item) => item.slug === activeSlug);
+      if (existing) {
+        existing.name = data.meta.name;
+        existing.template = data.meta.template;
+        projects = [...projects];
+      } else {
+        projects = [
+          ...projects,
+          {
+            slug: activeSlug,
+            name: data.meta.name,
+            template: data.meta.template
+          }
+        ];
+      }
+      openError = "";
+    } catch (error) {
+      openError = error instanceof Error ? error.message : t("errOpenProject");
+    } finally {
+      input.value = "";
+    }
+  };
+
+  const centerCarousel = (container: HTMLElement, index: number, behavior: ScrollBehavior) => {
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
+    const target = cards[index];
+    if (!target) return;
+    const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+    container.scrollTo({ left: targetLeft, behavior });
+  };
+
+  const syncCarousels = async () => {
+    await tick();
+    const containers = Array.from(
+      document.querySelectorAll<HTMLElement>(".menu-carousel")
+    );
+    containers.forEach((container) => {
+      const id = container.dataset.categoryId;
+      if (!id) return;
+      const index = carouselActive[id] ?? 0;
+      centerCarousel(container, index, "auto");
+    });
+  };
+
+  const initCarouselIndices = (value: MenuProject) => {
+    const next: Record<string, number> = {};
+    value.categories.forEach((category) => {
+      next[category.id] = getLoopStart(category.items.length);
+    });
+    carouselActive = next;
+    void syncCarousels();
+  };
+
+  const pickRootFolder = async () => {
+    try {
+      const picker = (window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> })
+        .showDirectoryPicker;
+      if (!picker) {
+        if (bridgeAvailable) {
+          assetMode = "bridge";
+          fsError = "";
+          await refreshBridgeEntries();
+          return;
+        }
+        fsError = t("errNoFolder");
+        return;
+      }
+      rootHandle = await picker();
+      fsError = "";
+      updateAssetMode();
+      await refreshRootEntries();
+    } catch (error) {
+      fsError = error instanceof Error ? error.message : t("errOpenFolder");
+    }
+  };
+
+  const refreshRootEntries = async () => {
+    if (!rootHandle) return;
+    const entries: {
+      id: string;
+      name: string;
+      path: string;
+      kind: "file" | "directory";
+      handle: FileSystemHandle | null;
+      parent: FileSystemDirectoryHandle | null;
+      source: "filesystem" | "bridge";
+    }[] = [];
+    const walk = async (dir: FileSystemDirectoryHandle, prefix = "") => {
+      for await (const [name, handle] of dir.entries()) {
+        const path = `${prefix}${name}`;
+        entries.push({
+          id: path,
+          name,
+          path,
+          kind: handle.kind,
+          handle,
+          parent: dir,
+          source: "filesystem"
+        });
+        if (handle.kind === "directory") {
+          await walk(handle as FileSystemDirectoryHandle, `${path}/`);
+        }
+      }
+    };
+    await walk(rootHandle);
+    entries.sort((a, b) => {
+      if (a.kind !== b.kind) {
+        return a.kind === "directory" ? -1 : 1;
+      }
+      return a.path.localeCompare(b.path);
+    });
+    fsEntries = entries;
+    rootFiles = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
+  };
+
+  const getProjectSlug = () => draft?.meta.slug || activeSlug || "demo";
+
+  const updateAssetMode = () => {
+    if (rootHandle) {
+      assetMode = "filesystem";
+    } else if (bridgeAvailable) {
+      assetMode = "bridge";
+      fsError = "";
+    } else {
+      assetMode = "none";
+    }
+  };
+
+  const refreshBridgeEntries = async () => {
+    if (!bridgeAvailable) return;
+    const slug = getProjectSlug();
+    bridgeProjectSlug = slug;
+    try {
+      const response = await fetch(`/api/assets/list?project=${encodeURIComponent(slug)}`);
+      if (!response.ok) {
+        fsError = t("errOpenFolder");
+        return;
+      }
+      const data = (await response.json()) as {
+        entries?: { path: string; kind: "file" | "directory" }[];
+      };
+      const entries = (data.entries ?? []).map((entry) => {
+        const name = entry.path.split("/").filter(Boolean).pop() ?? entry.path;
+        return {
+          id: entry.path,
+          name,
+          path: entry.path,
+          kind: entry.kind,
+          handle: null,
+          parent: null,
+          source: "bridge" as const
+        };
+      });
+      fsEntries = entries;
+      const prefix = `/projects/${slug}/assets/`;
+      rootFiles = entries
+        .filter((entry) => entry.kind === "file")
+        .map((entry) => `${prefix}${entry.path}`);
+      fsError = "";
+    } catch (error) {
+      fsError = error instanceof Error ? error.message : t("errOpenFolder");
+    }
+  };
+
+  const bridgeRequest = async (endpoint: string, payload?: Record<string, unknown>) => {
+    const slug = getProjectSlug();
+    const response = await fetch(`/api/assets/${endpoint}?project=${encodeURIComponent(slug)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Bridge error");
+    }
+  };
+
+  const normalizePath = (value: string) => value.replace(/^\/+/, "").trim();
+
+  const getDirectoryHandleByPath = async (
+    path: string,
+    create = false
+  ): Promise<FileSystemDirectoryHandle> => {
+    if (!rootHandle) {
+      throw new Error(t("errNoFolder"));
+    }
+    const parts = normalizePath(path).split("/").filter(Boolean);
+    let current = rootHandle;
+    for (const part of parts) {
+      current = await current.getDirectoryHandle(part, { create });
+    }
+    return current;
+  };
+
+  const getFileHandleByPath = async (path: string): Promise<FileSystemFileHandle> => {
+    const normalized = normalizePath(path);
+    const parts = normalized.split("/").filter(Boolean);
+    const fileName = parts.pop();
+    if (!fileName) {
+      throw new Error("Missing file name");
+    }
+    const dir = await getDirectoryHandleByPath(parts.join("/"), false);
+    return await dir.getFileHandle(fileName);
+  };
+
+  const createFolder = async () => {
+    const name = window.prompt(t("promptNewFolder"));
+    if (!name) return;
+    if (assetMode === "filesystem") {
+      if (!rootHandle) return;
+      await getDirectoryHandleByPath(name, true);
+      await refreshRootEntries();
+      return;
+    }
+    if (assetMode === "bridge") {
+      try {
+        await bridgeRequest("mkdir", { path: name });
+        await refreshBridgeEntries();
+      } catch (error) {
+        fsError = error instanceof Error ? error.message : t("errOpenFolder");
+      }
+    }
+  };
+
+  const writeFileTo = async (
+    file: File,
+    destination: FileSystemDirectoryHandle,
+    name: string
+  ) => {
+    const newHandle = await destination.getFileHandle(name, { create: true });
+    const writable = await newHandle.createWritable();
+    await writable.write(await file.arrayBuffer());
+    await writable.close();
+  };
+
+  const copyFileTo = async (
+    source: FileSystemFileHandle,
+    destination: FileSystemDirectoryHandle,
+    name: string
+  ) => {
+    const file = await source.getFile();
+    const newHandle = await destination.getFileHandle(name, { create: true });
+    const writable = await newHandle.createWritable();
+    await writable.write(await file.arrayBuffer());
+    await writable.close();
+  };
+
+  const copyDirectoryTo = async (
+    source: FileSystemDirectoryHandle,
+    destination: FileSystemDirectoryHandle,
+    name: string
+  ) => {
+    const newDir = await destination.getDirectoryHandle(name, { create: true });
+    for await (const [entryName, handle] of source.entries()) {
+      if (handle.kind === "file") {
+        await copyFileTo(handle as FileSystemFileHandle, newDir, entryName);
+      } else {
+        await copyDirectoryTo(handle as FileSystemDirectoryHandle, newDir, entryName);
+      }
+    }
+  };
+
+  const renameEntry = async (entry: (typeof fsEntries)[number]) => {
+    const newName = window.prompt(t("promptRename"), entry.name);
+    if (!newName || newName === entry.name) return;
+    if (assetMode === "filesystem") {
+      if (!rootHandle || !entry.parent || !entry.handle) return;
+      if (entry.kind === "file") {
+        await copyFileTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
+        await entry.parent.removeEntry(entry.name);
+      } else {
+        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, entry.parent, newName);
+        await entry.parent.removeEntry(entry.name, { recursive: true });
+      }
+      await refreshRootEntries();
+      return;
+    }
+    if (assetMode === "bridge") {
+      const parts = entry.path.split("/").filter(Boolean);
+      parts.pop();
+      const newPath = [...parts, newName].join("/");
+      try {
+        await bridgeRequest("move", { from: entry.path, to: newPath });
+        await refreshBridgeEntries();
+      } catch (error) {
+        fsError = error instanceof Error ? error.message : t("errOpenFolder");
+      }
+    }
+  };
+
+  const moveEntryToPath = async (
+    entry: (typeof fsEntries)[number],
+    targetPath: string
+  ) => {
+    if (assetMode === "filesystem") {
+      if (!rootHandle || !entry.parent || !entry.handle) return;
+      const raw = normalizePath(targetPath);
+      const endsWithSlash = targetPath.trim().endsWith("/");
+      const parts = raw.split("/").filter(Boolean);
+      if (entry.kind === "file") {
+        let fileName = entry.name;
+        let folderParts = parts;
+        if (!endsWithSlash && parts.length) {
+          fileName = parts[parts.length - 1];
+          folderParts = parts.slice(0, -1);
+        }
+        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
+        await copyFileTo(entry.handle as FileSystemFileHandle, destination, fileName);
+        await entry.parent.removeEntry(entry.name);
+      } else {
+        let folderName = entry.name;
+        let folderParts = parts;
+        if (!endsWithSlash && parts.length) {
+          folderName = parts[parts.length - 1];
+          folderParts = parts.slice(0, -1);
+        }
+        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
+        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, destination, folderName);
+        await entry.parent.removeEntry(entry.name, { recursive: true });
+      }
+      return;
+    }
+    if (assetMode === "bridge") {
+      const raw = normalizePath(targetPath);
+      const endsWithSlash = targetPath.trim().endsWith("/");
+      const parts = raw.split("/").filter(Boolean);
+      let destinationPath = raw;
+      if (entry.kind === "file") {
+        let fileName = entry.name;
+        let folderParts = parts;
+        if (!endsWithSlash && parts.length) {
+          fileName = parts[parts.length - 1];
+          folderParts = parts.slice(0, -1);
+        }
+        destinationPath = [...folderParts, fileName].join("/");
+      } else {
+        let folderName = entry.name;
+        let folderParts = parts;
+        if (!endsWithSlash && parts.length) {
+          folderName = parts[parts.length - 1];
+          folderParts = parts.slice(0, -1);
+        }
+        destinationPath = [...folderParts, folderName].join("/");
+      }
+      await bridgeRequest("move", { from: entry.path, to: destinationPath });
+    }
+  };
+
+  const moveEntry = async (entry: (typeof fsEntries)[number]) => {
+    const target = window.prompt(t("promptMoveTo"), entry.path);
+    if (!target) return;
+    try {
+      await moveEntryToPath(entry, target);
+      if (assetMode === "filesystem") {
+        await refreshRootEntries();
+      } else if (assetMode === "bridge") {
+        await refreshBridgeEntries();
+      }
+    } catch (error) {
+      fsError = error instanceof Error ? error.message : t("errOpenFolder");
+    }
+  };
+
+  const deleteEntry = async (entry: (typeof fsEntries)[number]) => {
+    if (assetMode === "filesystem") {
+      if (!entry.parent) return;
+      await entry.parent.removeEntry(entry.name, { recursive: entry.kind === "directory" });
+      await refreshRootEntries();
+      return;
+    }
+    if (assetMode === "bridge") {
+      try {
+        await bridgeRequest("delete", { path: entry.path });
+        await refreshBridgeEntries();
+      } catch (error) {
+        fsError = error instanceof Error ? error.message : t("errOpenFolder");
+      }
+    }
+  };
+
+  const bulkDelete = async () => {
+    const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
+    for (const entry of targets) {
+      if (assetMode === "filesystem") {
+        if (!entry.parent) continue;
+        await entry.parent.removeEntry(entry.name, { recursive: entry.kind === "directory" });
+      } else if (assetMode === "bridge") {
+        await bridgeRequest("delete", { path: entry.path });
+      }
+    }
+    selectedAssetIds = [];
+    if (assetMode === "filesystem") {
+      await refreshRootEntries();
+    } else if (assetMode === "bridge") {
+      await refreshBridgeEntries();
+    }
+  };
+
+  const bulkMove = async () => {
+    const target = window.prompt(t("promptMoveTo"), "");
+    if (!target) return;
+    const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
+    for (const entry of targets) {
+      await moveEntryToPath(entry, target);
+    }
+    selectedAssetIds = [];
+    if (assetMode === "filesystem") {
+      await refreshRootEntries();
+    } else if (assetMode === "bridge") {
+      await refreshBridgeEntries();
+    }
+  };
+
+  const uploadAssets = async (files: FileList | File[]) => {
+    const target = window.prompt(t("promptMoveTo"), "");
+    if (target === null) return;
+    const uploads = Array.from(files);
+    if (assetMode === "filesystem") {
+      if (!rootHandle) {
+        fsError = t("errNoFolder");
+        return;
+      }
+      const destination = await getDirectoryHandleByPath(target, true);
+      for (const file of uploads) {
+        await writeFileTo(file, destination, file.name);
+      }
+      await refreshRootEntries();
+      return;
+    }
+    if (assetMode === "bridge") {
+      try {
+        for (const file of uploads) {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+          });
+          await bridgeRequest("upload", { path: target, name: file.name, data: dataUrl });
+        }
+        await refreshBridgeEntries();
+      } catch (error) {
+        fsError = error instanceof Error ? error.message : t("errOpenFolder");
+      }
+      return;
+    }
+    fsError = t("errNoFolder");
+  };
+
+  const handleAssetUpload = async (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+    await uploadAssets(files);
+    input.value = "";
+  };
+
+  const handleAssetDrop = async (event: DragEvent) => {
+    event.preventDefault();
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    await uploadAssets(files);
+  };
+
+  const handleAssetDragOver = (event: DragEvent) => {
+    event.preventDefault();
+  };
+
+  const toggleExpandPath = (path: string) => {
+    expandedPaths = { ...expandedPaths, [path]: !expandedPaths[path] };
+    buildTreeRows();
+  };
+
+  const toggleAssetSelection = (id: string) => {
+    if (selectedAssetIds.includes(id)) {
+      selectedAssetIds = selectedAssetIds.filter((item) => item !== id);
+    } else {
+      selectedAssetIds = [...selectedAssetIds, id];
+    }
+  };
+
+  const selectAllAssets = () => {
+    if (assetMode === "filesystem") {
+      selectedAssetIds = fsEntries.map((entry) => entry.id);
+    } else {
+      selectedAssetIds = fsEntries.map((entry) => entry.id);
+    }
+  };
+
+  const clearAssetSelection = () => {
+    selectedAssetIds = [];
+  };
+
+  const createLocalized = (locales: string[]) => {
+    return locales.reduce<Record<string, string>>((acc, lang) => {
+      acc[lang] = "";
+      return acc;
+    }, {});
+  };
+
+  const applyTemplate = (templateId: string) => {
+    if (!draft) return;
+    draft.meta.template = templateId;
+    const template = templateOptions.find((item) => item.id === templateId);
+    if (!template) return;
+    if (draft.categories.length === 0) {
+      const baseCategories =
+        template.categories[uiLang] ?? template.categories.es ?? template.categories.en ?? [];
+      draft.categories = baseCategories.map((_, index) => ({
+        id: `section-${Math.random().toString(36).slice(2, 8)}`,
+        name: draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+          const localized = template.categories[lang] ?? baseCategories;
+          acc[lang] = localized[index] ?? baseCategories[index] ?? "";
+          return acc;
+        }, {}),
+        items: []
+      }));
+      wizardCategoryId = draft.categories[0]?.id ?? "";
+    }
+  };
+
+  const addBackground = () => {
+    if (!draft) return;
+    const id = `bg-${Date.now()}`;
+    draft.backgrounds = [
+      ...draft.backgrounds,
+      {
+        id,
+        label: `${t("backgroundLabel")} ${draft.backgrounds.length + 1}`,
+        src: "",
+        type: "image"
+      }
+    ];
+  };
+
+  const removeBackground = (id: string) => {
+    if (!draft) return;
+    draft.backgrounds = draft.backgrounds.filter((item) => item.id !== id);
+  };
+
+  const addSection = () => {
+    if (!draft) return;
+    const id = `section-${Date.now()}`;
+    const newSection = {
+      id,
+      name: createLocalized(draft.meta.locales),
+      items: []
+    };
+    draft.categories = [...draft.categories, newSection];
+    selectedCategoryId = id;
+    selectedItemId = "";
+  };
+
+  const deleteSection = () => {
+    if (!draft) return;
+    if (!selectedCategoryId) return;
+    draft.categories = draft.categories.filter((item) => item.id !== selectedCategoryId);
+    selectedCategoryId = draft.categories[0]?.id ?? "";
+    selectedItemId = "";
+  };
+
+  const addDish = () => {
+    if (!draft) return;
+    const category = selectedCategory;
+    if (!category) return;
+    const id = `dish-${Date.now()}`;
+    const newDish: MenuItem = {
+      id,
+      name: createLocalized(draft.meta.locales),
+      description: createLocalized(draft.meta.locales),
+      price: {
+        amount: 0,
+        currency: draft.meta.currency
+      },
+      media: {
+        hero360: ""
+      }
+    };
+    category.items = [...category.items, newDish];
+    selectedItemId = id;
+  };
+
+  const addWizardCategory = () => {
+    if (!draft) return;
+    const id = `section-${Date.now()}`;
+    const newSection = {
+      id,
+      name: createLocalized(draft.meta.locales),
+      items: []
+    };
+    draft.categories = [...draft.categories, newSection];
+    wizardCategoryId = id;
+    wizardItemId = "";
+  };
+
+  const removeWizardCategory = (id: string) => {
+    if (!draft) return;
+    draft.categories = draft.categories.filter((item) => item.id !== id);
+    wizardCategoryId = draft.categories[0]?.id ?? "";
+    wizardItemId = "";
+  };
+
+  const addWizardDish = () => {
+    if (!draft) return;
+    const category = draft.categories.find((item) => item.id === wizardCategoryId);
+    if (!category) return;
+    const id = `dish-${Date.now()}`;
+    const newDish: MenuItem = {
+      id,
+      name: createLocalized(draft.meta.locales),
+      description: createLocalized(draft.meta.locales),
+      price: {
+        amount: 0,
+        currency: draft.meta.currency
+      },
+      media: {
+        hero360: ""
+      }
+    };
+    category.items = [...category.items, newDish];
+    wizardItemId = id;
+  };
+
+  const removeWizardDish = () => {
+    if (!draft) return;
+    const category = draft.categories.find((item) => item.id === wizardCategoryId);
+    if (!category || !wizardItemId) return;
+    category.items = category.items.filter((item) => item.id !== wizardItemId);
+    wizardItemId = category.items[0]?.id ?? "";
+  };
+
+  const deleteDish = () => {
+    const category = selectedCategory;
+    if (!category) return;
+    if (!selectedItemId) return;
+    category.items = category.items.filter((item) => item.id !== selectedItemId);
+    selectedItemId = category.items[0]?.id ?? "";
+  };
+
+  const goPrevDish = () => {
+    const category = selectedCategory;
+    if (!category) return;
+    const index = category.items.findIndex((item) => item.id === selectedItemId);
+    if (index > 0) {
+      selectedItemId = category.items[index - 1].id;
+    }
+  };
+
+  const goNextDish = () => {
+    const category = selectedCategory;
+    if (!category) return;
+    const index = category.items.findIndex((item) => item.id === selectedItemId);
+    if (index >= 0 && index < category.items.length - 1) {
+      selectedItemId = category.items[index + 1].id;
+    }
+  };
+
+  const handleCarouselScroll = (categoryId: string, event: Event) => {
+    const container = event.currentTarget as HTMLElement;
+    if (carouselRaf[categoryId]) {
+      cancelAnimationFrame(carouselRaf[categoryId] ?? 0);
+    }
+    carouselRaf[categoryId] = requestAnimationFrame(() => {
+      const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
+      const center = container.scrollLeft + container.clientWidth / 2;
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      cards.forEach((card, index) => {
+        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+        const distance = Math.abs(center - cardCenter);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+      carouselActive = { ...carouselActive, [categoryId]: closestIndex };
+    });
+
+    if (carouselSnapTimeout[categoryId]) {
+      window.clearTimeout(carouselSnapTimeout[categoryId] ?? 0);
+    }
+    carouselSnapTimeout[categoryId] = window.setTimeout(() => {
+      const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
+      if (cards.length === 0) return;
+      const center = container.scrollLeft + container.clientWidth / 2;
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      cards.forEach((card, index) => {
+        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+        const distance = Math.abs(center - cardCenter);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+      const category = activeProject?.categories.find((item) => item.id === categoryId);
+      const count = category?.items.length ?? 0;
+      let finalIndex = closestIndex;
+      if (count > 1) {
+        const loopStart = getLoopStart(count);
+        const normalized = ((closestIndex % count) + count) % count;
+        finalIndex = loopStart + normalized;
+      }
+      const behavior: ScrollBehavior = finalIndex === closestIndex ? "smooth" : "auto";
+      centerCarousel(container, finalIndex, behavior);
+      carouselActive = { ...carouselActive, [categoryId]: finalIndex };
+    }, 160);
+  };
+
+  const openDish = (categoryId: string, itemId: string) => {
+    activeItem = { category: categoryId, itemId };
+  };
+
+  const closeDish = () => {
+    activeItem = null;
+  };
+
+  const resolveActiveDish = () => {
+    if (!activeProject || !activeItem) return null;
+    const category = activeProject.categories.find((item) => item.id === activeItem.category);
+    const dish = category?.items.find((item) => item.id === activeItem.itemId);
+    return dish ?? null;
+  };
+
+  const ensureDescription = (item: MenuItem) => {
+    if (!item.description) {
+      item.description = {};
+    }
+    return item.description;
+  };
+
+  const handleDescriptionInput = (item: MenuItem, lang: string, event: Event) => {
+    const input = event.currentTarget as HTMLTextAreaElement;
+    const desc = ensureDescription(item);
+    desc[lang] = input.value;
+  };
+
+  const formatPrice = (amount: number) => {
+    const currency = activeProject?.meta.currency ?? "USD";
+    const symbol = currencyOptions.find((option) => option.code === currency)?.symbol ?? currency;
+    const position = activeProject?.meta.currencyPosition ?? "left";
+    return position === "left" ? `${symbol}${amount}` : `${amount}${symbol}`;
+  };
+
+  const handleLocalizedInput = (
+    record: Record<string, string>,
+    lang: string,
+    event: Event
+  ) => {
+    const input = event.currentTarget as HTMLInputElement;
+    record[lang] = input.value;
+  };
+
+  const handleCurrencyChange = (event: Event) => {
+    const input = event.currentTarget as HTMLSelectElement;
+    setCurrency(input.value);
+  };
 </script>
 
-<main class="min-h-screen px-5 py-8">
+<main class="min-h-screen app-shell {layoutMode}">
   {#if loadError}
     <div class="rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-sm text-red-100">
       {loadError}
     </div>
   {:else if !project}
     <div class="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-200">
-      Cargando proyecto...
+      {t("loadingProject")}
     </div>
   {:else if activeProject}
-    <nav class="mb-5 flex gap-3 overflow-x-auto pb-2">
-      {#each projects as item}
+    <div class="split-layout {layoutMode}">
+      {#if showEditorToggle}
         <button
-          class="project-pill {item.slug === activeSlug ? 'active' : ''}"
+          class="menu-fab"
           type="button"
-          on:click={() => changeProject(item.slug)}
+          aria-label={editorOpen ? t("closeEditor") : t("openEditor")}
+          on:click={toggleEditor}
         >
-          <span class="text-[0.6rem] uppercase tracking-[0.35em] text-amber-200/80">
-            {item.template}
-          </span>
-          <span class="text-sm text-slate-100">{item.name}</span>
+          <span class="menu-fab__icon"></span>
         </button>
-      {/each}
-    </nav>
-
-    <section class="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-[0.35em] text-slate-300">Editor minimo</p>
-          <p class="mt-1 text-xs text-slate-400">
-            Cambios locales con exportacion manual de JSON.
-          </p>
-        </div>
-        <button class="editor-cta" type="button" on:click={downloadProject}>Descargar JSON</button>
-      </div>
-
-      {#if draft}
-        <div class="mt-4 grid gap-3">
-          <label class="editor-field">
-            <span>Nombre del proyecto</span>
-            <input
-              type="text"
-              bind:value={draft.meta.name}
-              class="editor-input"
-              placeholder="Nombre"
-            />
-          </label>
-          <label class="editor-field">
-            <span>Template</span>
-            <input
-              type="text"
-              bind:value={draft.meta.template}
-              class="editor-input"
-              placeholder="bar-pub"
-            />
-          </label>
-          <label class="editor-field">
-            <span>Locales (comma)</span>
-            <input
-              type="text"
-              value={draft.meta.locales.join(", ")}
-              class="editor-input"
-              placeholder="es, en"
-              on:input={handleLocalesInput}
-            />
-          </label>
-          <label class="editor-field">
-            <span>Locale default</span>
-            <input
-              type="text"
-              bind:value={draft.meta.defaultLocale}
-              class="editor-input"
-              placeholder="es"
-            />
-          </label>
-          <label class="editor-field">
-            <span>Moneda</span>
-            <input
-              type="text"
-              bind:value={draft.meta.currency}
-              class="editor-input"
-              placeholder="MXN"
-            />
-          </label>
-        </div>
       {/if}
-    </section>
 
-    <section class="relative overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/70 p-5">
-      <div
-        class="absolute inset-0 bg-cover bg-center opacity-60"
-        style={`background-image: url('${activeProject.backgrounds[0]?.src}');`}
-      ></div>
-      <div class="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/70 to-slate-950"></div>
+      {#if editorVisible && !editorLocked}
+        <div class="editor-backdrop" on:click={toggleEditor}></div>
+      {/if}
 
-      <div class="relative z-10">
-        <header class="flex items-start justify-between gap-4">
+      <aside class="editor-panel {editorVisible ? 'open' : ''} {editorLocked ? 'locked' : ''}">
+        <div class="editor-panel__header">
           <div>
-            <p class="text-[0.6rem] uppercase tracking-[0.5em] text-amber-300/90">
-              {activeProject.meta.name}
-            </p>
-            <h1 class="mt-3 text-2xl font-semibold text-slate-100">Menú elegante</h1>
-            <p class="mt-2 text-sm text-slate-300">
-              MVP base con fondo animado y platillo 360°.
-            </p>
+            <p class="editor-eyebrow">{t("studioTitle")}</p>
+            <p class="mt-1 text-xs text-slate-400">{t("studioSubtitle")}</p>
           </div>
-          <div class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[0.65rem] text-slate-200">
-            {activeProject.meta.locales.join(" / ").toUpperCase()}
+          <div class="editor-actions">
+            <button
+              class="icon-btn"
+              type="button"
+              aria-label={t("toggleView")}
+              title={t("toggleView")}
+              on:click={togglePreviewMode}
+            >
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="2.5" y="4.5" width="13" height="9" rx="1.5"></rect>
+                <rect x="18" y="6" width="3.5" height="10" rx="1"></rect>
+                <path d="M6 18h6"></path>
+              </svg>
+            </button>
+            <div class="lang-toggle" aria-label={t("toggleLang")}>
+              <button
+                class="lang-btn {uiLang === 'es' ? 'active' : ''}"
+                type="button"
+                on:click={() => (uiLang = 'es')}
+              >
+                ES
+              </button>
+              <button
+                class="lang-btn {uiLang === 'en' ? 'active' : ''}"
+                type="button"
+                on:click={() => (uiLang = 'en')}
+              >
+                EN
+              </button>
+            </div>
+            {#if !editorLocked}
+              <button
+                class="editor-close"
+                type="button"
+                aria-label={t("closeEditor")}
+                on:click={toggleEditor}
+              >
+                ✕
+              </button>
+            {/if}
           </div>
-        </header>
+        </div>
 
-        <section class="mt-8 grid gap-5">
-          {#each activeProject.categories as category}
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p class="text-xs uppercase tracking-[0.35em] text-slate-300">
-                {textOf(category.name)}
+        <div class="editor-tabs">
+          <button
+            class="editor-tab {editorTab === 'info' ? 'active' : ''}"
+            type="button"
+            on:click={() => setEditorTab('info')}
+          >
+            {t("tabProject")}
+          </button>
+          <button
+            class="editor-tab {editorTab === 'assets' ? 'active' : ''}"
+            type="button"
+            on:click={() => setEditorTab('assets')}
+          >
+            {t("tabAssets")}
+          </button>
+          <button
+            class="editor-tab {editorTab === 'edit' ? 'active' : ''}"
+            type="button"
+            on:click={() => setEditorTab('edit')}
+          >
+            {t("tabEdit")}
+          </button>
+          <button
+            class="editor-tab {editorTab === 'wizard' ? 'active' : ''}"
+            type="button"
+            on:click={() => setEditorTab('wizard')}
+          >
+            {t("tabWizard")}
+          </button>
+        </div>
+
+        <div class="editor-content">
+          {#if editorTab === "info"}
+            <div class="editor-toolbar">
+              <button
+                class="icon-btn"
+                type="button"
+                aria-label={t("open")}
+                title={t("open")}
+                on:click={openProjectDialog}
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
+                  <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
+                </svg>
+              </button>
+              <button
+                class="icon-btn"
+                type="button"
+                aria-label={t("save")}
+                title={t("save")}
+                on:click={saveProject}
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 4h12l2 2v14H5z"></path>
+                  <path d="M7 4v6h10V4"></path>
+                  <rect x="8" y="14" width="8" height="5" rx="1"></rect>
+                </svg>
+              </button>
+              <button
+                class="icon-btn"
+                type="button"
+                aria-label={t("export")}
+                title={t("export")}
+                on:click={exportStaticSite}
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v10"></path>
+                  <path d="M8 7l4-4 4 4"></path>
+                  <rect x="4" y="13" width="16" height="8" rx="2"></rect>
+                </svg>
+              </button>
+              <input
+                class="sr-only"
+                type="file"
+                accept="application/json"
+                bind:this={projectFileInput}
+                on:change={handleProjectFile}
+              />
+            </div>
+
+            {#if openError}
+              <p class="mt-2 text-xs text-red-300">{openError}</p>
+            {/if}
+            {#if exportStatus}
+              <p class="mt-2 text-xs text-emerald-200">{exportStatus}</p>
+            {/if}
+            {#if exportError}
+              <p class="mt-2 text-xs text-red-300">{exportError}</p>
+            {/if}
+
+            {#if draft}
+              <div class="mt-5 grid gap-4">
+                <label class="editor-field">
+                  <span>{t("projectName")}</span>
+                  <input
+                    type="text"
+                    bind:value={draft.meta.name}
+                    class="editor-input"
+                    placeholder={t("projectName")}
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>{t("template")}</span>
+                  <select bind:value={draft.meta.template} class="editor-select">
+                    {#each templateOptions as template}
+                      <option value={template.id}>
+                        {template.label[uiLang] ?? template.label.es ?? template.id}
+                      </option>
+                    {/each}
+                  </select>
+                </label>
+                <div class="editor-field">
+                  <span>{t("languages")}</span>
+                  <button
+                    class="editor-select"
+                    type="button"
+                    on:click={() => (languageMenuOpen = !languageMenuOpen)}
+                  >
+                    {selectedLabel(draft.meta.locales.length)}
+                  </button>
+                  {#if languageMenuOpen}
+                    <div class="dropdown-panel">
+                      {#each languageOptions as lang}
+                        <label class="dropdown-item">
+                          <input
+                            type="checkbox"
+                            checked={draft.meta.locales.includes(lang.code)}
+                            on:change={() => toggleLanguage(lang.code)}
+                          />
+                          <span>{lang.label}</span>
+                        </label>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+                <label class="editor-field">
+                  <span>{t("defaultLang")}</span>
+                  <select bind:value={draft.meta.defaultLocale} class="editor-select">
+                    {#each draft.meta.locales as lang}
+                      <option value={lang}>{lang.toUpperCase()}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="editor-field">
+                  <span>{t("currency")}</span>
+                  <select
+                    class="editor-select"
+                    bind:value={draft.meta.currency}
+                    on:change={handleCurrencyChange}
+                  >
+                    {#each currencyOptions as currency}
+                      <option value={currency.code}>{currency.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                <div class="editor-field">
+                  <span>{t("currencyPos")}</span>
+                  <button class="editor-outline" type="button" on:click={toggleCurrencyPosition}>
+                    {draft.meta.currencyPosition === "right"
+                      ? t("currencyRight")
+                      : t("currencyLeft")}
+                  </button>
+                </div>
+              </div>
+            {/if}
+          {:else if editorTab === "assets"}
+            <section class="asset-manager">
+              <div class="asset-manager__header">
+                <div>
+                  <p>{t("rootTitle")}</p>
+                  <span>{rootLabel}</span>
+                </div>
+                <div class="asset-actions">
+                  <button type="button" on:click={createFolder}>{t("newFolder")}</button>
+                  <button
+                    type="button"
+                    on:click={() => assetUploadInput?.click()}
+                  >
+                    {t("uploadAssets")}
+                  </button>
+                  <input
+                    class="sr-only"
+                    type="file"
+                    multiple
+                    bind:this={assetUploadInput}
+                    on:change={handleAssetUpload}
+                  />
+                </div>
+              </div>
+              <div class="asset-drop">
+                <p>{t("uploadHint")}</p>
+                <div
+                  class="asset-drop__zone"
+                  on:dragover={handleAssetDragOver}
+                  on:drop={handleAssetDrop}
+                >
+                  {t("dragDrop")}
+                </div>
+              </div>
+              {#if fsError}
+                <p class="text-xs text-red-300">{fsError}</p>
+              {/if}
+              <div class="asset-bulk">
+                <button type="button" on:click={selectAllAssets}>{t("selectAll")}</button>
+                <button type="button" on:click={clearAssetSelection}>{t("clear")}</button>
+                <button type="button" on:click={bulkMove}>{t("move")}</button>
+                <button type="button" on:click={bulkDelete}>{t("delete")}</button>
+              </div>
+              <div class="asset-list">
+                {#if assetMode === "none"}
+                  <p class="text-xs text-slate-400">{t("pickRootHint")}</p>
+                {:else if fsEntries.length === 0}
+                  <p class="text-xs text-slate-400">{t("rootEmpty")}</p>
+                {:else}
+                  {#each treeRows as row}
+                    <div class="asset-item">
+                      <label class="asset-check">
+                        <input
+                          type="checkbox"
+                          checked={selectedAssetIds.includes(row.entry.id)}
+                          on:change={() => toggleAssetSelection(row.entry.id)}
+                        />
+                      </label>
+                      <div>
+                        <div
+                          class="asset-name"
+                          style={`padding-left:${row.depth * 16}px`}
+                        >
+                          {#if row.entry.kind === "directory" && row.hasChildren}
+                            <button
+                              class="asset-toggle"
+                              type="button"
+                              on:click={() => toggleExpandPath(row.entry.path)}
+                            >
+                              {row.expanded ? "▾" : "▸"}
+                            </button>
+                          {:else}
+                            <span class="asset-toggle placeholder"></span>
+                          {/if}
+                          <span class="asset-icon">
+                            {row.entry.kind === "directory" ? "📁" : "📄"}
+                          </span>
+                          <span>{row.entry.name}</span>
+                        </div>
+                        <p class="asset-meta">{row.entry.path}</p>
+                      </div>
+                      <div class="asset-actions">
+                        <button type="button" on:click={() => renameEntry(row.entry)}>{t("rename")}</button>
+                        <button type="button" on:click={() => moveEntry(row.entry)}>{t("move")}</button>
+                        <button type="button" on:click={() => deleteEntry(row.entry)}>{t("delete")}</button>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+            </section>
+          {:else if editorTab === "edit"}
+            {#if deviceMode === "mobile" && previewMode === "full"}
+              <p class="mt-2 text-xs text-amber-200">
+                {t("tipRotate")}
               </p>
-              <div class="mt-4 grid gap-4">
-                {#each category.items as item}
-                  <div class="flex items-center gap-4">
-                    <div class="dish-frame">
-                      <img
-                        src={item.media.hero360 ?? ""}
-                        alt={textOf(item.name)}
-                        class="dish-media"
-                      />
-                      <div class="dish-glow"></div>
-                    </div>
-                    <div>
-                      <p class="text-sm text-slate-100">{textOf(item.name)}</p>
-                      <p class="mt-1 text-xs text-slate-400">{textOf(item.description)}</p>
-                    </div>
-                    <p class="ml-auto text-sm text-amber-200">
-                      {item.price.display ?? `${item.price.amount} ${item.price.currency}`}
-                    </p>
+            {/if}
+
+            {#if draft}
+              <div class="edit-shell">
+                <div class="edit-row">
+                  <label class="editor-field">
+                    <span>{t("editLang")}</span>
+                    <select bind:value={editLang} class="editor-select">
+                      {#each draft.meta.locales as lang}
+                        <option value={lang}>{lang.toUpperCase()}</option>
+                      {/each}
+                    </select>
+                  </label>
+                </div>
+                <div class="edit-row">
+                  <label class="editor-field">
+                    <span>{t("section")}</span>
+                    <select bind:value={selectedCategoryId} class="editor-select">
+                      {#each draft.categories as category}
+                        <option value={category.id}>{textOf(category.name)}</option>
+                      {/each}
+                    </select>
+                  </label>
+                  <div class="edit-actions">
+                    <button
+                      class="editor-outline"
+                      type="button"
+                      aria-label={t("addSection")}
+                      title={t("addSection")}
+                      on:click={addSection}
+                    >
+                      <span class="btn-icon">＋</span>
+                    </button>
+                    <button class="editor-outline danger" type="button" on:click={deleteSection}>
+                      {t("deleteSection")}
+                    </button>
                   </div>
+                </div>
+
+                {#if selectedCategory}
+                  <div class="edit-block">
+                    <p class="edit-block__title">{t("sectionName")}</p>
+                    <label class="editor-field">
+                      <span>{editLang.toUpperCase()}</span>
+                      <input
+                        type="text"
+                        class="editor-input"
+                        value={selectedCategory.name?.[editLang] ?? ""}
+                        on:input={(event) =>
+                          handleLocalizedInput(selectedCategory.name, editLang, event)}
+                      />
+                    </label>
+                  </div>
+
+                  <div class="edit-row">
+                    <label class="editor-field">
+                      <span>{t("dish")}</span>
+                      <select bind:value={selectedItemId} class="editor-select">
+                        {#each selectedCategory.items as item}
+                          <option value={item.id}>{textOf(item.name)}</option>
+                        {/each}
+                      </select>
+                    </label>
+                    <div class="edit-actions">
+                      <button
+                        class="editor-outline"
+                        type="button"
+                        aria-label={t("prevDish")}
+                        title={t("prevDish")}
+                        on:click={goPrevDish}
+                      >
+                        <span class="btn-icon">◀</span>
+                      </button>
+                      <button
+                        class="editor-outline"
+                        type="button"
+                        aria-label={t("nextDish")}
+                        title={t("nextDish")}
+                        on:click={goNextDish}
+                      >
+                        <span class="btn-icon">▶</span>
+                      </button>
+                      <button
+                        class="editor-outline"
+                        type="button"
+                        aria-label={t("addDish")}
+                        title={t("addDish")}
+                        on:click={addDish}
+                      >
+                        <span class="btn-icon">＋</span>
+                      </button>
+                      <button class="editor-outline danger" type="button" on:click={deleteDish}>
+                        {t("delete")}
+                      </button>
+                    </div>
+                  </div>
+
+                  {#if selectedItem}
+                    <div class="edit-block">
+                      <p class="edit-block__title">{t("dishData")}</p>
+                      <div class="edit-item">
+                        <div class="edit-item__media">
+                          <img src={selectedItem.media.hero360 ?? ""} alt={textOf(selectedItem.name)} />
+                        </div>
+                        <div class="edit-item__content">
+                          <label class="editor-field">
+                            <span>{t("name")} ({editLang.toUpperCase()})</span>
+                            <input
+                              type="text"
+                              class="editor-input"
+                              value={selectedItem.name?.[editLang] ?? ""}
+                              on:input={(event) =>
+                                handleLocalizedInput(selectedItem.name, editLang, event)}
+                            />
+                          </label>
+                          <label class="editor-field">
+                            <span>{t("description")} ({editLang.toUpperCase()})</span>
+                            <textarea
+                              class="editor-input"
+                              rows="2"
+                              value={selectedItem.description?.[editLang] ?? ""}
+                              on:input={(event) =>
+                                handleDescriptionInput(selectedItem, editLang, event)}
+                            ></textarea>
+                          </label>
+                          <label class="editor-field">
+                            <span>{t("price")}</span>
+                            <input
+                              type="number"
+                              class="editor-input"
+                              bind:value={selectedItem.price.amount}
+                            />
+                          </label>
+                          <label class="editor-field">
+                            <span>{t("asset360")}</span>
+                            <input
+                              type="text"
+                              class="editor-input"
+                              bind:value={selectedItem.media.hero360}
+                              list="asset-files"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
+          {:else}
+            <section class="wizard">
+              <div class="wizard-header">
+                <p class="text-[0.6rem] uppercase tracking-[0.35em] text-slate-300">
+                  {t("tabWizard")}
+                </p>
+                <span class="text-xs text-slate-400">
+                  {t("step")} {wizardStep + 1} / {wizardSteps.length}
+                </span>
+              </div>
+              <div class="wizard-progress">
+                <span>{t("wizardProgress")} {Math.round(wizardProgress * 100)}%</span>
+                <div class="wizard-progress__bar">
+                  <span style={`width:${wizardProgress * 100}%`}></span>
+                </div>
+              </div>
+              <div class="wizard-steps">
+                {#each wizardSteps as step, index}
+                  <button
+                    class="wizard-step {index === wizardStep ? 'active' : ''} {isWizardStepValid(index) ? 'done' : ''}"
+                    type="button"
+                    on:click={() => goToStep(index)}
+                  >
+                    <span>{step}</span>
+                    <span class="wizard-step__status">
+                      {isWizardStepValid(index) ? "●" : "○"}
+                    </span>
+                  </button>
                 {/each}
               </div>
+              <div class="wizard-body">
+                {#if wizardStep === 0}
+                  <p class="text-sm text-slate-200">{t("wizardPick")}</p>
+                  <div class="wizard-card-grid">
+                    {#each templateOptions as template}
+                      <button
+                        class="wizard-card {draft?.meta.template === template.id ? 'active' : ''}"
+                        type="button"
+                        on:click={() => applyTemplate(template.id)}
+                      >
+                        <p class="wizard-card__title">
+                          {template.label[uiLang] ?? template.label.es ?? template.id}
+                        </p>
+                        <p class="wizard-card__meta">
+                          {(template.categories[uiLang] ?? template.categories.es ?? []).join(" • ")}
+                        </p>
+                      </button>
+                    {/each}
+                  </div>
+                  {#if draft?.categories.length}
+                    <p class="text-xs text-slate-400">
+                      {t("wizardTip")}
+                    </p>
+                  {/if}
+                {:else if wizardStep === 1}
+                  <p class="text-sm text-slate-200">{t("wizardIdentity")}</p>
+                  {#if !wizardStatus.identity}
+                    <p class="wizard-warning">{t("wizardMissingBackground")}</p>
+                  {/if}
+                  <div class="wizard-block">
+                    <button class="editor-outline" type="button" on:click={addBackground}>
+                      {t("wizardAddBg")}
+                    </button>
+                    {#if draft}
+                      <div class="wizard-list">
+                        {#each draft.backgrounds as bg}
+                          <div class="wizard-item">
+                            <label class="editor-field">
+                              <span>{t("wizardLabel")}</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                bind:value={bg.label}
+                              />
+                            </label>
+                            <label class="editor-field">
+                              <span>{t("wizardSrc")}</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                bind:value={bg.src}
+                                list="asset-files"
+                              />
+                            </label>
+                            <button
+                              class="editor-outline danger"
+                              type="button"
+                              on:click={() => removeBackground(bg.id)}
+                            >
+                              {t("delete")}
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {:else if wizardStep === 2}
+                  <p class="text-sm text-slate-200">{t("wizardCategories")}</p>
+                  {#if !wizardStatus.categories}
+                    <p class="wizard-warning">{t("wizardMissingCategories")}</p>
+                  {/if}
+                  {#if draft}
+                    <div class="wizard-block">
+                      <label class="editor-field">
+                        <span>{t("wizardLanguage")}</span>
+                        <select bind:value={wizardLang} class="editor-select">
+                          {#each draft.meta.locales as lang}
+                            <option value={lang}>{lang.toUpperCase()}</option>
+                          {/each}
+                        </select>
+                      </label>
+                      <button class="editor-outline" type="button" on:click={addWizardCategory}>
+                        {t("wizardAddCategory")}
+                      </button>
+                      <div class="wizard-list">
+                        {#each draft.categories as category}
+                          <div class="wizard-item">
+                            <label class="editor-field">
+                              <span>{t("name")} ({wizardLang.toUpperCase()})</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                value={category.name?.[wizardLang] ?? ""}
+                                on:input={(event) =>
+                                  handleLocalizedInput(category.name, wizardLang, event)}
+                              />
+                            </label>
+                            <button
+                              class="editor-outline danger"
+                              type="button"
+                              on:click={() => removeWizardCategory(category.id)}
+                            >
+                              {t("delete")}
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                {:else if wizardStep === 3}
+                  <p class="text-sm text-slate-200">{t("wizardDishes")}</p>
+                  {#if !wizardStatus.dishes}
+                    <p class="wizard-warning">{t("wizardMissingDishes")}</p>
+                  {/if}
+                  {#if draft}
+                    <div class="wizard-block">
+                      <label class="editor-field">
+                        <span>{t("wizardLanguage")}</span>
+                        <select bind:value={wizardLang} class="editor-select">
+                          {#each draft.meta.locales as lang}
+                            <option value={lang}>{lang.toUpperCase()}</option>
+                          {/each}
+                        </select>
+                      </label>
+                      <label class="editor-field">
+                        <span>{t("wizardCategory")}</span>
+                        <select bind:value={wizardCategoryId} class="editor-select">
+                          {#each draft.categories as category}
+                            <option value={category.id}>{textOf(category.name)}</option>
+                          {/each}
+                        </select>
+                      </label>
+                      <div class="edit-actions">
+                        <button class="editor-outline" type="button" on:click={addWizardDish}>
+                          {t("wizardAddDish")}
+                        </button>
+                        <button class="editor-outline danger" type="button" on:click={removeWizardDish}>
+                          {t("delete")}
+                        </button>
+                      </div>
+                      {#if wizardCategory}
+                        <label class="editor-field">
+                          <span>{t("dish")}</span>
+                          <select bind:value={wizardItemId} class="editor-select">
+                            {#each wizardCategory.items as item}
+                              <option value={item.id}>{textOf(item.name)}</option>
+                            {/each}
+                          </select>
+                        </label>
+                      {/if}
+                      {#if wizardItem}
+                        <label class="editor-field">
+                          <span>{t("name")} ({wizardLang.toUpperCase()})</span>
+                          <input
+                            type="text"
+                            class="editor-input"
+                            value={wizardItem.name?.[wizardLang] ?? ""}
+                            on:input={(event) =>
+                              handleLocalizedInput(wizardItem.name, wizardLang, event)}
+                          />
+                        </label>
+                        <label class="editor-field">
+                          <span>{t("description")} ({wizardLang.toUpperCase()})</span>
+                          <textarea
+                            class="editor-input"
+                            rows="2"
+                            value={wizardItem.description?.[wizardLang] ?? ""}
+                            on:input={(event) => handleDescriptionInput(wizardItem, wizardLang, event)}
+                          ></textarea>
+                        </label>
+                        <label class="editor-field">
+                          <span>{t("price")}</span>
+                          <input
+                            type="number"
+                            class="editor-input"
+                            bind:value={wizardItem.price.amount}
+                          />
+                        </label>
+                        <label class="editor-field">
+                          <span>{t("asset360")}</span>
+                          <input
+                            type="text"
+                            class="editor-input"
+                            bind:value={wizardItem.media.hero360}
+                            list="asset-files"
+                          />
+                        </label>
+                      {/if}
+                    </div>
+                  {/if}
+                {:else}
+                  <p class="text-sm text-slate-200">{t("wizardPreview")}</p>
+                  <p class="text-xs text-slate-400">
+                    {t("wizardExportNote")}
+                  </p>
+                {/if}
+              </div>
+              <div class="wizard-nav">
+                <button
+                  class="editor-outline"
+                  type="button"
+                  on:click={goPrevStep}
+                  disabled={wizardStep === 0}
+                >
+                  {t("wizardBack")}
+                </button>
+                {#if wizardStep < wizardSteps.length - 1}
+                  <button
+                    class="editor-cta"
+                    type="button"
+                    on:click={goNextStep}
+                    disabled={!isWizardStepValid(wizardStep)}
+                  >
+                    {t("wizardNext")}
+                  </button>
+                {:else}
+                  <button
+                    class="editor-cta"
+                    type="button"
+                    on:click={exportStaticSite}
+                    disabled={!wizardStatus.preview}
+                  >
+                    {t("export")}
+                  </button>
+                {/if}
+              </div>
+            </section>
+          {/if}
+        </div>
+      </aside>
+
+      <section class="preview-panel {layoutMode}">
+        <section class="preview-shell {effectivePreview}">
+          <section class="menu-preview">
+            <div
+              class="menu-background"
+              style={`background-image: url('${activeProject.backgrounds[0]?.src}');`}
+            ></div>
+            <div class="menu-overlay"></div>
+
+            <header class="menu-topbar">
+              <div>
+                <p class="menu-eyebrow">{activeProject.meta.name}</p>
+                <h1 class="menu-title">Menú elegante</h1>
+              </div>
+              <div class="menu-lang">
+                <select bind:value={locale} class="menu-select">
+                  {#each activeProject.meta.locales as lang}
+                    <option value={lang}>{lang.toUpperCase()}</option>
+                  {/each}
+                </select>
+              </div>
+            </header>
+
+            <div class="menu-scroll">
+              {#each activeProject.categories as category}
+                {@const loopedItems = getLoopedItems(category.items)}
+                {@const activeIndex =
+                  carouselActive[category.id] ?? getLoopStart(category.items.length)}
+                <section class="menu-section">
+                  <div class="menu-section__head">
+                    <p class="menu-section__title">{textOf(category.name)}</p>
+                    <span class="menu-section__count">{category.items.length} items</span>
+                  </div>
+                  <div
+                    class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
+                    on:scroll={(event) => handleCarouselScroll(category.id, event)}
+                    data-category-id={category.id}
+                  >
+                    {#each loopedItems as entry (entry.key)}
+                      {@const distance = Math.abs(activeIndex - entry.loopIndex)}
+                      {@const fade = Math.max(0, 1 - distance * 0.2)}
+                      <button
+                        class={`carousel-card ${
+                          distance === 0 ? "active" : distance === 1 ? "near" : "far"
+                        }`}
+                        type="button"
+                        style={`--fade:${fade}`}
+                        on:click={() => openDish(category.id, entry.item.id)}
+                      >
+                        <div class="carousel-media">
+                          <img
+                            src={entry.item.media.hero360 ?? ""}
+                            alt={textOf(entry.item.name)}
+                          />
+                        </div>
+                        <div class="carousel-text">
+                          <p class="carousel-title">{textOf(entry.item.name)}</p>
+                          <p class="carousel-desc">{textOf(entry.item.description)}</p>
+                          <span class="carousel-price">
+                            {formatPrice(entry.item.price.amount)}
+                          </span>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                </section>
+              {/each}
             </div>
-          {/each}
+          </section>
         </section>
-      </div>
-    </section>
+      </section>
+    </div>
   {/if}
 </main>
+
+{#if activeItem}
+  {@const dish = resolveActiveDish()}
+  {#if dish}
+    <div class="dish-modal" on:click={closeDish}>
+      <div class="dish-modal__card" on:click|stopPropagation>
+        <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
+        <div class="dish-modal__media">
+          <img src={dish.media.hero360 ?? ""} alt={textOf(dish.name)} />
+        </div>
+        <div class="dish-modal__content">
+          <p class="dish-modal__title">{textOf(dish.name)}</p>
+          <p class="dish-modal__desc">{textOf(dish.description)}</p>
+                    <p class="dish-modal__price">
+            {formatPrice(dish.price.amount)}
+          </p>
+        </div>
+      </div>
+    </div>
+  {/if}
+{/if}
+
+{#if assetOptions.length}
+  <datalist id="asset-files">
+    {#each assetOptions as path}
+      <option value={path}></option>
+    {/each}
+  </datalist>
+{/if}

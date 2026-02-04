@@ -55,6 +55,7 @@ export type MenuProject = {
     locales: LocaleCode[];
     defaultLocale: LocaleCode;
     currency: string;
+    currencyPosition?: "left" | "right";
   };
   backgrounds: MediaAsset[];
   categories: MenuCategory[];

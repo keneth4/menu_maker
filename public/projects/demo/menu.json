@@ -5,7 +5,8 @@
     "template": "bar-pub",
     "locales": ["es", "en"],
     "defaultLocale": "es",
-    "currency": "MXN"
+    "currency": "MXN",
+    "currencyPosition": "left"
   },
   "backgrounds": [
     {
