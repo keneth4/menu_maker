@@ -1062,10 +1062,30 @@ body {
   scroll-padding-inline: var(--carousel-edge);
   scrollbar-width: none;
   align-items: center;
-  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 }
 .menu-carousel::-webkit-scrollbar { display: none; }
+.menu-preview.is-enhanced .menu-carousel {
+  mask-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 1) 8%,
+    rgba(255, 255, 255, 1) 92%,
+    rgba(255, 255, 255, 0)
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 1) 8%,
+    rgba(255, 255, 255, 1) 92%,
+    rgba(255, 255, 255, 0)
+  );
+}
+@media (max-width: 640px) {
+  .menu-carousel {
+    --carousel-card: clamp(160px, 60vw, 220px);
+    gap: 12px;
+  }
+}
 .carousel-card {
   --fade: 1;
   width: var(--carousel-card);
@@ -1084,12 +1104,21 @@ body {
   transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 220ms ease, filter 240ms ease;
   transform-origin: center center;
+  opacity: 1;
+  filter: none;
+  transform: scale(1);
+  color: inherit;
+}
+.menu-preview.is-enhanced .carousel-card {
   opacity: var(--fade);
   filter: blur(calc((1 - var(--fade)) * 8px));
   transform: scale(calc(0.4 + var(--fade) * 0.6));
-  color: inherit;
 }
-.carousel-card.active { transform: scale(1); opacity: 1; filter: none; }
+.menu-preview.is-enhanced .carousel-card.active {
+  transform: scale(1);
+  opacity: 1;
+  filter: none;
+}
 .carousel-media {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -1239,11 +1268,11 @@ const getLoopedItems = (items) => {
 const buildCarousel = (category) => {
   const looped = getLoopedItems(category.items);
   return \`
-    <div class="menu-section__head">
-      <p class="menu-section__title">\${textOf(category.name)}</p>
-      <span class="menu-section__count">\${category.items.length} items</span>
+    <div class="menu-section__head" style="display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.8);">
+      <p class="menu-section__title" style="margin:0;font-size:0.75rem;">\${textOf(category.name)}</p>
+      <span class="menu-section__count" style="font-size:0.65rem;">\${category.items.length} items</span>
     </div>
-    <div class="menu-carousel" data-category-id="\${category.id}">
+    <div class="menu-carousel" data-category-id="\${category.id}" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;gap:16px;overflow-x:auto;overflow-y:hidden;padding:12px 24px 16px;scroll-snap-type:x mandatory;">
       \${looped
         .map(
           (entry) => \`
@@ -1278,31 +1307,176 @@ const render = () => {
     "";
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview">
-      <div class="menu-background" style="background-image: url('\${bg}')"></div>
-      <div class="menu-overlay"></div>
-      <div class="menu-content">
-        <header class="menu-topbar">
-          <div class="menu-title-block">
-            <p class="menu-eyebrow">\${restaurantName}</p>
-            <h1 class="menu-title">\${menuTitle || "Menu"}</h1>
+    <div class="menu-preview" style="position:relative;min-height:100vh;overflow:hidden;color:#e2e8f0;">
+      <div class="menu-background" style="position:absolute;inset:0;z-index:0;background-image:url('\${bg}');background-size:cover;background-position:center;opacity:0.92;filter:blur(2px);transform:scale(1.05);"></div>
+      <div class="menu-overlay" style="position:absolute;inset:0;z-index:1;background:radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));"></div>
+      <div class="menu-content" style="position:relative;z-index:2;padding:32px 24px 40px;display:grid;gap:24px;width:100%;max-width:100vw;overflow-x:hidden;box-sizing:border-box;">
+        <header class="menu-topbar" style="position:relative;display:flex;justify-content:center;align-items:flex-start;gap:16px;text-align:center;width:100%;">
+          <div class="menu-title-block" style="flex:1;">
+            <p class="menu-eyebrow" style="margin:0;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.7);">\${restaurantName}</p>
+            <h1 class="menu-title" style="margin:4px 0 0;font-size:clamp(1.4rem,3vw,2.2rem);color:#f8fafc;">\${menuTitle || "Menu"}</h1>
           </div>
-          <select class="menu-select" id="menu-locale">
-            \${DATA.meta.locales
-              .map((lang) => \`<option value="\${lang}" \${lang === locale ? "selected" : ""}>\${lang.toUpperCase()}</option>\`)
-              .join("")}
-          </select>
+          <div class="menu-lang" style="position:absolute;right:0;top:0;">
+            <select class="menu-select" id="menu-locale" style="background:rgba(15,23,42,0.65);color:#f8fafc;border:1px solid rgba(148,163,184,0.4);border-radius:999px;padding:6px 12px;font-size:0.75rem;">
+              \${DATA.meta.locales
+                .map((lang) => \`<option value="\${lang}" \${lang === locale ? "selected" : ""}>\${lang.toUpperCase()}</option>\`)
+                .join("")}
+            </select>
+          </div>
         </header>
-        <div class="menu-scroll">
-          \${DATA.categories.map((category) => \`<section class="menu-section">\${buildCarousel(category)}</section>\`).join("")}
+        <div class="menu-scroll" style="display:grid;gap:24px;width:100%;min-width:0;overflow-x:hidden;">
+          \${DATA.categories
+            .map(
+              (category) =>
+                \`<section class="menu-section" style="display:grid;gap:12px;width:100%;min-width:0;overflow-x:hidden;">\${buildCarousel(
+                  category
+                )}</section>\`
+            )
+            .join("")}
         </div>
       </div>
     </div>
   \`;
+  const applyBaseStyles = () => {
+    const preview = app.querySelector(".menu-preview");
+    if (preview) {
+      preview.style.position = "relative";
+      preview.style.minHeight = "100vh";
+      preview.style.overflow = "hidden";
+      preview.style.color = "#e2e8f0";
+    }
+    const bgLayer = app.querySelector(".menu-background");
+    if (bgLayer) {
+      bgLayer.style.position = "absolute";
+      bgLayer.style.inset = "0";
+      bgLayer.style.backgroundSize = "cover";
+      bgLayer.style.backgroundPosition = "center";
+      bgLayer.style.zIndex = "0";
+    }
+    const overlay = app.querySelector(".menu-overlay");
+    if (overlay) {
+      overlay.style.position = "absolute";
+      overlay.style.inset = "0";
+      overlay.style.zIndex = "1";
+    }
+    const content = app.querySelector(".menu-content");
+    if (content) {
+      content.style.position = "relative";
+      content.style.zIndex = "2";
+      content.style.display = "grid";
+      content.style.gap = "24px";
+    }
+    const topbar = app.querySelector(".menu-topbar");
+    if (topbar) {
+      topbar.style.position = "relative";
+      topbar.style.display = "flex";
+      topbar.style.justifyContent = "center";
+      topbar.style.alignItems = "flex-start";
+      topbar.style.textAlign = "center";
+    }
+    const titleBlock = app.querySelector(".menu-title-block");
+    if (titleBlock) {
+      titleBlock.style.flex = "1";
+    }
+    const lang = app.querySelector(".menu-lang");
+    if (lang) {
+      lang.style.position = "absolute";
+      lang.style.right = "0";
+      lang.style.top = "0";
+    }
+    const scroll = app.querySelector(".menu-scroll");
+    if (scroll) {
+      scroll.style.display = "grid";
+      scroll.style.gap = "24px";
+      scroll.style.width = "100%";
+      scroll.style.minWidth = "0";
+      scroll.style.overflowX = "hidden";
+    }
+    app.querySelectorAll(".menu-section").forEach((section) => {
+      section.style.display = "grid";
+      section.style.gap = "12px";
+      section.style.width = "100%";
+      section.style.minWidth = "0";
+      section.style.overflowX = "hidden";
+    });
+    app.querySelectorAll(".menu-section__head").forEach((head) => {
+      head.style.display = "flex";
+      head.style.justifyContent = "space-between";
+      head.style.alignItems = "center";
+    });
+    app.querySelectorAll(".menu-carousel").forEach((carousel) => {
+      carousel.style.display = "flex";
+      carousel.style.alignItems = "center";
+      carousel.style.gap = "16px";
+      carousel.style.overflowX = "auto";
+      carousel.style.overflowY = "hidden";
+      carousel.style.padding = "12px 24px 16px";
+      carousel.style.scrollSnapType = "x mandatory";
+      carousel.style.width = "100%";
+      carousel.style.maxWidth = "100%";
+      carousel.style.minWidth = "0";
+      carousel.style.boxSizing = "border-box";
+    });
+    app.querySelectorAll(".carousel-card").forEach((card) => {
+      card.style.flex = "0 0 220px";
+      card.style.width = "220px";
+      card.style.minWidth = "220px";
+      card.style.maxWidth = "220px";
+      card.style.display = "grid";
+      card.style.gap = "8px";
+      card.style.border = "none";
+      card.style.background = "transparent";
+      card.style.color = "#e2e8f0";
+      card.style.scrollSnapAlign = "center";
+      card.style.padding = "8px 6px 12px";
+      card.style.textAlign = "left";
+    });
+    app.querySelectorAll(".carousel-media").forEach((media) => {
+      media.style.width = "100%";
+      media.style.height = "180px";
+      media.style.display = "grid";
+      media.style.placeItems = "center";
+    });
+    app.querySelectorAll(".carousel-media img").forEach((image) => {
+      image.style.width = "75%";
+      image.style.height = "75%";
+      image.style.objectFit = "contain";
+    });
+    app.querySelectorAll(".carousel-text").forEach((text) => {
+      text.style.width = "100%";
+      text.style.borderRadius = "18px";
+      text.style.padding = "12px";
+      text.style.background = "rgba(15, 23, 42, 0.62)";
+      text.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+      text.style.display = "grid";
+      text.style.gap = "6px";
+    });
+    app.querySelectorAll(".carousel-row").forEach((row) => {
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.justifyContent = "space-between";
+      row.style.gap = "12px";
+    });
+    app.querySelectorAll(".carousel-title").forEach((title) => {
+      title.style.margin = "0";
+      title.style.fontSize = "0.95rem";
+    });
+    app.querySelectorAll(".carousel-price").forEach((price) => {
+      price.style.fontWeight = "600";
+      price.style.color = "#fbbf24";
+      price.style.textAlign = "right";
+    });
+    app.querySelectorAll(".carousel-desc").forEach((desc) => {
+      desc.style.margin = "0";
+      desc.style.fontSize = "0.75rem";
+      desc.style.color = "rgba(226, 232, 240, 0.82)";
+    });
+  };
   const preview = app.querySelector(".menu-preview");
   if (preview) {
     preview.style.setProperty("--menu-font", getFontStack(fontFamily));
   }
+  applyBaseStyles();
   const localeSelect = document.getElementById("menu-locale");
   localeSelect?.addEventListener("change", (event) => {
     locale = event.target.value;
@@ -1316,18 +1490,46 @@ const centerCarousel = (container, index, behavior = "auto") => {
   const cards = Array.from(container.querySelectorAll(".carousel-card"));
   const target = cards[index];
   if (!target) return;
-  const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
-  container.scrollTo({ left: targetLeft, behavior });
+  if (container.clientWidth === 0) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const delta =
+    targetRect.left +
+    targetRect.width / 2 -
+    (containerRect.left + containerRect.width / 2);
+  const nextLeft = container.scrollLeft + delta;
+  container.scrollTo({ left: nextLeft, behavior });
 };
 
-const applyFade = (container, activeIndex) => {
+const applyFocusState = (container, activeIndex) => {
   const cards = Array.from(container.querySelectorAll(".carousel-card"));
   cards.forEach((card, index) => {
     const distance = Math.abs(activeIndex - index);
-    const fade = Math.max(0, 1 - distance * 0.2);
-    card.style.setProperty("--fade", fade.toString());
+    const opacity = Math.max(0.18, 1 - distance * 0.2);
+    const scale = Math.max(0.62, 1 - distance * 0.14);
+    const blur = Math.min(8, distance * 2.5);
+    card.style.opacity = opacity.toString();
+    card.style.transform = \`scale(\${distance === 0 ? 1 : scale})\`;
+    card.style.filter = distance === 0 ? "none" : \`blur(\${blur}px)\`;
+    card.style.zIndex = String(Math.max(1, 100 - distance));
     card.classList.toggle("active", distance === 0);
   });
+};
+
+const getClosestIndex = (container) => {
+  const cards = Array.from(container.querySelectorAll(".carousel-card"));
+  const center = container.scrollLeft + container.clientWidth / 2;
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  cards.forEach((card, index) => {
+    const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+    const distance = Math.abs(center - cardCenter);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+  return closestIndex;
 };
 
 const bindCarousels = () => {
@@ -1336,34 +1538,35 @@ const bindCarousels = () => {
     const id = container.dataset.categoryId;
     const category = DATA.categories.find((item) => item.id === id);
     const count = category?.items.length || 0;
+    if (count === 0) return;
     const start = getLoopStart(count);
-    applyFade(container, start);
-    centerCarousel(container, start, "auto");
+
+    const alignTo = (index, behavior = "auto") => {
+      centerCarousel(container, index, behavior);
+      applyFocusState(container, index);
+    };
+
+    requestAnimationFrame(() => {
+      alignTo(start, "auto");
+    });
+    window.setTimeout(() => {
+      alignTo(start, "auto");
+    }, 180);
+
     let timeout;
     container.addEventListener("scroll", () => {
       if (timeout) window.clearTimeout(timeout);
-      const cards = Array.from(container.querySelectorAll(".carousel-card"));
-      const center = container.scrollLeft + container.clientWidth / 2;
-      let closestIndex = 0;
-      let closestDistance = Number.POSITIVE_INFINITY;
-      cards.forEach((card, index) => {
-        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-        const distance = Math.abs(center - cardCenter);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = index;
-        }
-      });
-      applyFade(container, closestIndex);
+      const closestIndex = getClosestIndex(container);
+      applyFocusState(container, closestIndex);
       timeout = window.setTimeout(() => {
         let finalIndex = closestIndex;
         if (count > 1) {
           const normalized = ((closestIndex % count) + count) % count;
           finalIndex = getLoopStart(count) + normalized;
         }
-        centerCarousel(container, finalIndex, finalIndex === closestIndex ? "smooth" : "auto");
-        applyFade(container, finalIndex);
-      }, 160);
+        const behavior = finalIndex === closestIndex ? "smooth" : "auto";
+        alignTo(finalIndex, behavior);
+      }, 140);
     });
   });
 };
@@ -1593,10 +1796,33 @@ render();
       const encoder = new TextEncoder();
       const entries: { name: string; data: Uint8Array }[] = [];
       const menuData = JSON.stringify(exportProject, null, 2);
+      const serveCommand = `#!/bin/bash
+set -e
+cd "$(dirname "$0")"
+python3 -m http.server 4173
+`;
+      const serveBat = `@echo off
+cd /d %~dp0
+python -m http.server 4173
+`;
+      const readme = `Open this exported site with a local server (recommended).
+
+macOS / Linux:
+1. Run chmod +x serve.command
+2. Run ./serve.command
+3. Open http://localhost:4173
+
+Windows:
+1. Run serve.bat
+2. Open http://localhost:4173
+`;
       entries.push({ name: "menu.json", data: encoder.encode(menuData) });
       entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
       entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
       entries.push({ name: "index.html", data: encoder.encode(buildExportHtml()) });
+      entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
+      entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
+      entries.push({ name: "README.txt", data: encoder.encode(readme) });
 
       if (assetMode === "filesystem" && rootHandle) {
         for (const pair of assetPairs) {
@@ -1907,8 +2133,32 @@ render();
     const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
     const target = cards[index];
     if (!target) return;
-    const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
-    container.scrollTo({ left: targetLeft, behavior });
+    if (container.clientWidth === 0) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const delta =
+      targetRect.left +
+      targetRect.width / 2 -
+      (containerRect.left + containerRect.width / 2);
+    const nextLeft = container.scrollLeft + delta;
+    container.scrollTo({ left: nextLeft, behavior });
+  };
+
+  const getClosestCarouselIndex = (container: HTMLElement) => {
+    const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
+    if (cards.length === 0) return 0;
+    const center = container.scrollLeft + container.clientWidth / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    cards.forEach((card, index) => {
+      const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+      const distance = Math.abs(center - cardCenter);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
   };
 
   const syncCarousels = async () => {
@@ -1921,6 +2171,15 @@ render();
       if (!id) return;
       const index = carouselActive[id] ?? 0;
       centerCarousel(container, index, "auto");
+    });
+    requestAnimationFrame(() => {
+      const next = { ...carouselActive };
+      containers.forEach((container) => {
+        const id = container.dataset.categoryId;
+        if (!id) return;
+        next[id] = getClosestCarouselIndex(container);
+      });
+      carouselActive = next;
     });
   };
 
@@ -2688,18 +2947,7 @@ render();
       cancelAnimationFrame(carouselRaf[categoryId] ?? 0);
     }
     carouselRaf[categoryId] = requestAnimationFrame(() => {
-      const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
-      const center = container.scrollLeft + container.clientWidth / 2;
-      let closestIndex = 0;
-      let closestDistance = Number.POSITIVE_INFINITY;
-      cards.forEach((card, index) => {
-        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-        const distance = Math.abs(center - cardCenter);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = index;
-        }
-      });
+      const closestIndex = getClosestCarouselIndex(container);
       carouselActive = { ...carouselActive, [categoryId]: closestIndex };
     });
 
@@ -2707,19 +2955,7 @@ render();
       window.clearTimeout(carouselSnapTimeout[categoryId] ?? 0);
     }
     carouselSnapTimeout[categoryId] = window.setTimeout(() => {
-      const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
-      if (cards.length === 0) return;
-      const center = container.scrollLeft + container.clientWidth / 2;
-      let closestIndex = 0;
-      let closestDistance = Number.POSITIVE_INFINITY;
-      cards.forEach((card, index) => {
-        const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-        const distance = Math.abs(center - cardCenter);
-        if (distance < closestDistance) {
-          closestDistance = distance;
-          closestIndex = index;
-        }
-      });
+      const closestIndex = getClosestCarouselIndex(container);
       const category = activeProject?.categories.find((item) => item.id === categoryId);
       const count = category?.items.length ?? 0;
       let finalIndex = closestIndex;
