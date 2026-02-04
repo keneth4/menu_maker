@@ -5,6 +5,12 @@
       "name": "Café The Okinawan",
       "template": "bar-pub",
       "cover": "/projects/cafe-the-okinawan/assets/backgrounds/background.webp"
+    },
+    {
+      "slug": "sample-cafebrunch-menu",
+      "name": "SampleCafeBrunchMenu",
+      "template": "focus-rows",
+      "cover": "/projects/sample-cafebrunch-menu/assets/backgrounds/backery-outside.gif"
     }
   ]
 }

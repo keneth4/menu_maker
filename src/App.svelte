@@ -1841,6 +1841,16 @@ const getClosestIndex = (container) => {
   return closestIndex;
 };
 
+const remapLoopIndexIfEdge = (container, closestIndex, count) => {
+  if (count <= 1) return closestIndex;
+  const total = container.querySelectorAll(".carousel-card").length;
+  const edgeBand = count;
+  const nearEdge = closestIndex < edgeBand || closestIndex >= total - edgeBand;
+  if (!nearEdge) return closestIndex;
+  const normalized = ((closestIndex % count) + count) % count;
+  return getLoopStart(count) + normalized;
+};
+
 const bindCarousels = () => {
   carouselCleanup.forEach((dispose) => dispose());
   carouselCleanup = [];
@@ -1866,11 +1876,7 @@ const bindCarousels = () => {
     }, 180);
     window.setTimeout(() => {
       const closestIndex = getClosestIndex(container);
-      let finalIndex = closestIndex;
-      if (count > 1) {
-        const normalized = ((closestIndex % count) + count) % count;
-        finalIndex = getLoopStart(count) + normalized;
-      }
+      const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
       alignTo(finalIndex, "auto");
     }, 360);
 
@@ -1880,11 +1886,7 @@ const bindCarousels = () => {
       const closestIndex = getClosestIndex(container);
       applyFocusState(container, closestIndex);
       timeout = window.setTimeout(() => {
-        let finalIndex = closestIndex;
-        if (count > 1) {
-          const normalized = ((closestIndex % count) + count) % count;
-          finalIndex = getLoopStart(count) + normalized;
-        }
+        const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
         const behavior = finalIndex === closestIndex ? "smooth" : "auto";
         alignTo(finalIndex, behavior);
       }, 140);
@@ -1896,11 +1898,7 @@ const bindCarousels = () => {
       if (resizeTimeout) window.clearTimeout(resizeTimeout);
       resizeTimeout = window.setTimeout(() => {
         const closestIndex = getClosestIndex(container);
-        let finalIndex = closestIndex;
-        if (count > 1) {
-          const normalized = ((closestIndex % count) + count) % count;
-          finalIndex = getLoopStart(count) + normalized;
-        }
+        const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
         alignTo(finalIndex, "auto");
       }, 120);
     };
@@ -2500,6 +2498,20 @@ Windows:
       }
     });
     return closestIndex;
+  };
+
+  const remapLoopIndexIfEdge = (
+    container: HTMLElement,
+    closestIndex: number,
+    count: number
+  ) => {
+    if (count <= 1) return closestIndex;
+    const total = container.querySelectorAll(".carousel-card").length;
+    const edgeBand = count;
+    const nearEdge = closestIndex < edgeBand || closestIndex >= total - edgeBand;
+    if (!nearEdge) return closestIndex;
+    const normalized = ((closestIndex % count) + count) % count;
+    return getLoopStart(count) + normalized;
   };
 
   const syncCarousels = async () => {
@@ -3386,12 +3398,7 @@ Windows:
       const closestIndex = getClosestCarouselIndex(container);
       const category = activeProject?.categories.find((item) => item.id === categoryId);
       const count = category?.items.length ?? 0;
-      let finalIndex = closestIndex;
-      if (count > 1) {
-        const loopStart = getLoopStart(count);
-        const normalized = ((closestIndex % count) + count) % count;
-        finalIndex = loopStart + normalized;
-      }
+      const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
       const behavior: ScrollBehavior = finalIndex === closestIndex ? "smooth" : "auto";
       centerCarousel(container, finalIndex, behavior);
       carouselActive = { ...carouselActive, [categoryId]: finalIndex };

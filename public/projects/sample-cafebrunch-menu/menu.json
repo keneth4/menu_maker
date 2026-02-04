@@ -1,0 +1,567 @@
+{
+  "meta": {
+    "slug": "sample-cafebrunch-menu",
+    "name": "SampleCafeBrunchMenu",
+    "restaurantName": {
+      "es": "Cafe Aurora",
+      "en": "Cafe Aurora"
+    },
+    "title": {
+      "es": "Menu Brunch de la Casa",
+      "en": "House Brunch Menu"
+    },
+    "fontFamily": "Cinzel",
+    "fontSource": "",
+    "template": "focus-rows",
+    "locales": [
+      "es",
+      "en"
+    ],
+    "defaultLocale": "en",
+    "currency": "MXN",
+    "currencyPosition": "left"
+  },
+  "backgrounds": [
+    {
+      "id": "bg-1770216523927",
+      "label": "Cafe",
+      "src": "/projects/sample-cafebrunch-menu/assets/backgrounds/backery-outside.gif",
+      "type": "image"
+    },
+    {
+      "id": "bg-1770216805499",
+      "label": "drops",
+      "src": "/projects/sample-cafebrunch-menu/assets/backgrounds/coffe-drops.gif",
+      "type": "image"
+    }
+  ],
+  "categories": [
+    {
+      "id": "section-pnqps1",
+      "name": {
+        "es": "Pastelería",
+        "en": "Pastries"
+      },
+      "items": [
+        {
+          "id": "dish-1770216523928-87jyg",
+          "name": {
+            "es": "Muffin de Pistache",
+            "en": "Pistaccio Muffin"
+          },
+          "description": {
+            "es": "Pastelillo estilo muffin con relleno sabor Pistache.",
+            "en": "Muffin pastry with Pistaccio filling inside"
+          },
+          "longDescription": {
+            "es": "Inspirado en las cafeterias de Melbourne, se sirve con microespuma fina para resaltar el perfil del grano.",
+            "en": "Inspired by Melbourne coffee bars, served with fine microfoam to highlight bean profile."
+          },
+          "price": {
+            "amount": 35,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts"
+              }
+            },
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
+          }
+        },
+        {
+          "id": "dish-1770217436244",
+          "name": {
+            "es": "Galletas Blanco & Negro",
+            "en": "Black & White Cookies"
+          },
+          "description": {
+            "es": "Galleta gruesa de masa semi-suave con trozos de chocolate dentro",
+            "en": "Thick semi-soft dough Cookie with chocolate pieces inside"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/b&w-cookies.gif"
+          }
+        },
+        {
+          "id": "dish-1770217647423",
+          "name": {
+            "es": "Dona Morada",
+            "en": "Purple Donut"
+          },
+          "description": {
+            "es": "Deliciosa dona con relleno suave de moras y una cubierta de glaseado",
+            "en": "Delicious Donut with a soft berries filling and a glazed cover"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/all-berry-donut.gif"
+          }
+        },
+        {
+          "id": "dish-1770218071272",
+          "name": {
+            "es": "HotCakes de Mora Azul",
+            "en": "Blueberry Pancakes"
+          },
+          "description": {
+            "es": "HotCakes esponjosos con mermelada de Mora Azul encima",
+            "en": "Fluffy Pancakes with Blueberry marmelade on top"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 55,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/blue-berry-pancakes.gif"
+          }
+        },
+        {
+          "id": "dish-1770218671234",
+          "name": {
+            "es": "Pay de caramelo",
+            "en": "Caramel Pie"
+          },
+          "description": {
+            "es": "Dulce pay con relleno y cubierta de sabor caramelo",
+            "en": "Sweet Pie with caramel flavored filling and cover"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 45,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/caramel-pie.gif"
+          }
+        },
+        {
+          "id": "dish-1770219007092",
+          "name": {
+            "es": "Pastel de Pay de Queso con Moras",
+            "en": "Cheescake Pie & Berries Cake"
+          },
+          "description": {
+            "es": "Pastel completo sabor Pay de Queso con Moras",
+            "en": "Whole Cheescake Pie & Berries Cake"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 350,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/full-cheescake.gif"
+          }
+        },
+        {
+          "id": "dish-1770219339360",
+          "name": {
+            "es": "Pay de Queso con Frambuesa",
+            "en": "Raspberry Cheescake"
+          },
+          "description": {
+            "es": "Delicioso Pay de Queso con corteza crujiente y un toque de crema batida y frambuesas frescas",
+            "en": "Delicious Cheescake with a crunchy crust and a touch of whipped cream and fresh raspberries"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 35,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/raspberry-cheesecake-pie.gif"
+          }
+        },
+        {
+          "id": "dish-1770219635727",
+          "name": {
+            "es": "Sandwich de helado Napolitano",
+            "en": "Ice-cream Sandwich"
+          },
+          "description": {
+            "es": "Helado en forma de Sandwich con galleta sabor a chocolate y helado de estilo Napolitano",
+            "en": "Napolitan Style ice-cream Sandwich with chocolate flavored cookie"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            }
+          ],
+          "vegan": true,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/ice-cream-sandwich.webp"
+          }
+        }
+      ]
+    },
+    {
+      "id": "section-izp9v9",
+      "name": {
+        "es": "Brunch",
+        "en": "Brunch"
+      },
+      "items": [
+        {
+          "id": "dish-1770216523929-l8vq2",
+          "name": {
+            "es": "Sandwich con Tocino",
+            "en": "Bacon Sandwich"
+          },
+          "description": {
+            "es": "Clásico Sandwich de jamón con Tocino",
+            "en": "Classic Ham sandwich with Bacon"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 40,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-bacon.gif"
+          }
+        },
+        {
+          "id": "dish-1770220621189",
+          "name": {
+            "es": "Sandwich de pechuga de Pollo",
+            "en": "Jerk Chicken Sandwich"
+          },
+          "description": {
+            "es": "Medio Sandwich rellenado generosamente con pechuga de pollo.",
+            "en": "Half Sandwich bun generously filled with jerk chicken"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 55,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/jerk-chicken-sandwich.webp"
+          }
+        },
+        {
+          "id": "dish-1770220835963",
+          "name": {
+            "es": "Sandwich de Pechuga Empanizada",
+            "en": "Breaded Chicken Sandwich"
+          },
+          "description": {
+            "es": "Sandwich de pechuga de pollo empanizada estilo mexicano",
+            "en": "Mexican Style breaded chicken breast sandwich"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 50,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-filete-de-pollo-empanizado.gif"
+          }
+        },
+        {
+          "id": "dish-1770221040005",
+          "name": {
+            "es": "Torta de jamón de Pavo",
+            "en": "Turkey Ham Sandwich"
+          },
+          "description": {
+            "es": "Clásica torta de jamón de pavo, servida generosamente con aguacate",
+            "en": "Classic Turkey ham Sandwich, generously served with avocado"
+          },
+          "longDescription": {
+            "es": "",
+            "en": ""
+          },
+          "price": {
+            "amount": 50,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/torta-de-jamon-de-pavo.gif"
+          }
+        }
+      ]
+    }
+  ],
+  "sound": {
+    "enabled": false,
+    "theme": "bar-amber",
+    "volume": 0.6,
+    "map": {}
+  }
+}
