@@ -413,7 +413,7 @@
               }
             }
           ],
-          "vegan": false,
+          "vegan": true,
           "media": {
             "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/ice-cream-sandwich.webp"
           }
