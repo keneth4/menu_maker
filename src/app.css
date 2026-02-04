@@ -490,6 +490,7 @@ body {
   inset: 0;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   opacity: 0;
   filter: saturate(1.08) blur(1.5px);
   transition: opacity 1200ms ease;
@@ -573,6 +574,9 @@ body {
   padding: 0 20px 20px;
   display: grid;
   gap: 20px;
+  scroll-snap-type: y proximity;
+  scroll-behavior: smooth;
+  scroll-padding-block: 20px;
   scrollbar-width: none;
 }
 
@@ -581,8 +585,13 @@ body {
 }
 
 .menu-section {
+  --section-focus: 1;
   display: grid;
   gap: 12px;
+  transform: scale(var(--section-focus));
+  transform-origin: center center;
+  transition: transform 240ms ease;
+  scroll-snap-align: center;
 }
 
 .menu-section__head {
@@ -653,6 +662,7 @@ body {
   min-width: 100%;
   scroll-snap-align: start;
   padding-inline: 4px;
+  transform: none;
 }
 
 .template-jukebox .menu-carousel {
@@ -785,20 +795,33 @@ body {
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 20px;
+  position: relative;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   color: #e2e8f0;
   max-height: calc(100dvh - 40px);
   overflow-y: auto;
 }
 
+.dish-modal__header {
+  display: grid;
+  gap: 8px;
+  padding-right: 56px;
+  align-self: start;
+}
+
 .dish-modal__close {
-  justify-self: end;
   background: transparent;
   border: 1px solid rgba(148, 163, 184, 0.4);
   color: #e2e8f0;
   border-radius: 999px;
   padding: 4px 10px;
+  line-height: 1;
+  cursor: pointer;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
 }
 
 .dish-modal__media {
@@ -818,14 +841,20 @@ body {
 
 .dish-modal__title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: #f8fafc;
-  text-align: center;
+  text-align: left;
 }
 
 .dish-modal__content {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  align-content: start;
+}
+
+.dish-modal__text {
+  display: grid;
+  gap: 12px;
 }
 
 .dish-modal__desc {
@@ -859,6 +888,7 @@ body {
 .dish-modal__price {
   margin: 0;
   justify-self: end;
+  text-align: right;
   font-size: 1rem;
   font-weight: 700;
   color: #fbbf24;
@@ -896,28 +926,41 @@ body {
   background: rgba(2, 6, 23, 0.5);
   padding: 12px;
   display: grid;
+  gap: 14px;
+}
+
+.edit-item__media-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
   gap: 12px;
+  align-items: center;
 }
 
 .edit-item__media {
-  width: 120px;
+  width: 132px;
   aspect-ratio: 1 / 1;
   border-radius: 12px;
   background: rgba(2, 6, 23, 0.6);
   display: grid;
   place-items: center;
   overflow: hidden;
+  justify-self: center;
 }
 
 .edit-item__media img {
-  width: 85%;
-  height: 85%;
+  width: 82%;
+  height: 82%;
   object-fit: contain;
+  margin: 0 auto;
 }
 
 .edit-item__content {
   display: grid;
   gap: 8px;
+}
+
+.edit-item__source .editor-input {
+  width: 100%;
 }
 
 .asset-manager {
@@ -1152,47 +1195,75 @@ body {
 
 @media (orientation: landscape) and (max-height: 560px) {
   .dish-modal {
-    align-items: stretch;
-    padding: 10px;
+    align-items: center;
+    padding: 8px;
   }
 
   .dish-modal__card {
-    width: min(900px, 94vw);
-    max-height: calc(100dvh - 20px);
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+    width: min(960px, 96vw);
+    max-height: calc(100dvh - 16px);
+    padding: 16px 18px 18px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(230px, 0.8fr);
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
-      "close close"
-      "title title"
-      "content media"
-      "price media";
-    align-items: start;
+      "header media"
+      "content media";
+    gap: 10px 18px;
+    align-items: stretch;
+    overflow: hidden;
   }
 
-  .dish-modal__close {
-    grid-area: close;
-    justify-self: end;
+  .dish-modal__header {
+    grid-area: header;
+    align-self: start;
+    padding-right: 62px;
   }
 
   .dish-modal__title {
-    grid-area: title;
-    text-align: left;
-    padding-right: 14px;
+    padding-right: 8px;
+    font-size: clamp(1.2rem, 2.5vw, 1.7rem);
   }
 
   .dish-modal__content {
     grid-area: content;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    padding-right: 6px;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-content: stretch;
+  }
+
+  .dish-modal__text {
+    align-self: center;
   }
 
   .dish-modal__media {
     grid-area: media;
     align-self: stretch;
     aspect-ratio: auto;
-    min-height: 170px;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .dish-modal__media img {
+    width: 96%;
+    height: 96%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .dish-modal__close {
+    top: 10px;
+    right: 12px;
   }
 
   .dish-modal__price {
-    grid-area: price;
-    justify-self: start;
+    justify-self: end;
+    text-align: right;
+    align-self: end;
+    margin: 0;
   }
 }
 

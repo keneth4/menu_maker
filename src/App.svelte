@@ -40,6 +40,8 @@
   let carouselActive: Record<string, number> = {};
   let carouselRaf: Record<string, number | null> = {};
   let carouselSnapTimeout: Record<string, number | null> = {};
+  let sectionFocusRaf: number | null = null;
+  let sectionSnapTimeout: ReturnType<typeof setTimeout> | null = null;
   let languageMenuOpen = false;
   let uiLang: "es" | "en" = "es";
   let editLang = "es";
@@ -852,6 +854,14 @@
 
   onDestroy(() => {
     clearBackgroundRotation();
+    if (sectionFocusRaf) {
+      cancelAnimationFrame(sectionFocusRaf);
+      sectionFocusRaf = null;
+    }
+    if (sectionSnapTimeout) {
+      clearTimeout(sectionSnapTimeout);
+      sectionSnapTimeout = null;
+    }
   });
 
   $: activeProject = draft ?? project;
@@ -1323,6 +1333,7 @@ body {
   inset: 0;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   opacity: 0;
   filter: blur(2px);
   transform: scale(1.05);
@@ -1341,7 +1352,11 @@ body {
   z-index: 2;
   padding: 32px 24px 40px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 24px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 .menu-topbar {
   position: relative;
@@ -1380,6 +1395,19 @@ body {
 .menu-scroll {
   display: grid;
   gap: 24px;
+  scroll-snap-type: y proximity;
+  scroll-behavior: smooth;
+  overflow-y: auto;
+  padding: 0 4px 20px;
+  scrollbar-width: none;
+}
+.menu-scroll::-webkit-scrollbar { display: none; }
+.menu-section {
+  --section-focus: 1;
+  transform: scale(var(--section-focus));
+  transform-origin: center center;
+  transition: transform 240ms ease;
+  scroll-snap-align: center;
 }
 .menu-section__head {
   display: grid;
@@ -1417,6 +1445,7 @@ body {
 .template-jukebox .menu-section {
   min-width: 100%;
   scroll-snap-align: start;
+  transform: none;
 }
 .template-jukebox .menu-carousel {
   --carousel-card: clamp(220px, 62vw, 300px);
@@ -1512,20 +1541,30 @@ body {
   padding: 20px;
   position: relative;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   color: #e2e8f0;
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
 }
+.dish-modal__header {
+  display: grid;
+  gap: 8px;
+  padding-right: 56px;
+  align-self: start;
+}
 .dish-modal__close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 1.2rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.95rem;
   cursor: pointer;
+  line-height: 1;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
 }
 .dish-modal__media {
   width: 100%;
@@ -1538,13 +1577,14 @@ body {
   height: 70%;
   object-fit: contain;
 }
-.dish-modal__title { margin: 0; font-size: 1.2rem; text-align: center; }
-.dish-modal__content { display: grid; gap: 10px; }
+.dish-modal__title { margin: 0; font-size: 1.2rem; text-align: left; }
+.dish-modal__content { display: grid; gap: 12px; align-content: start; }
+.dish-modal__text { display: grid; gap: 12px; }
 .dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
 .dish-modal__long { margin: 0; font-size: 0.8rem; color: rgba(226,232,240,0.7); }
 .dish-modal__allergens { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(251, 191, 36, 0.7); }
 .dish-modal__badge { align-self: start; border-radius: 999px; padding: 4px 10px; border: 1px solid rgba(251, 191, 36, 0.5); color: #fde68a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em; }
-.dish-modal__price { margin: 0; justify-self: end; font-weight: 700; color: #fbbf24; }
+.dish-modal__price { margin: 0; justify-self: end; text-align: right; font-weight: 700; color: #fbbf24; }
 @media (min-width: 900px) {
   .menu-content {
     padding: 40px 48px 60px;
@@ -1552,42 +1592,66 @@ body {
 }
 @media (orientation: landscape) and (max-height: 560px) {
   .dish-modal {
-    padding: 10px;
-    align-items: stretch;
+    padding: 8px;
+    align-items: center;
   }
   .dish-modal__card {
-    width: min(900px, 94vw);
-    max-height: calc(100dvh - 20px);
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+    width: min(960px, 96vw);
+    max-height: calc(100dvh - 16px);
+    padding: 16px 18px 18px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(230px, 0.8fr);
+    grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas:
-      "close close"
-      "title title"
-      "content media"
-      "price media";
-    align-items: start;
+      "header media"
+      "content media";
+    gap: 10px 18px;
+    align-items: stretch;
+    overflow: hidden;
   }
-  .dish-modal__close {
-    grid-area: close;
-    position: static;
-    justify-self: end;
+  .dish-modal__header {
+    grid-area: header;
+    align-self: start;
+    padding-right: 62px;
   }
   .dish-modal__title {
-    grid-area: title;
-    text-align: left;
-    padding-right: 12px;
+    padding-right: 8px;
+    font-size: clamp(1.2rem, 2.5vw, 1.7rem);
   }
   .dish-modal__content {
     grid-area: content;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    padding-right: 6px;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-content: stretch;
+  }
+  .dish-modal__text {
+    align-self: center;
   }
   .dish-modal__media {
     grid-area: media;
     align-self: stretch;
     aspect-ratio: auto;
-    min-height: 170px;
+    min-height: 0;
+    height: 100%;
+  }
+  .dish-modal__media img {
+    width: 96%;
+    height: 96%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .dish-modal__close {
+    top: 10px;
+    right: 12px;
   }
   .dish-modal__price {
-    grid-area: price;
-    justify-self: start;
+    justify-self: end;
+    text-align: right;
+    align-self: end;
+    margin: 0;
   }
 }
 `;
@@ -1762,7 +1826,7 @@ const render = () => {
       \${backgrounds
         .map(
           (item, index) =>
-            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="position:absolute;inset:0;z-index:0;background-image:url('\${item.src}');background-size:cover;background-position:center;filter:blur(2px);transform:scale(1.05);"></div>\`
+            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="position:absolute;inset:0;z-index:0;background-image:url('\${item.src}');background-size:cover;background-position:center;background-repeat:no-repeat;filter:blur(2px);transform:scale(1.05);"></div>\`
         )
         .join("")}
       <div class="menu-overlay" style="position:absolute;inset:0;z-index:1;background:radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));"></div>
@@ -1807,6 +1871,7 @@ const render = () => {
       bgLayer.style.inset = "0";
       bgLayer.style.backgroundSize = "cover";
       bgLayer.style.backgroundPosition = "center";
+      bgLayer.style.backgroundRepeat = "no-repeat";
       bgLayer.style.zIndex = "0";
     });
     const overlay = app.querySelector(".menu-overlay");
@@ -1820,7 +1885,11 @@ const render = () => {
       content.style.position = "relative";
       content.style.zIndex = "2";
       content.style.display = "grid";
+      content.style.gridTemplateRows = "auto minmax(0, 1fr)";
       content.style.gap = "24px";
+      content.style.minHeight = "100vh";
+      content.style.minHeight = "100dvh";
+      content.style.overflow = "hidden";
     }
     const topbar = app.querySelector(".menu-topbar");
     if (topbar) {
@@ -1847,6 +1916,8 @@ const render = () => {
       scroll.style.width = "100%";
       scroll.style.minWidth = "0";
       scroll.style.overflowX = "hidden";
+      scroll.style.overflowY = "auto";
+      scroll.style.padding = "0 4px 20px";
     }
     app.querySelectorAll(".menu-section").forEach((section) => {
       section.style.display = "grid";
@@ -1976,6 +2047,7 @@ const render = () => {
     render();
   });
   bindCarousels();
+  bindSectionFocus();
   bindCards();
 };
 
@@ -2103,22 +2175,107 @@ const bindCards = () => {
       const longDesc = textOf(dish.longDescription);
       const allergens = getAllergenValues(dish).join(", ");
       modalContent.innerHTML = \`
-        <button class="dish-modal__close" id="modal-close">✕</button>
-        <p class="dish-modal__title">\${textOf(dish.name)}</p>
+        <div class="dish-modal__header">
+          <p class="dish-modal__title">\${textOf(dish.name)}</p>
+          <button class="dish-modal__close" id="modal-close">✕</button>
+        </div>
         <div class="dish-modal__media">
           <img src="\${dish.media.hero360 || ""}" alt="\${textOf(dish.name)}" />
         </div>
         <div class="dish-modal__content">
-          <p class="dish-modal__desc">\${textOf(dish.description)}</p>
-          \${longDesc ? '<p class="dish-modal__long">' + longDesc + '</p>' : ""}
-          \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
-          \${dish.vegan ? '<span class="dish-modal__badge">🌿 ' + veganLabel + '</span>' : ""}
+          <div class="dish-modal__text">
+            <p class="dish-modal__desc">\${textOf(dish.description)}</p>
+            \${longDesc ? '<p class="dish-modal__long">' + longDesc + '</p>' : ""}
+            \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
+            \${dish.vegan ? '<span class="dish-modal__badge">🌿 ' + veganLabel + '</span>' : ""}
+          </div>
+          <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
         </div>
-        <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
       \`;
       modal.classList.add("open");
       modal.querySelector("#modal-close")?.addEventListener("click", closeModal);
     });
+  });
+};
+
+const getClosestSectionIndex = (container) => {
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  if (sections.length === 0) return -1;
+  const centerY = container.scrollTop + container.clientHeight / 2;
+  let closest = 0;
+  let minDistance = Number.POSITIVE_INFINITY;
+  sections.forEach((section, index) => {
+    const sectionCenter = section.offsetTop + section.offsetHeight / 2;
+    const distance = Math.abs(sectionCenter - centerY);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = index;
+    }
+  });
+  return closest;
+};
+
+const centerSection = (container, index, behavior = "smooth") => {
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  const target = sections[index];
+  if (!target || container.clientHeight === 0) return;
+  const targetTop = target.offsetTop + target.offsetHeight / 2 - container.clientHeight / 2;
+  container.scrollTo({ top: targetTop, behavior });
+};
+
+const applySectionFocus = (container) => {
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  if (sections.length === 0) return;
+  const centerY = container.scrollTop + container.clientHeight / 2;
+  const maxDistance = Math.max(container.clientHeight * 0.6, 1);
+  const closestIndex = getClosestSectionIndex(container);
+  sections.forEach((section, index) => {
+    const sectionCenter = section.offsetTop + section.offsetHeight / 2;
+    const distance = Math.abs(sectionCenter - centerY);
+    const ratio = Math.min(1, distance / maxDistance);
+    const focus = 1 - ratio * 0.14;
+    section.style.setProperty("--section-focus", focus.toFixed(3));
+    section.classList.toggle("is-centered", index === closestIndex);
+  });
+};
+
+const bindSectionFocus = () => {
+  const scroll = app.querySelector(".menu-scroll");
+  if (!scroll) return;
+  const sections = Array.from(scroll.querySelectorAll(".menu-section"));
+  if (sections.length === 0) return;
+  applySectionFocus(scroll);
+  if (scroll.scrollHeight <= scroll.clientHeight + 4) return;
+
+  let raf;
+  let snapTimeout;
+  const onScroll = () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      applySectionFocus(scroll);
+    });
+    if (snapTimeout) window.clearTimeout(snapTimeout);
+    snapTimeout = window.setTimeout(() => {
+      const closestIndex = getClosestSectionIndex(scroll);
+      if (closestIndex >= 0) {
+        centerSection(scroll, closestIndex, "smooth");
+      }
+      applySectionFocus(scroll);
+    }, 180);
+  };
+  const onResize = () => {
+    applySectionFocus(scroll);
+  };
+
+  scroll.addEventListener("scroll", onScroll);
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+  carouselCleanup.push(() => {
+    scroll.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onResize);
+    window.removeEventListener("orientationchange", onResize);
+    if (raf) cancelAnimationFrame(raf);
+    if (snapTimeout) window.clearTimeout(snapTimeout);
   });
 };
 
@@ -2694,6 +2851,75 @@ Windows:
     return getLoopStart(count) + normalized;
   };
 
+  const getClosestSectionIndex = (container: HTMLElement) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (sections.length === 0) return -1;
+    const centerY = container.scrollTop + container.clientHeight / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetTop + section.offsetHeight / 2;
+      const distance = Math.abs(sectionCenter - centerY);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
+  };
+
+  const centerSection = (container: HTMLElement, index: number, behavior: ScrollBehavior) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    const target = sections[index];
+    if (!target || container.clientHeight === 0) return;
+    const targetTop = target.offsetTop + target.offsetHeight / 2 - container.clientHeight / 2;
+    container.scrollTo({ top: targetTop, behavior });
+  };
+
+  const applySectionFocus = (container: HTMLElement) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (sections.length === 0) return;
+    const centerY = container.scrollTop + container.clientHeight / 2;
+    const maxDistance = Math.max(container.clientHeight * 0.6, 1);
+    const closestIndex = getClosestSectionIndex(container);
+
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetTop + section.offsetHeight / 2;
+      const distance = Math.abs(sectionCenter - centerY);
+      const ratio = Math.min(1, distance / maxDistance);
+      const focus = 1 - ratio * 0.14;
+      section.style.setProperty("--section-focus", focus.toFixed(3));
+      section.classList.toggle("is-centered", index === closestIndex);
+    });
+  };
+
+  const snapSectionToCenter = (container: HTMLElement) => {
+    if (container.scrollHeight <= container.clientHeight + 4) {
+      applySectionFocus(container);
+      return;
+    }
+    const closestIndex = getClosestSectionIndex(container);
+    if (closestIndex < 0) return;
+    centerSection(container, closestIndex, "smooth");
+    applySectionFocus(container);
+  };
+
+  const handleMenuScroll = (event: Event) => {
+    const container = event.currentTarget as HTMLElement;
+    if (sectionFocusRaf) {
+      cancelAnimationFrame(sectionFocusRaf);
+    }
+    sectionFocusRaf = requestAnimationFrame(() => {
+      applySectionFocus(container);
+    });
+    if (sectionSnapTimeout) {
+      clearTimeout(sectionSnapTimeout);
+    }
+    sectionSnapTimeout = setTimeout(() => {
+      snapSectionToCenter(container);
+    }, 180);
+  };
+
   const syncCarousels = async () => {
     await tick();
     const containers = Array.from(
@@ -2713,6 +2939,10 @@ Windows:
         next[id] = getClosestCarouselIndex(container);
       });
       carouselActive = next;
+      const menuScroll = document.querySelector<HTMLElement>(".menu-scroll");
+      if (menuScroll) {
+        applySectionFocus(menuScroll);
+      }
     });
   };
 
@@ -4450,8 +4680,22 @@ Windows:
                       <div class="edit-block">
                         <p class="edit-block__title">{t("dishData")}</p>
                         <div class="edit-item">
-                          <div class="edit-item__media">
-                            <img src={selectedItem.media.hero360 ?? ""} alt={textOf(selectedItem.name)} />
+                          <div class="edit-item__media-row">
+                            <div class="edit-item__media">
+                              <img
+                                src={selectedItem.media.hero360 ?? ""}
+                                alt={textOf(selectedItem.name)}
+                              />
+                            </div>
+                            <label class="editor-field edit-item__source">
+                              <span>{t("asset360")}</span>
+                              <input
+                                type="text"
+                                class="editor-input"
+                                bind:value={selectedItem.media.hero360}
+                                list="asset-files"
+                              />
+                            </label>
                           </div>
                           <div class="edit-item__content">
                             <label class="editor-field">
@@ -4525,15 +4769,6 @@ Windows:
                                 type="checkbox"
                                 checked={selectedItem.vegan ?? false}
                                 on:change={(event) => handleVeganToggle(selectedItem, event)}
-                              />
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("asset360")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={selectedItem.media.hero360}
-                                list="asset-files"
                               />
                             </label>
                           </div>
@@ -4860,7 +5095,7 @@ Windows:
                 </div>
               </header>
 
-              <div class="menu-scroll">
+              <div class="menu-scroll" on:scroll={handleMenuScroll}>
                 {#each activeProject.categories as category}
                   {@const loopedItems = getLoopedItems(category.items)}
                   {@const activeIndex =
@@ -4925,28 +5160,32 @@ Windows:
   {#if dish}
     <div class="dish-modal" on:click={closeDish}>
       <div class="dish-modal__card" on:click|stopPropagation>
-        <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
-        <p class="dish-modal__title">{textOf(dish.name)}</p>
+        <div class="dish-modal__header">
+          <p class="dish-modal__title">{textOf(dish.name)}</p>
+          <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
+        </div>
         <div class="dish-modal__media">
           <img src={dish.media.hero360 ?? ""} alt={textOf(dish.name)} />
         </div>
         <div class="dish-modal__content">
-          <p class="dish-modal__desc">{textOf(dish.description)}</p>
-          {#if textOf(dish.longDescription)}
-            <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
-          {/if}
-          {#if dish.allergens?.length}
-            <p class="dish-modal__allergens">
-              {getMenuTerm("allergens")}: {getAllergenValues(dish).join(", ")}
-            </p>
-          {/if}
-          {#if dish.vegan}
-            <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
-          {/if}
+          <div class="dish-modal__text">
+            <p class="dish-modal__desc">{textOf(dish.description)}</p>
+            {#if textOf(dish.longDescription)}
+              <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
+            {/if}
+            {#if dish.allergens?.length}
+              <p class="dish-modal__allergens">
+                {getMenuTerm("allergens")}: {getAllergenValues(dish).join(", ")}
+              </p>
+            {/if}
+            {#if dish.vegan}
+              <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
+            {/if}
+          </div>
+          <p class="dish-modal__price">
+            {formatPrice(dish.price.amount)}
+          </p>
         </div>
-        <p class="dish-modal__price">
-          {formatPrice(dish.price.amount)}
-        </p>
       </div>
     </div>
   {/if}
