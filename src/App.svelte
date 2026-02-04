@@ -1775,10 +1775,18 @@ render();
 
   const createNewProject = async () => {
     const empty = createEmptyProject();
+    empty.meta.name = uiLang === "en" ? "New project" : "Nuevo proyecto";
+    empty.meta.slug = "new-project";
+    if (!empty.meta.locales.includes(uiLang)) {
+      empty.meta.locales = [uiLang, ...empty.meta.locales];
+    }
+    empty.meta.defaultLocale = uiLang;
     project = empty;
     draft = cloneProject(empty);
     activeSlug = empty.meta.slug;
-    locale = empty.meta.defaultLocale;
+    locale = uiLang;
+    editLang = uiLang;
+    wizardLang = uiLang;
     lastSaveName = "";
     needsAssets = false;
     openError = "";
@@ -2794,6 +2802,24 @@ render();
   />
   {#if showLanding}
     <section class="landing-screen">
+      <div class="landing-lang">
+        <div class="lang-toggle" aria-label={t("toggleLang")}>
+          <button
+            class="lang-btn {uiLang === 'es' ? 'active' : ''}"
+            type="button"
+            on:click={() => (uiLang = 'es')}
+          >
+            ES
+          </button>
+          <button
+            class="lang-btn {uiLang === 'en' ? 'active' : ''}"
+            type="button"
+            on:click={() => (uiLang = 'en')}
+          >
+            EN
+          </button>
+        </div>
+      </div>
       <header class="landing-header">
         <h1>{t("landingTitle")}</h1>
         <p>{t("landingBy")}</p>
@@ -2820,10 +2846,11 @@ render();
         <button type="button" class="landing-action" on:click={startWizard}>
           <span class="landing-icon">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 4h8v8H4z"></path>
-              <path d="M12 12h8v8h-8z"></path>
-              <path d="M12 4h8v8h-8z"></path>
-              <path d="M4 12h8v8H4z"></path>
+              <path d="M4 20l10-10"></path>
+              <path d="M14 10l6-6"></path>
+              <path d="M18 4l2 2"></path>
+              <path d="M6 14l4 4"></path>
+              <path d="M16 6l2 2"></path>
             </svg>
           </span>
           <span>{t("landingWizard")}</span>
@@ -2910,28 +2937,56 @@ render();
             type="button"
             on:click={() => setEditorTab('info')}
           >
-            {t("tabProject")}
+            <span class="editor-tab__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
+                <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
+              </svg>
+            </span>
+            <span>{t("tabProject")}</span>
           </button>
           <button
             class="editor-tab {editorTab === 'assets' ? 'active' : ''}"
             type="button"
             on:click={() => setEditorTab('assets')}
           >
-            {t("tabAssets")}
+            <span class="editor-tab__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16v12H4z"></path>
+                <path d="M8 10h8"></path>
+                <path d="M8 14h6"></path>
+              </svg>
+            </span>
+            <span>{t("tabAssets")}</span>
           </button>
           <button
             class="editor-tab {editorTab === 'edit' ? 'active' : ''}"
             type="button"
             on:click={() => setEditorTab('edit')}
           >
-            {t("tabEdit")}
+            <span class="editor-tab__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 20h6"></path>
+                <path d="M14 4l6 6"></path>
+                <path d="M5 19l4-1 9-9-3-3-9 9z"></path>
+              </svg>
+            </span>
+            <span>{t("tabEdit")}</span>
           </button>
           <button
             class="editor-tab {editorTab === 'wizard' ? 'active' : ''}"
             type="button"
             on:click={() => setEditorTab('wizard')}
           >
-            {t("tabWizard")}
+            <span class="editor-tab__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 20l10-10"></path>
+                <path d="M14 10l6-6"></path>
+                <path d="M18 4l2 2"></path>
+                <path d="M6 14l4 4"></path>
+              </svg>
+            </span>
+            <span>{t("tabWizard")}</span>
           </button>
         </div>
 
