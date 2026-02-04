@@ -1060,7 +1060,7 @@ render();
     <div id="dish-modal" class="dish-modal">
       <div id="dish-modal-content" class="dish-modal__card"></div>
     </div>
-    <script src="app.js"><\\/script>
+    <script src="app.js"></scr${"ipt"}>
   </body>
 </html>
 `;
@@ -1085,34 +1085,68 @@ render();
     exportError = "";
     exportStatus = t("exporting");
     try {
+      const slug = getProjectSlug();
+      const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
+      const assets = collectAssetPaths(draft);
+      const assetPairs = assets.map((assetPath) => {
+        const normalized = normalizePath(assetPath);
+        const prefix = `projects/${slug}/assets/`;
+        let exportPath = normalized;
+        if (normalized.startsWith(prefix)) {
+          exportPath = `assets/${normalized.slice(prefix.length)}`;
+        } else if (!normalized.startsWith("assets/")) {
+          const fileName = normalized.split("/").filter(Boolean).pop() ?? "asset";
+          exportPath = `assets/${fileName}`;
+        }
+        return { sourcePath: normalized, exportPath };
+      });
+
+      exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
+        const normalized = normalizePath(bg.src || "");
+        const pair = assetPairs.find((item) => item.sourcePath === normalized);
+        return { ...bg, src: pair ? pair.exportPath : bg.src };
+      });
+      exportProject.categories = exportProject.categories.map((category) => ({
+        ...category,
+        items: category.items.map((item) => {
+          const hero = normalizePath(item.media.hero360 || "");
+          const pair = assetPairs.find((p) => p.sourcePath === hero);
+          return {
+            ...item,
+            media: {
+              ...item.media,
+              hero360: pair ? pair.exportPath : item.media.hero360
+            }
+          };
+        })
+      }));
+
       const encoder = new TextEncoder();
       const entries: { name: string; data: Uint8Array }[] = [];
-      const menuData = JSON.stringify(draft, null, 2);
+      const menuData = JSON.stringify(exportProject, null, 2);
       entries.push({ name: "menu.json", data: encoder.encode(menuData) });
       entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
-      entries.push({ name: "app.js", data: encoder.encode(buildExportScript(draft)) });
+      entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
       entries.push({ name: "index.html", data: encoder.encode(buildExportHtml()) });
 
-      const assets = collectAssetPaths(draft);
       if (assetMode === "filesystem" && rootHandle) {
-        for (const assetPath of assets) {
+        for (const pair of assetPairs) {
           try {
-            const fileHandle = await getFileHandleByPath(assetPath);
+            const fileHandle = await getFileHandleByPath(pair.sourcePath);
             const file = await fileHandle.getFile();
             const buffer = await file.arrayBuffer();
-            entries.push({ name: assetPath, data: new Uint8Array(buffer) });
+            entries.push({ name: pair.exportPath, data: new Uint8Array(buffer) });
           } catch (error) {
-            console.warn("Missing asset", assetPath, error);
+            console.warn("Missing asset", pair.sourcePath, error);
           }
         }
       } else if (assetMode === "bridge") {
-        for (const assetPath of assets) {
+        for (const pair of assetPairs) {
           try {
-            const slug = getProjectSlug();
             const prefix = `projects/${slug}/assets/`;
-            const bridgePath = assetPath.startsWith(prefix)
-              ? assetPath.slice(prefix.length)
-              : assetPath;
+            const bridgePath = pair.sourcePath.startsWith(prefix)
+              ? pair.sourcePath.slice(prefix.length)
+              : pair.sourcePath;
             const response = await fetch(
               `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
                 bridgePath
@@ -1120,9 +1154,9 @@ render();
             );
             if (!response.ok) continue;
             const buffer = await response.arrayBuffer();
-            entries.push({ name: assetPath, data: new Uint8Array(buffer) });
+            entries.push({ name: pair.exportPath, data: new Uint8Array(buffer) });
           } catch (error) {
-            console.warn("Missing asset", assetPath, error);
+            console.warn("Missing asset", pair.sourcePath, error);
           }
         }
       }
