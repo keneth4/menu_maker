@@ -32,6 +32,11 @@ export type MenuItem = {
   media: {
     hero360?: string;
     gallery?: string[];
+    responsive?: {
+      small?: string;
+      medium?: string;
+      large?: string;
+    };
   };
 };
 

@@ -98,6 +98,17 @@
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
 
+  const RESPONSIVE_IMAGE_WIDTHS = {
+    small: 480,
+    medium: 960,
+    large: 1440
+  } as const;
+  type ResponsiveMediaPaths = {
+    small: string;
+    medium: string;
+    large: string;
+  };
+
   const languageOptions = [
     { code: "es", label: "Español" },
     { code: "en", label: "English" },
@@ -1485,6 +1496,39 @@ const getLoopedItems = (items) => {
   return looped;
 };
 
+const responsiveWidths = { small: 480, medium: 960, large: 1440 };
+const buildSrcSet = (item) => {
+  const responsive = item?.media?.responsive;
+  if (!responsive) return "";
+  const ordered = [
+    { src: responsive.small, width: responsiveWidths.small },
+    { src: responsive.medium, width: responsiveWidths.medium },
+    { src: responsive.large, width: responsiveWidths.large }
+  ].filter((entry) => entry.src);
+  if (ordered.length === 0) return "";
+  const unique = new Map();
+  ordered.forEach((entry) => {
+    if (!unique.has(entry.src)) {
+      unique.set(entry.src, entry.width);
+    }
+  });
+  return Array.from(unique.entries())
+    .map(([src, width]) => src + " " + width + "w")
+    .join(", ");
+};
+const getCarouselImageSrc = (item) =>
+  item?.media?.responsive?.medium ||
+  item?.media?.responsive?.large ||
+  item?.media?.responsive?.small ||
+  item?.media?.hero360 ||
+  "";
+const getDetailImageSrc = (item) =>
+  item?.media?.responsive?.large ||
+  item?.media?.responsive?.medium ||
+  item?.media?.responsive?.small ||
+  item?.media?.hero360 ||
+  "";
+
 const buildCarousel = (category) => {
   const looped = getLoopedItems(category.items);
   return \`
@@ -1492,13 +1536,23 @@ const buildCarousel = (category) => {
       <p class="menu-section__title">\${textOf(category.name)}</p>
       <span class="menu-section__count">\${category.items.length} items</span>
     </div>
+    \${category.items.length > 1
+      ? '<div class="carousel-nav">' +
+        '<button class="carousel-nav__btn prev" type="button" data-category-id="' +
+        category.id +
+        '" data-dir="-1" aria-label="Previous item"><span aria-hidden="true">‹</span></button>' +
+        '<button class="carousel-nav__btn next" type="button" data-category-id="' +
+        category.id +
+        '" data-dir="1" aria-label="Next item"><span aria-hidden="true">›</span></button>' +
+        "</div>"
+      : ""}
     <div class="menu-carousel \${category.items.length <= 1 ? "single" : ""}" data-category-id="\${category.id}">
       \${looped
         .map(
           (entry) => \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}">
               <div class="carousel-media">
-                <img src="\${entry.item.media.hero360 || ""}" alt="\${textOf(entry.item.name)}" />
+                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -1592,6 +1646,7 @@ const render = () => {
     render();
   });
   bindCarousels();
+  bindCarouselNav();
   bindSectionFocus();
   bindCards();
 };
@@ -1644,6 +1699,38 @@ const remapLoopIndexIfEdge = (container, closestIndex, count) => {
   if (!nearEdge) return closestIndex;
   const normalized = ((closestIndex % count) + count) % count;
   return getLoopStart(count) + normalized;
+};
+
+const shiftCarousel = (categoryId, direction) => {
+  const container = app.querySelector(
+    '.menu-carousel[data-category-id="' + categoryId + '"]'
+  );
+  if (!container) return;
+  const total = container.querySelectorAll(".carousel-card").length;
+  if (total === 0) return;
+  const category = DATA.categories.find((item) => item.id === categoryId);
+  const count = category?.items.length || 0;
+  const current = getClosestIndex(container);
+  const nextIndex = (current + direction + total) % total;
+  const finalIndex = remapLoopIndexIfEdge(container, nextIndex, count);
+  centerCarousel(container, finalIndex, "smooth");
+  applyFocusState(container, finalIndex);
+};
+
+const bindCarouselNav = () => {
+  const buttons = Array.from(app.querySelectorAll(".carousel-nav__btn"));
+  buttons.forEach((button) => {
+    const handler = () => {
+      const categoryId = button.dataset.categoryId;
+      if (!categoryId) return;
+      const direction = Number(button.dataset.dir || "1");
+      shiftCarousel(categoryId, direction);
+    };
+    button.addEventListener("click", handler);
+    carouselCleanup.push(() => {
+      button.removeEventListener("click", handler);
+    });
+  });
 };
 
 const bindCarousels = () => {
@@ -1725,7 +1812,7 @@ const bindCards = () => {
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
-          <img src="\${dish.media.hero360 || ""}" alt="\${textOf(dish.name)}" />
+          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" decoding="async" />
         </div>
         <div class="dish-modal__content">
           <div class="dish-modal__text">
@@ -1876,6 +1963,36 @@ render();
       .filter((path) => path && !path.startsWith("http"));
   };
 
+  const readAssetBytes = async (
+    slug: string,
+    sourcePath: string
+  ): Promise<Uint8Array | null> => {
+    if (assetMode === "filesystem" && rootHandle) {
+      const fileHandle = await getFileHandleByPath(sourcePath);
+      const file = await fileHandle.getFile();
+      const buffer = await file.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+    if (assetMode === "bridge") {
+      const prefix = `projects/${slug}/assets/`;
+      let bridgePath = sourcePath.startsWith(prefix)
+        ? sourcePath.slice(prefix.length)
+        : sourcePath;
+      if (bridgePath.includes("assets/")) {
+        bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
+      }
+      const response = await fetch(
+        `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
+          bridgePath
+        )}`
+      );
+      if (!response.ok) return null;
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+    return null;
+  };
+
   const buildProjectZipEntries = async (slug: string) => {
     if (!draft) return [];
     const encoder = new TextEncoder();
@@ -1917,12 +2034,14 @@ render();
       items: category.items.map((item) => {
         const hero = normalizePath(item.media.hero360 || "");
         const pair = assetPairs.find((p) => p.sourcePath === hero);
+        const media = {
+          ...item.media,
+          hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
+        };
+        delete (media as { responsive?: unknown }).responsive;
         return {
           ...item,
-          media: {
-            ...item.media,
-            hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
-          }
+          media
         };
       })
     }));
@@ -1989,36 +2108,76 @@ render();
         }
         return { sourcePath: normalized, exportPath };
       });
+      const entries: { name: string; data: Uint8Array }[] = [];
+      const heroSources = new Set<string>();
+      draft.categories.forEach((category) => {
+        category.items.forEach((item) => {
+          const hero = normalizePath(item.media.hero360 || "");
+          if (hero) heroSources.add(hero);
+        });
+      });
+      const sourceToExportPath = new Map<string, string>();
+      const sourceToResponsive = new Map<string, ResponsiveMediaPaths>();
+
+      for (const pair of assetPairs) {
+        try {
+          const data = await readAssetBytes(slug, pair.sourcePath);
+          if (!data) continue;
+          const mime = getMimeType(pair.exportPath).toLowerCase();
+          const shouldResize = heroSources.has(pair.sourcePath) && isResponsiveImageMime(mime);
+          if (shouldResize) {
+            const responsive = await createResponsiveImageVariants(pair.exportPath, data, mime);
+            if (responsive) {
+              responsive.entries.forEach((entry) => entries.push(entry));
+              sourceToExportPath.set(pair.sourcePath, responsive.paths.large);
+              sourceToResponsive.set(pair.sourcePath, responsive.paths);
+              continue;
+            }
+          }
+          entries.push({ name: pair.exportPath, data });
+          sourceToExportPath.set(pair.sourcePath, pair.exportPath);
+        } catch (error) {
+          console.warn("Missing asset", pair.sourcePath, error);
+        }
+      }
 
       exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
         const normalized = normalizePath(bg.src || "");
-        const pair = assetPairs.find((item) => item.sourcePath === normalized);
-        return { ...bg, src: pair ? pair.exportPath : bg.src };
+        const mapped = sourceToExportPath.get(normalized);
+        return { ...bg, src: mapped ?? bg.src };
       });
+
       if (exportProject.meta.fontSource) {
         const normalized = normalizePath(exportProject.meta.fontSource);
-        const pair = assetPairs.find((item) => item.sourcePath === normalized);
-        if (pair) {
-          exportProject.meta.fontSource = pair.exportPath;
+        const mapped = sourceToExportPath.get(normalized);
+        if (mapped) {
+          exportProject.meta.fontSource = mapped;
         }
       }
+
       exportProject.categories = exportProject.categories.map((category) => ({
         ...category,
         items: category.items.map((item) => {
           const hero = normalizePath(item.media.hero360 || "");
-          const pair = assetPairs.find((p) => p.sourcePath === hero);
+          const mappedHero = sourceToExportPath.get(hero);
+          const responsive = sourceToResponsive.get(hero);
+          const nextMedia = {
+            ...item.media,
+            hero360: mappedHero ?? item.media.hero360
+          };
+          if (responsive) {
+            nextMedia.responsive = responsive;
+          } else if ("responsive" in nextMedia) {
+            delete (nextMedia as { responsive?: unknown }).responsive;
+          }
           return {
             ...item,
-            media: {
-              ...item.media,
-              hero360: pair ? pair.exportPath : item.media.hero360
-            }
+            media: nextMedia
           };
         })
       }));
 
       const encoder = new TextEncoder();
-      const entries: { name: string; data: Uint8Array }[] = [];
       const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
       const serveCommand = `#!/bin/bash
@@ -2048,41 +2207,6 @@ Windows:
       entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
       entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
       entries.push({ name: "README.txt", data: encoder.encode(readme) });
-
-      if (assetMode === "filesystem" && rootHandle) {
-        for (const pair of assetPairs) {
-          try {
-            const fileHandle = await getFileHandleByPath(pair.sourcePath);
-            const file = await fileHandle.getFile();
-            const buffer = await file.arrayBuffer();
-            entries.push({ name: pair.exportPath, data: new Uint8Array(buffer) });
-          } catch (error) {
-            console.warn("Missing asset", pair.sourcePath, error);
-          }
-        }
-    } else if (assetMode === "bridge") {
-      for (const pair of assetPairs) {
-        try {
-          const prefix = `projects/${slug}/assets/`;
-          let bridgePath = pair.sourcePath.startsWith(prefix)
-            ? pair.sourcePath.slice(prefix.length)
-            : pair.sourcePath;
-          if (bridgePath.includes("assets/")) {
-            bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
-          }
-          const response = await fetch(
-            `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
-              bridgePath
-            )}`
-            );
-            if (!response.ok) continue;
-            const buffer = await response.arrayBuffer();
-            entries.push({ name: pair.exportPath, data: new Uint8Array(buffer) });
-          } catch (error) {
-            console.warn("Missing asset", pair.sourcePath, error);
-          }
-        }
-      }
 
       const blob = createZipBlob(entries);
       const url = URL.createObjectURL(blob);
@@ -2171,6 +2295,40 @@ Windows:
     }
     return looped;
   };
+
+  const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
+    const responsive = item.media.responsive;
+    if (!responsive) return undefined;
+    const ordered = [
+      { src: responsive.small, width: RESPONSIVE_IMAGE_WIDTHS.small },
+      { src: responsive.medium, width: RESPONSIVE_IMAGE_WIDTHS.medium },
+      { src: responsive.large, width: RESPONSIVE_IMAGE_WIDTHS.large }
+    ].filter((entry): entry is { src: string; width: number } => Boolean(entry.src));
+    if (ordered.length === 0) return undefined;
+    const unique = new Map<string, number>();
+    ordered.forEach((entry) => {
+      if (!unique.has(entry.src)) {
+        unique.set(entry.src, entry.width);
+      }
+    });
+    return Array.from(unique.entries())
+      .map(([src, width]) => `${src} ${width}w`)
+      .join(", ");
+  };
+
+  const getCarouselImageSource = (item: MenuItem) =>
+    item.media.responsive?.medium ||
+    item.media.responsive?.large ||
+    item.media.responsive?.small ||
+    item.media.hero360 ||
+    "";
+
+  const getDetailImageSource = (item: MenuItem) =>
+    item.media.responsive?.large ||
+    item.media.responsive?.medium ||
+    item.media.responsive?.small ||
+    item.media.hero360 ||
+    "";
 
   const goToStep = (index: number) => {
     wizardStep = index;
@@ -2662,6 +2820,80 @@ Windows:
     return "application/octet-stream";
   };
 
+  const isResponsiveImageMime = (mime: string) =>
+    ["image/jpeg", "image/png", "image/webp"].includes(mime.toLowerCase());
+
+  const withVariantSuffix = (path: string, suffix: string) => {
+    const slash = path.lastIndexOf("/");
+    const dot = path.lastIndexOf(".");
+    if (dot <= slash) return `${path}-${suffix}`;
+    return `${path.slice(0, dot)}-${suffix}${path.slice(dot)}`;
+  };
+
+  const createResponsiveImageVariants = async (
+    basePath: string,
+    sourceData: Uint8Array,
+    mime: string
+  ): Promise<{ paths: ResponsiveMediaPaths; entries: { name: string; data: Uint8Array }[] } | null> => {
+    let bitmap: ImageBitmap;
+    try {
+      bitmap = await createImageBitmap(new Blob([sourceData], { type: mime }));
+    } catch {
+      return null;
+    }
+    const longestEdge = Math.max(bitmap.width, bitmap.height);
+    const specs = [
+      { key: "large", suffix: "lg", maxEdge: RESPONSIVE_IMAGE_WIDTHS.large },
+      { key: "medium", suffix: "md", maxEdge: RESPONSIVE_IMAGE_WIDTHS.medium },
+      { key: "small", suffix: "sm", maxEdge: RESPONSIVE_IMAGE_WIDTHS.small }
+    ] as const;
+    const variantByEdge = new Map<number, { path: string; data: Uint8Array }>();
+    const paths: ResponsiveMediaPaths = { small: "", medium: "", large: "" };
+
+    for (const spec of specs) {
+      const targetEdge = Math.min(longestEdge, spec.maxEdge);
+      const existing = variantByEdge.get(targetEdge);
+      if (existing) {
+        paths[spec.key] = existing.path;
+        continue;
+      }
+      let nextData = sourceData;
+      if (targetEdge < longestEdge) {
+        const scale = targetEdge / Math.max(1, longestEdge);
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          bitmap.close();
+          return null;
+        }
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        const quality = mime === "image/png" ? undefined : 0.86;
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, mime, quality)
+        );
+        if (!blob) {
+          bitmap.close();
+          return null;
+        }
+        const buffer = await blob.arrayBuffer();
+        nextData = new Uint8Array(buffer);
+      }
+      const variantPath = withVariantSuffix(basePath, spec.suffix);
+      variantByEdge.set(targetEdge, { path: variantPath, data: nextData });
+      paths[spec.key] = variantPath;
+    }
+    bitmap.close();
+    const entries = Array.from(variantByEdge.values()).map((entry) => ({
+      name: entry.path,
+      data: entry.data
+    }));
+    return { paths, entries };
+  };
+
   const getFontFormat = (value: string) => {
     const ext = value.split(".").pop()?.toLowerCase();
     if (!ext) return "";
@@ -2927,6 +3159,7 @@ Windows:
   const uploadAssets = async (files: FileList | File[]) => {
     const target = uploadTargetPath;
     const uploads = Array.from(files);
+    fsError = "";
     if (assetMode === "filesystem") {
       if (!rootHandle) {
         fsError = t("errNoFolder");
@@ -3339,6 +3572,22 @@ Windows:
     if (index >= 0 && index < category.items.length - 1) {
       selectedItemId = category.items[index + 1].id;
     }
+  };
+
+  const shiftCarousel = (categoryId: string, direction: number) => {
+    const container = document.querySelector<HTMLElement>(
+      `.menu-carousel[data-category-id="${categoryId}"]`
+    );
+    if (!container) return;
+    const total = container.querySelectorAll(".carousel-card").length;
+    if (total === 0) return;
+    const category = activeProject?.categories.find((item) => item.id === categoryId);
+    const count = category?.items.length ?? 0;
+    const current = carouselActive[categoryId] ?? getClosestCarouselIndex(container);
+    const nextIndex = (current + direction + total) % total;
+    const finalIndex = remapLoopIndexIfEdge(container, nextIndex, count);
+    centerCarousel(container, finalIndex, "smooth");
+    carouselActive = { ...carouselActive, [categoryId]: finalIndex };
   };
 
   const handleCarouselScroll = (categoryId: string, event: Event) => {
@@ -4650,6 +4899,26 @@ Windows:
                       <p class="menu-section__title">{textOf(category.name)}</p>
                       <span class="menu-section__count">{category.items.length} items</span>
                     </div>
+                    {#if deviceMode === "desktop" && category.items.length > 1}
+                      <div class="carousel-nav">
+                        <button
+                          class="carousel-nav__btn prev"
+                          type="button"
+                          aria-label={t("prevDish")}
+                          on:click={() => shiftCarousel(category.id, -1)}
+                        >
+                          <span aria-hidden="true">‹</span>
+                        </button>
+                        <button
+                          class="carousel-nav__btn next"
+                          type="button"
+                          aria-label={t("nextDish")}
+                          on:click={() => shiftCarousel(category.id, 1)}
+                        >
+                          <span aria-hidden="true">›</span>
+                        </button>
+                      </div>
+                    {/if}
                     <div
                       class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
                       on:scroll={(event) => handleCarouselScroll(category.id, event)}
@@ -4668,8 +4937,13 @@ Windows:
                         >
                           <div class="carousel-media">
                             <img
-                              src={entry.item.media.hero360 ?? ""}
+                              src={getCarouselImageSource(entry.item)}
+                              srcset={buildResponsiveSrcSetFromMedia(entry.item)}
+                              sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
                               alt={textOf(entry.item.name)}
+                              loading="lazy"
+                              decoding="async"
+                              fetchpriority="low"
                             />
                           </div>
                           <div class="carousel-text">
@@ -4710,7 +4984,13 @@ Windows:
           <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
         </div>
         <div class="dish-modal__media">
-          <img src={dish.media.hero360 ?? ""} alt={textOf(dish.name)} />
+          <img
+            src={getDetailImageSource(dish)}
+            srcset={buildResponsiveSrcSetFromMedia(dish)}
+            sizes="(max-width: 720px) 90vw, 440px"
+            alt={textOf(dish.name)}
+            decoding="async"
+          />
         </div>
         <div class="dish-modal__content">
           <div class="dish-modal__text">
