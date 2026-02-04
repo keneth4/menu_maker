@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { createZipBlob } from "./lib/zip";
+  import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
   import type { MenuCategory, MenuItem, MenuProject } from "./lib/types";
@@ -24,6 +24,7 @@
   let projectFileInput: HTMLInputElement | null = null;
   let assetUploadInput: HTMLInputElement | null = null;
   let openError = "";
+  let needsAssets = false;
   let lastSaveName = "";
   let exportError = "";
   let exportStatus = "";
@@ -77,6 +78,8 @@
     hasChildren: boolean;
     expanded: boolean;
   }[] = [];
+  let uploadTargetPath = "";
+  let uploadFolderOptions: { value: string; label: string }[] = [];
 
   const languageOptions = [
     { code: "es", label: "Español" },
@@ -109,6 +112,7 @@
       tabAssets: "Assets",
       tabEdit: "Edición",
       tabWizard: "Wizard",
+      newProject: "Nuevo proyecto",
       open: "Abrir proyecto",
       save: "Guardar proyecto",
       export: "Exportar sitio",
@@ -119,6 +123,7 @@
       loadingProject: "Cargando proyecto...",
       uploadAssets: "Subir assets",
       uploadHint: "Arrastra archivos o usa el botón para subir.",
+      uploadTo: "Subir a",
       promptMoveTo: "Mover a (ruta dentro de la carpeta raíz)",
       step: "Paso",
       wizardProgress: "Progreso",
@@ -134,21 +139,26 @@
       tipRotate: "Consejo: gira el dispositivo a horizontal para ver el layout completo.",
       selectFolder: "Seleccionar carpeta",
       newFolder: "Nueva carpeta",
-      rootTitle: "Carpeta raíz del proyecto",
-      rootNone: "Sin carpeta seleccionada",
-      dragDrop: "Arrastra archivos aquí o usa el botón de seleccionar carpeta.",
+      rootTitle: "Assets del proyecto",
+      rootNone: "Sin ubicación",
+      dragDrop: "Arrastra archivos aquí o usa el botón de subir.",
       selectAll: "Seleccionar todo",
       clear: "Limpiar",
       move: "Mover",
       delete: "Eliminar",
       rename: "Renombrar",
-      pickRootHint: "Selecciona una carpeta raíz para ver tus assets.",
-      rootEmpty: "Sin archivos en la carpeta seleccionada.",
+      pickRootHint: "Sube assets para verlos aquí.",
+      rootEmpty: "Sin archivos en este proyecto.",
       filesCount: "archivos",
       projectName: "Nombre del proyecto",
       template: "Template",
       languages: "Idiomas disponibles",
       defaultLang: "Idioma default",
+      restaurantName: "Nombre del restaurante",
+      menuTitle: "Título del menú",
+      menuTitleFallback: "Menú",
+      restaurantFallback: "Restaurante",
+      blankMenu: "Selecciona una plantilla para comenzar.",
       currency: "Moneda",
       currencyPos: "Posición del símbolo",
       currencyLeft: "Izquierda (€150)",
@@ -173,6 +183,7 @@
       wizardCategories: "Crea categorías principales.",
       wizardDishes: "Agrega platillos y sus GIFs 360.",
       wizardPreview: "Revisa el preview final.",
+      wizardAssetsHint: "Sube assets en la pestaña Assets para seleccionarlos aquí.",
       wizardStepStructure: "Estructura",
       wizardStepIdentity: "Identidad",
       wizardStepCategories: "Categorías",
@@ -191,9 +202,13 @@
       errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
       errOpenFolder: "No se pudo abrir la carpeta.",
       errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
+      errZipMissing: "El zip no contiene menu.json.",
+      errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
+      errZipNoBridge: "Para abrir zips necesitas el almacenamiento local activo.",
+      assetsRequired: "Carga los assets del proyecto para completar el preview.",
       promptNewFolder: "Nombre de la nueva carpeta",
       promptRename: "Nuevo nombre",
-      promptSaveName: "Nombre del archivo del proyecto"
+      promptSaveName: "Nombre del archivo del proyecto (zip)"
     },
     en: {
       appTitle: "Interactive Menu",
@@ -203,6 +218,7 @@
       tabAssets: "Assets",
       tabEdit: "Edit",
       tabWizard: "Wizard",
+      newProject: "New project",
       open: "Open project",
       save: "Save project",
       export: "Export site",
@@ -213,6 +229,7 @@
       loadingProject: "Loading project...",
       uploadAssets: "Upload assets",
       uploadHint: "Drag files here or use the upload button.",
+      uploadTo: "Upload to",
       promptMoveTo: "Move to (path inside root folder)",
       step: "Step",
       wizardProgress: "Progress",
@@ -228,21 +245,26 @@
       tipRotate: "Tip: rotate the device to landscape to see the full layout.",
       selectFolder: "Select folder",
       newFolder: "New folder",
-      rootTitle: "Project root folder",
-      rootNone: "No folder selected",
-      dragDrop: "Drag files here or use the select folder button.",
+      rootTitle: "Project assets",
+      rootNone: "No location",
+      dragDrop: "Drag files here or use the upload button.",
       selectAll: "Select all",
       clear: "Clear",
       move: "Move",
       delete: "Delete",
       rename: "Rename",
-      pickRootHint: "Select a root folder to see your assets.",
-      rootEmpty: "No files in the selected folder.",
+      pickRootHint: "Upload assets to see them here.",
+      rootEmpty: "No files in this project yet.",
       filesCount: "files",
       projectName: "Project name",
       template: "Template",
       languages: "Available languages",
       defaultLang: "Default language",
+      restaurantName: "Restaurant name",
+      menuTitle: "Menu title",
+      menuTitleFallback: "Menu",
+      restaurantFallback: "Restaurant",
+      blankMenu: "Select a template to begin.",
       currency: "Currency",
       currencyPos: "Symbol position",
       currencyLeft: "Left (€150)",
@@ -267,6 +289,7 @@
       wizardCategories: "Create main categories.",
       wizardDishes: "Add dishes and their 360 GIFs.",
       wizardPreview: "Review the final preview.",
+      wizardAssetsHint: "Upload assets in the Assets tab to select them here.",
       wizardStepStructure: "Structure",
       wizardStepIdentity: "Identity",
       wizardStepCategories: "Categories",
@@ -285,9 +308,13 @@
       errNoFolder: "Your browser doesn't support local folder access.",
       errOpenFolder: "Unable to open the folder.",
       errMoveFolder: "Your browser doesn't support moving files by folder.",
+      errZipMissing: "The zip file doesn't contain menu.json.",
+      errZipCompression: "The zip uses unsupported compression. Use a stored zip.",
+      errZipNoBridge: "Zip import requires local bridge storage.",
+      assetsRequired: "Upload the project assets to complete the preview.",
       promptNewFolder: "New folder name",
       promptRename: "New name",
-      promptSaveName: "Project file name"
+      promptSaveName: "Project file name (zip)"
     }
   };
 
@@ -386,6 +413,9 @@
     : bridgeAvailable
       ? `Container · ${getProjectSlug()}`
       : t("rootNone");
+  $: if (needsAssets && assetMode !== "none" && rootFiles.length > 0) {
+    needsAssets = false;
+  }
   $: if (assetMode === "bridge") {
     const slug = getProjectSlug();
     if (slug && slug !== bridgeProjectSlug) {
@@ -465,6 +495,24 @@
     treeRows = rows;
   };
 
+  $: {
+    const folders = fsEntries
+      .filter((entry) => entry.kind === "directory")
+      .map((entry) => {
+        const depth = entry.path.split("/").filter(Boolean).length;
+        const prefix = depth > 1 ? `${"—".repeat(depth - 1)} ` : "";
+        return { value: entry.path, label: `${prefix}${entry.path}` };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+    uploadFolderOptions = [{ value: "", label: "/" }, ...folders];
+    if (
+      uploadTargetPath &&
+      !uploadFolderOptions.some((option) => option.value === uploadTargetPath)
+    ) {
+      uploadTargetPath = "";
+    }
+  }
+
   $: if (fsEntries) {
     fsEntries.forEach((entry) => {
       if (entry.kind === "directory" && expandedPaths[entry.path] === undefined) {
@@ -481,6 +529,11 @@
   $: layoutMode = editorLocked ? "split" : "full";
   $: editorVisible = editorLocked ? true : editorOpen;
   $: showEditorToggle = !editorLocked;
+  $: isBlankMenu =
+    !!activeProject &&
+    !activeProject.meta.template &&
+    activeProject.backgrounds.length === 0 &&
+    activeProject.categories.length === 0;
 
   $: if (draft) {
     const defaultLocale = draft.meta.defaultLocale || "es";
@@ -548,12 +601,17 @@
         await refreshBridgeEntries();
       }
 
-      projects = await loadProjects();
-      activeSlug = projects[0]?.slug ?? activeSlug;
-      project = await loadProject(activeSlug);
-      draft = cloneProject(project);
-      locale = project.meta.defaultLocale;
-      initCarouselIndices(project);
+      try {
+        projects = await loadProjects();
+      } catch {
+        projects = [];
+      }
+      const emptyProject = createEmptyProject();
+      project = emptyProject;
+      draft = cloneProject(emptyProject);
+      activeSlug = emptyProject.meta.slug;
+      locale = emptyProject.meta.defaultLocale;
+      initCarouselIndices(emptyProject);
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Error desconocido";
     }
@@ -561,15 +619,52 @@
 
   $: activeProject = draft ?? project;
 
+  const touchDraft = () => {
+    if (draft) {
+      draft = { ...draft };
+    }
+  };
+
   const textOf = (entry: Record<string, string> | undefined, fallback = "") => {
     if (!entry) return fallback;
     return entry[locale] ?? entry[activeProject?.meta.defaultLocale ?? "es"] ?? fallback;
   };
 
+  const ensureMetaTitle = () => {
+    if (!draft) return null;
+    if (!draft.meta.title) {
+      draft.meta.title = createLocalized(draft.meta.locales);
+    }
+    return draft.meta.title;
+  };
+
+  const ensureRestaurantName = () => {
+    if (!draft) return null;
+    if (!draft.meta.restaurantName) {
+      draft.meta.restaurantName = createLocalized(draft.meta.locales);
+    }
+    return draft.meta.restaurantName;
+  };
+
+  const normalizeProject = (value: MenuProject) => {
+    const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
+    value.meta.locales = locales;
+    if (!value.meta.title) {
+      value.meta.title = createLocalized(locales);
+    }
+    if (!value.meta.restaurantName) {
+      value.meta.restaurantName = createLocalized(locales);
+    }
+    if (!value.meta.currencyPosition) {
+      value.meta.currencyPosition = "left";
+    }
+    return value;
+  };
+
   const changeProject = async (slug: string) => {
     try {
       activeSlug = slug;
-      project = await loadProject(slug);
+      project = normalizeProject(await loadProject(slug));
       draft = cloneProject(project);
       locale = project.meta.defaultLocale;
       loadError = "";
@@ -588,6 +683,28 @@
     }
     return JSON.parse(JSON.stringify(value)) as MenuProject;
   };
+
+  const createEmptyProject = (): MenuProject => ({
+    meta: {
+      slug: "nuevo-proyecto",
+      name: "Nuevo proyecto",
+      restaurantName: { es: "", en: "" },
+      title: { es: "", en: "" },
+      template: "",
+      locales: ["es", "en"],
+      defaultLocale: "es",
+      currency: "MXN",
+      currencyPosition: "left"
+    },
+    backgrounds: [],
+    categories: [],
+    sound: {
+      enabled: false,
+      theme: "bar-amber",
+      volume: 0.6,
+      map: {}
+    }
+  });
 
   const toggleLanguage = (code: string) => {
     if (!draft) return;
@@ -625,46 +742,147 @@
       .replace(/^-+|-+$/g, "")
       .slice(0, 60);
 
-  const normalizeFileName = (value: string) => {
+  const normalizeZipName = (value: string) => {
     const sanitized = value.replace(/[\\/:*?"<>|]/g, "").trim();
     if (!sanitized) return "";
-    return sanitized.toLowerCase().endsWith(".json") ? sanitized : `${sanitized}.json`;
+    const lower = sanitized.toLowerCase();
+    if (lower.endsWith(".zip")) return sanitized;
+    if (lower.endsWith(".json")) return `${sanitized.slice(0, -5)}.zip`;
+    return `${sanitized}.zip`;
   };
 
-  const getSuggestedFileName = () => {
-    if (lastSaveName) return lastSaveName;
+  const getSuggestedZipName = () => {
+    if (lastSaveName) {
+      const base = lastSaveName.replace(/\.json$/i, "").replace(/\.zip$/i, "");
+      const slug = slugifyName(base) || "menu";
+      return `${slug}.zip`;
+    }
     const baseName = draft?.meta.name?.trim() || draft?.meta.slug || "menu";
     const slug = slugifyName(baseName) || "menu";
-    return `${slug}.json`;
+    return `${slug}.zip`;
   };
 
-  const downloadProject = (fileName: string) => {
+  const updateAssetPathsForSlug = (fromSlug: string, toSlug: string) => {
     if (!draft) return;
-    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+    if (!fromSlug || !toSlug || fromSlug === toSlug) return;
+    const fromPrefix = `/projects/${fromSlug}/assets/`;
+    const toPrefix = `/projects/${toSlug}/assets/`;
+    const updatePath = (value: string) =>
+      value.startsWith(fromPrefix) ? `${toPrefix}${value.slice(fromPrefix.length)}` : value;
+
+    draft.backgrounds = draft.backgrounds.map((bg) => ({
+      ...bg,
+      src: bg.src ? updatePath(bg.src) : bg.src
+    }));
+    draft.categories = draft.categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => ({
+        ...item,
+        media: {
+          ...item.media,
+          hero360: item.media.hero360 ? updatePath(item.media.hero360) : item.media.hero360
+        }
+      }))
+    }));
+  };
+
+  const mapImportedAssetPath = (value: string, slug: string) => {
+    if (!value) return value;
+    const normalized = value.replace(/^\/+/, "");
+    if (normalized.startsWith("assets/")) {
+      return `/projects/${slug}/${normalized}`;
+    }
+    const match = normalized.match(/^projects\/[^/]+\/(assets\/.*)$/);
+    if (match) {
+      return `/projects/${slug}/${match[1]}`;
+    }
+    return value;
+  };
+
+  const applyImportedPaths = (data: MenuProject, slug: string) => {
+    data.backgrounds = data.backgrounds.map((bg) => ({
+      ...bg,
+      src: bg.src ? mapImportedAssetPath(bg.src, slug) : bg.src
+    }));
+    data.categories = data.categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => ({
+        ...item,
+        media: {
+          ...item.media,
+          hero360: item.media.hero360 ? mapImportedAssetPath(item.media.hero360, slug) : item.media.hero360
+        }
+      }))
+    }));
+  };
+
+  const saveProject = async () => {
+    if (!draft) return;
+    const suggested = getSuggestedZipName();
+    const response = window.prompt(t("promptSaveName"), suggested);
+    if (!response) return;
+    const fileName = normalizeZipName(response) || suggested;
+    lastSaveName = fileName;
+    const base = fileName.replace(/\.zip$/i, "");
+    const nextSlug = slugifyName(base) || draft.meta.slug || "menu";
+    const previousSlug = getProjectSlug();
+    if (previousSlug && nextSlug && previousSlug !== nextSlug) {
+      if (assetMode === "bridge") {
+        try {
+          await bridgeRequest("rename-project", { from: previousSlug, to: nextSlug });
+        } catch (error) {
+          console.warn("Unable to rename project folder", error);
+        }
+      }
+      updateAssetPathsForSlug(previousSlug, nextSlug);
+      draft.meta.slug = nextSlug;
+      activeSlug = nextSlug;
+    } else if (!draft.meta.slug) {
+      draft.meta.slug = nextSlug;
+      activeSlug = nextSlug;
+    }
+
+    if (assetMode === "bridge") {
+      try {
+        await bridgeRequest("save-project", {
+          slug: draft.meta.slug || nextSlug,
+          name: draft.meta.name,
+          template: draft.meta.template,
+          cover: draft.backgrounds?.[0]?.src ?? "",
+          project: draft
+        });
+        const existingIndex = projects.findIndex(
+          (item) => item.slug === draft.meta.slug || item.slug === previousSlug
+        );
+        const summary = {
+          slug: draft.meta.slug,
+          name: draft.meta.name,
+          template: draft.meta.template,
+          cover: draft.backgrounds?.[0]?.src
+        };
+        if (existingIndex >= 0) {
+          projects = [
+            ...projects.slice(0, existingIndex),
+            summary,
+            ...projects.slice(existingIndex + 1)
+          ];
+        } else {
+          projects = [...projects, summary];
+        }
+        await refreshBridgeEntries();
+      } catch (error) {
+        openError = error instanceof Error ? error.message : t("errOpenProject");
+      }
+    }
+    const zipEntries = await buildProjectZipEntries(draft.meta.slug || nextSlug);
+    if (zipEntries.length === 0) return;
+    const blob = createZipBlob(zipEntries);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-  };
-
-  const saveProject = async () => {
-    if (!draft) return;
-    const suggested = getSuggestedFileName();
-    const response = window.prompt(t("promptSaveName"), suggested);
-    if (!response) return;
-    const fileName = normalizeFileName(response) || suggested;
-    lastSaveName = fileName;
-    if (rootHandle) {
-      const fileHandle = await rootHandle.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(draft, null, 2));
-      await writable.close();
-      await refreshRootEntries();
-      return;
-    }
-    downloadProject(fileName);
   };
 
   const buildExportStyles = () => `
@@ -922,6 +1140,14 @@ const buildCarousel = (category) => {
 
 const render = () => {
   const bg = DATA.backgrounds?.[0]?.src || "";
+  const restaurantName =
+    DATA.meta.restaurantName?.[locale] ??
+    DATA.meta.restaurantName?.[DATA.meta.defaultLocale] ??
+    "";
+  const menuTitle =
+    DATA.meta.title?.[locale] ??
+    DATA.meta.title?.[DATA.meta.defaultLocale] ??
+    "";
   app.innerHTML = \`
     <div class="menu-preview">
       <div class="menu-background" style="background-image: url('\${bg}')"></div>
@@ -929,8 +1155,8 @@ const render = () => {
       <div class="menu-content">
         <header class="menu-topbar">
           <div>
-            <p class="menu-eyebrow">\${DATA.meta.name}</p>
-            <h1 class="menu-title">\${DATA.meta.name}</h1>
+            <p class="menu-eyebrow">\${restaurantName}</p>
+            <h1 class="menu-title">\${menuTitle || "Menu"}</h1>
           </div>
           <select class="menu-select" id="menu-locale">
             \${DATA.meta.locales
@@ -1080,6 +1306,91 @@ render();
       .filter((path) => path && !path.startsWith("http"));
   };
 
+  const buildProjectZipEntries = async (slug: string) => {
+    if (!draft) return [];
+    const encoder = new TextEncoder();
+    const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
+    const assets = collectAssetPaths(draft);
+    const assetPairs = assets.map((assetPath) => {
+      const normalized = normalizePath(assetPath);
+      const prefix = `projects/${slug}/assets/`;
+      let relativePath = normalized;
+      if (normalized.startsWith(prefix)) {
+        relativePath = normalized.slice(prefix.length);
+      } else if (normalized.includes("assets/")) {
+        relativePath = normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length);
+      } else {
+        relativePath = normalized.split("/").filter(Boolean).pop() ?? "asset";
+      }
+      return {
+        sourcePath: normalized,
+        relativePath,
+        zipPath: `${slug}/assets/${relativePath}`
+      };
+    });
+
+    exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
+      const normalized = normalizePath(bg.src || "");
+      const pair = assetPairs.find((item) => item.sourcePath === normalized);
+      return { ...bg, src: pair ? `assets/${pair.relativePath}` : bg.src };
+    });
+    exportProject.categories = exportProject.categories.map((category) => ({
+      ...category,
+      items: category.items.map((item) => {
+        const hero = normalizePath(item.media.hero360 || "");
+        const pair = assetPairs.find((p) => p.sourcePath === hero);
+        return {
+          ...item,
+          media: {
+            ...item.media,
+            hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
+          }
+        };
+      })
+    }));
+
+    const entries: { name: string; data: Uint8Array }[] = [];
+    const menuData = JSON.stringify(exportProject, null, 2);
+    entries.push({ name: `${slug}/menu.json`, data: encoder.encode(menuData) });
+
+    if (assetMode === "filesystem" && rootHandle) {
+      for (const pair of assetPairs) {
+        try {
+          const fileHandle = await getFileHandleByPath(pair.sourcePath);
+          const file = await fileHandle.getFile();
+          const buffer = await file.arrayBuffer();
+          entries.push({ name: pair.zipPath, data: new Uint8Array(buffer) });
+        } catch (error) {
+          console.warn("Missing asset", pair.sourcePath, error);
+        }
+      }
+    } else if (assetMode === "bridge") {
+      for (const pair of assetPairs) {
+        try {
+          const prefix = `projects/${slug}/assets/`;
+          let bridgePath = pair.sourcePath.startsWith(prefix)
+            ? pair.sourcePath.slice(prefix.length)
+            : pair.sourcePath;
+          if (bridgePath.includes("assets/")) {
+            bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
+          }
+          const response = await fetch(
+            `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
+              bridgePath
+            )}`
+          );
+          if (!response.ok) continue;
+          const buffer = await response.arrayBuffer();
+          entries.push({ name: pair.zipPath, data: new Uint8Array(buffer) });
+        } catch (error) {
+          console.warn("Missing asset", pair.sourcePath, error);
+        }
+      }
+    }
+
+    return entries;
+  };
+
   const exportStaticSite = async () => {
     if (!draft) return;
     exportError = "";
@@ -1140,17 +1451,20 @@ render();
             console.warn("Missing asset", pair.sourcePath, error);
           }
         }
-      } else if (assetMode === "bridge") {
-        for (const pair of assetPairs) {
-          try {
-            const prefix = `projects/${slug}/assets/`;
-            const bridgePath = pair.sourcePath.startsWith(prefix)
-              ? pair.sourcePath.slice(prefix.length)
-              : pair.sourcePath;
-            const response = await fetch(
-              `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
-                bridgePath
-              )}`
+    } else if (assetMode === "bridge") {
+      for (const pair of assetPairs) {
+        try {
+          const prefix = `projects/${slug}/assets/`;
+          let bridgePath = pair.sourcePath.startsWith(prefix)
+            ? pair.sourcePath.slice(prefix.length)
+            : pair.sourcePath;
+          if (bridgePath.includes("assets/")) {
+            bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
+          }
+          const response = await fetch(
+            `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
+              bridgePath
+            )}`
             );
             if (!response.ok) continue;
             const buffer = await response.arrayBuffer();
@@ -1276,6 +1590,49 @@ render();
     editorTab = tab;
   };
 
+  const applyLoadedProject = async (data: MenuProject, sourceName = "") => {
+    project = data;
+    draft = cloneProject(data);
+    activeSlug = data.meta.slug || "importado";
+    lastSaveName = sourceName || `${activeSlug}.zip`;
+    locale = data.meta.defaultLocale || "es";
+    initCarouselIndices(data);
+    const existing = projects.find((item) => item.slug === activeSlug);
+    const summary = {
+      slug: activeSlug,
+      name: data.meta.name,
+      template: data.meta.template,
+      cover: data.backgrounds?.[0]?.src
+    };
+    if (existing) {
+      existing.name = summary.name;
+      existing.template = summary.template;
+      existing.cover = summary.cover;
+      projects = [...projects];
+    } else {
+      projects = [...projects, summary];
+    }
+    openError = "";
+  };
+
+  const createNewProject = async () => {
+    const empty = createEmptyProject();
+    project = empty;
+    draft = cloneProject(empty);
+    activeSlug = empty.meta.slug;
+    locale = empty.meta.defaultLocale;
+    lastSaveName = "";
+    needsAssets = false;
+    openError = "";
+    exportStatus = "";
+    exportError = "";
+    wizardStep = 0;
+    initCarouselIndices(empty);
+    if (assetMode === "bridge") {
+      await refreshBridgeEntries();
+    }
+  };
+
   const openProjectDialog = () => {
     projectFileInput?.click();
   };
@@ -1285,30 +1642,72 @@ render();
     const file = input.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const data = JSON.parse(text) as MenuProject;
-      project = data;
-      draft = cloneProject(data);
-      activeSlug = data.meta.slug || "importado";
-      lastSaveName = file.name;
-      locale = data.meta.defaultLocale || "es";
-      initCarouselIndices(data);
-      const existing = projects.find((item) => item.slug === activeSlug);
-      if (existing) {
-        existing.name = data.meta.name;
-        existing.template = data.meta.template;
-        projects = [...projects];
-      } else {
-        projects = [
-          ...projects,
-          {
-            slug: activeSlug,
-            name: data.meta.name,
-            template: data.meta.template
-          }
-        ];
-      }
       openError = "";
+      if (file.name.toLowerCase().endsWith(".zip")) {
+        const buffer = await file.arrayBuffer();
+        let entries: { name: string; data: Uint8Array }[] = [];
+        try {
+          entries = readZip(buffer);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          openError = message.includes("compression") ? t("errZipCompression") : message;
+          return;
+        }
+        const menuEntry = entries.find((entry) => entry.name.endsWith("menu.json"));
+        if (!menuEntry) {
+          openError = t("errZipMissing");
+          return;
+        }
+        const menuText = new TextDecoder().decode(menuEntry.data);
+        const data = normalizeProject(JSON.parse(menuText) as MenuProject);
+        const prefix = menuEntry.name.replace(/menu\.json$/i, "");
+        const folder = prefix.replace(/\/$/, "");
+        const folderName = folder.split("/").filter(Boolean).pop() ?? "";
+        const slug =
+          slugifyName(data.meta.slug || folderName || data.meta.name || "menu") || "menu";
+        data.meta.slug = slug;
+        applyImportedPaths(data, slug);
+        if (assetMode === "bridge") {
+          const assetsPrefix = prefix ? `${prefix}assets/` : "assets/";
+          const assetEntries = entries.filter((entry) => entry.name.startsWith(assetsPrefix));
+          for (const entry of assetEntries) {
+            const relative = entry.name.slice(assetsPrefix.length);
+            if (!relative) continue;
+            const parts = relative.split("/").filter(Boolean);
+            const name = parts.pop() ?? "";
+            const targetPath = parts.join("/");
+            const mime = getMimeType(name);
+            const dataUrl = `data:${mime};base64,${toBase64(entry.data)}`;
+            await bridgeRequest(
+              "upload",
+              { path: targetPath, name, data: dataUrl },
+              slug
+            );
+          }
+          needsAssets = false;
+        } else {
+          needsAssets = true;
+          openError = t("errZipNoBridge");
+        }
+        await applyLoadedProject(data, file.name);
+        if (assetMode === "bridge") {
+          await refreshBridgeEntries();
+        }
+      } else {
+        const text = await file.text();
+        const data = normalizeProject(JSON.parse(text) as MenuProject);
+        const slug =
+          slugifyName(data.meta.slug || data.meta.name || "importado") || "importado";
+        data.meta.slug = slug;
+        applyImportedPaths(data, slug);
+        await applyLoadedProject(data, file.name);
+        if (assetMode === "bridge") {
+          needsAssets = true;
+          editorTab = "assets";
+          await tick();
+          assetUploadInput?.click();
+        }
+      }
     } catch (error) {
       openError = error instanceof Error ? error.message : t("errOpenProject");
     } finally {
@@ -1457,8 +1856,12 @@ render();
     }
   };
 
-  const bridgeRequest = async (endpoint: string, payload?: Record<string, unknown>) => {
-    const slug = getProjectSlug();
+  const bridgeRequest = async (
+    endpoint: string,
+    payload?: Record<string, unknown>,
+    overrideSlug?: string
+  ) => {
+    const slug = overrideSlug ?? getProjectSlug();
     const response = await fetch(`/api/assets/${endpoint}?project=${encodeURIComponent(slug)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1470,7 +1873,39 @@ render();
     }
   };
 
+  const seedDemoAssets = async () => {
+    if (assetMode !== "bridge") return;
+    try {
+      await bridgeRequest("seed", { from: "demo" });
+      await refreshBridgeEntries();
+    } catch (error) {
+      fsError = error instanceof Error ? error.message : t("errOpenFolder");
+    }
+  };
+
   const normalizePath = (value: string) => value.replace(/^\/+/, "").trim();
+
+  const toBase64 = (data: Uint8Array) => {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunk = data.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+  };
+
+  const getMimeType = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (!ext) return "application/octet-stream";
+    if (["png", "gif", "webp", "jpg", "jpeg", "svg"].includes(ext)) {
+      return `image/${ext === "jpg" ? "jpeg" : ext}`;
+    }
+    if (["mp4", "webm"].includes(ext)) {
+      return `video/${ext}`;
+    }
+    return "application/octet-stream";
+  };
 
   const getDirectoryHandleByPath = async (
     path: string,
@@ -1707,8 +2142,7 @@ render();
   };
 
   const uploadAssets = async (files: FileList | File[]) => {
-    const target = window.prompt(t("promptMoveTo"), "");
-    if (target === null) return;
+    const target = uploadTargetPath;
     const uploads = Array.from(files);
     if (assetMode === "filesystem") {
       if (!rootHandle) {
@@ -1793,7 +2227,7 @@ render();
     }, {});
   };
 
-  const applyTemplate = (templateId: string) => {
+  const applyTemplate = async (templateId: string) => {
     if (!draft) return;
     draft.meta.template = templateId;
     const template = templateOptions.find((item) => item.id === templateId);
@@ -1812,6 +2246,19 @@ render();
       }));
       wizardCategoryId = draft.categories[0]?.id ?? "";
     }
+    if (draft.backgrounds.length === 0 && assetMode === "bridge") {
+      await seedDemoAssets();
+      const slug = getProjectSlug();
+      draft.backgrounds = [
+        {
+          id: `bg-${Date.now()}`,
+          label: `${t("backgroundLabel")} 1`,
+          src: `/projects/${slug}/assets/backgrounds/background.webp`,
+          type: "image"
+        }
+      ];
+    }
+    touchDraft();
   };
 
   const addBackground = () => {
@@ -1826,11 +2273,13 @@ render();
         type: "image"
       }
     ];
+    touchDraft();
   };
 
   const removeBackground = (id: string) => {
     if (!draft) return;
     draft.backgrounds = draft.backgrounds.filter((item) => item.id !== id);
+    touchDraft();
   };
 
   const addSection = () => {
@@ -1844,6 +2293,7 @@ render();
     draft.categories = [...draft.categories, newSection];
     selectedCategoryId = id;
     selectedItemId = "";
+    touchDraft();
   };
 
   const deleteSection = () => {
@@ -1852,6 +2302,7 @@ render();
     draft.categories = draft.categories.filter((item) => item.id !== selectedCategoryId);
     selectedCategoryId = draft.categories[0]?.id ?? "";
     selectedItemId = "";
+    touchDraft();
   };
 
   const addDish = () => {
@@ -1873,6 +2324,7 @@ render();
     };
     category.items = [...category.items, newDish];
     selectedItemId = id;
+    touchDraft();
   };
 
   const addWizardCategory = () => {
@@ -1886,6 +2338,7 @@ render();
     draft.categories = [...draft.categories, newSection];
     wizardCategoryId = id;
     wizardItemId = "";
+    touchDraft();
   };
 
   const removeWizardCategory = (id: string) => {
@@ -1893,6 +2346,7 @@ render();
     draft.categories = draft.categories.filter((item) => item.id !== id);
     wizardCategoryId = draft.categories[0]?.id ?? "";
     wizardItemId = "";
+    touchDraft();
   };
 
   const addWizardDish = () => {
@@ -1914,6 +2368,7 @@ render();
     };
     category.items = [...category.items, newDish];
     wizardItemId = id;
+    touchDraft();
   };
 
   const removeWizardDish = () => {
@@ -1922,6 +2377,7 @@ render();
     if (!category || !wizardItemId) return;
     category.items = category.items.filter((item) => item.id !== wizardItemId);
     wizardItemId = category.items[0]?.id ?? "";
+    touchDraft();
   };
 
   const deleteDish = () => {
@@ -1930,6 +2386,7 @@ render();
     if (!selectedItemId) return;
     category.items = category.items.filter((item) => item.id !== selectedItemId);
     selectedItemId = category.items[0]?.id ?? "";
+    touchDraft();
   };
 
   const goPrevDish = () => {
@@ -2028,6 +2485,7 @@ render();
     const input = event.currentTarget as HTMLTextAreaElement;
     const desc = ensureDescription(item);
     desc[lang] = input.value;
+    touchDraft();
   };
 
   const formatPrice = (amount: number) => {
@@ -2044,6 +2502,7 @@ render();
   ) => {
     const input = event.currentTarget as HTMLInputElement;
     record[lang] = input.value;
+    touchDraft();
   };
 
   const handleCurrencyChange = (event: Event) => {
@@ -2164,6 +2623,18 @@ render();
               <button
                 class="icon-btn"
                 type="button"
+                aria-label={t("newProject")}
+                title={t("newProject")}
+                on:click={createNewProject}
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14"></path>
+                  <path d="M5 12h14"></path>
+                </svg>
+              </button>
+              <button
+                class="icon-btn"
+                type="button"
                 aria-label={t("open")}
                 title={t("open")}
                 on:click={openProjectDialog}
@@ -2202,7 +2673,7 @@ render();
               <input
                 class="sr-only"
                 type="file"
-                accept="application/json"
+                accept=".json,.zip,application/zip"
                 bind:this={projectFileInput}
                 on:change={handleProjectFile}
               />
@@ -2318,6 +2789,17 @@ render();
                 </div>
               </div>
               <div class="asset-drop">
+                <label class="editor-field">
+                  <span>{t("uploadTo")}</span>
+                  <select bind:value={uploadTargetPath} class="editor-select">
+                    {#each uploadFolderOptions as folder}
+                      <option value={folder.value}>{folder.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                {#if needsAssets}
+                  <p class="text-xs text-amber-200">{t("assetsRequired")}</p>
+                {/if}
                 <p>{t("uploadHint")}</p>
                 <div
                   class="asset-drop__zone"
@@ -2401,6 +2883,38 @@ render();
                         <option value={lang}>{lang.toUpperCase()}</option>
                       {/each}
                     </select>
+                  </label>
+                </div>
+                <div class="edit-block">
+                  <p class="edit-block__title">{t("restaurantName")}</p>
+                  <label class="editor-field">
+                    <span>{editLang.toUpperCase()}</span>
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={draft.meta.restaurantName?.[editLang] ?? ""}
+                      on:input={(event) => {
+                        const name = ensureRestaurantName();
+                        if (!name) return;
+                        handleLocalizedInput(name, editLang, event);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div class="edit-block">
+                  <p class="edit-block__title">{t("menuTitle")}</p>
+                  <label class="editor-field">
+                    <span>{editLang.toUpperCase()}</span>
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={draft.meta.title?.[editLang] ?? ""}
+                      on:input={(event) => {
+                        const title = ensureMetaTitle();
+                        if (!title) return;
+                        handleLocalizedInput(title, editLang, event);
+                      }}
+                    />
                   </label>
                 </div>
                 <div class="edit-row">
@@ -2597,6 +3111,9 @@ render();
                   {#if !wizardStatus.identity}
                     <p class="wizard-warning">{t("wizardMissingBackground")}</p>
                   {/if}
+                  {#if assetOptions.length === 0}
+                    <p class="text-xs text-slate-400">{t("wizardAssetsHint")}</p>
+                  {/if}
                   <div class="wizard-block">
                     <button class="editor-outline" type="button" on:click={addBackground}>
                       {t("wizardAddBg")}
@@ -2615,12 +3132,21 @@ render();
                             </label>
                             <label class="editor-field">
                               <span>{t("wizardSrc")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={bg.src}
-                                list="asset-files"
-                              />
+                              {#if assetOptions.length}
+                                <select bind:value={bg.src} class="editor-select">
+                                  <option value=""></option>
+                                  {#each assetOptions as path}
+                                    <option value={path}>{path}</option>
+                                  {/each}
+                                </select>
+                              {:else}
+                                <input
+                                  type="text"
+                                  class="editor-input"
+                                  bind:value={bg.src}
+                                  list="asset-files"
+                                />
+                              {/if}
                             </label>
                             <button
                               class="editor-outline danger"
@@ -2802,71 +3328,83 @@ render();
       <section class="preview-panel {layoutMode}">
         <section class="preview-shell {effectivePreview}">
           <section class="menu-preview">
-            <div
-              class="menu-background"
-              style={`background-image: url('${activeProject.backgrounds[0]?.src}');`}
-            ></div>
+            {#if activeProject.backgrounds[0]?.src}
+              <div
+                class="menu-background"
+                style={`background-image: url('${activeProject.backgrounds[0]?.src}');`}
+              ></div>
+            {/if}
             <div class="menu-overlay"></div>
 
-            <header class="menu-topbar">
-              <div>
-                <p class="menu-eyebrow">{activeProject.meta.name}</p>
-                <h1 class="menu-title">Menú elegante</h1>
+            {#if isBlankMenu}
+              <div class="menu-blank">
+                <p>{t("blankMenu")}</p>
               </div>
-              <div class="menu-lang">
-                <select bind:value={locale} class="menu-select">
-                  {#each activeProject.meta.locales as lang}
-                    <option value={lang}>{lang.toUpperCase()}</option>
-                  {/each}
-                </select>
-              </div>
-            </header>
-
-            <div class="menu-scroll">
-              {#each activeProject.categories as category}
-                {@const loopedItems = getLoopedItems(category.items)}
-                {@const activeIndex =
-                  carouselActive[category.id] ?? getLoopStart(category.items.length)}
-                <section class="menu-section">
-                  <div class="menu-section__head">
-                    <p class="menu-section__title">{textOf(category.name)}</p>
-                    <span class="menu-section__count">{category.items.length} items</span>
-                  </div>
-                  <div
-                    class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
-                    on:scroll={(event) => handleCarouselScroll(category.id, event)}
-                    data-category-id={category.id}
-                  >
-                    {#each loopedItems as entry (entry.key)}
-                      {@const distance = Math.abs(activeIndex - entry.loopIndex)}
-                      {@const fade = Math.max(0, 1 - distance * 0.2)}
-                      <button
-                        class={`carousel-card ${
-                          distance === 0 ? "active" : distance === 1 ? "near" : "far"
-                        }`}
-                        type="button"
-                        style={`--fade:${fade}`}
-                        on:click={() => openDish(category.id, entry.item.id)}
-                      >
-                        <div class="carousel-media">
-                          <img
-                            src={entry.item.media.hero360 ?? ""}
-                            alt={textOf(entry.item.name)}
-                          />
-                        </div>
-                        <div class="carousel-text">
-                          <p class="carousel-title">{textOf(entry.item.name)}</p>
-                          <p class="carousel-desc">{textOf(entry.item.description)}</p>
-                          <span class="carousel-price">
-                            {formatPrice(entry.item.price.amount)}
-                          </span>
-                        </div>
-                      </button>
+            {:else}
+              <header class="menu-topbar">
+                <div>
+                  {#if textOf(activeProject.meta.restaurantName)}
+                    <p class="menu-eyebrow">{textOf(activeProject.meta.restaurantName)}</p>
+                  {/if}
+                  <h1 class="menu-title">
+                    {textOf(activeProject.meta.title, t("menuTitleFallback"))}
+                  </h1>
+                </div>
+                <div class="menu-lang">
+                  <select bind:value={locale} class="menu-select">
+                    {#each activeProject.meta.locales as lang}
+                      <option value={lang}>{lang.toUpperCase()}</option>
                     {/each}
-                  </div>
-                </section>
-              {/each}
-            </div>
+                  </select>
+                </div>
+              </header>
+
+              <div class="menu-scroll">
+                {#each activeProject.categories as category}
+                  {@const loopedItems = getLoopedItems(category.items)}
+                  {@const activeIndex =
+                    carouselActive[category.id] ?? getLoopStart(category.items.length)}
+                  <section class="menu-section">
+                    <div class="menu-section__head">
+                      <p class="menu-section__title">{textOf(category.name)}</p>
+                      <span class="menu-section__count">{category.items.length} items</span>
+                    </div>
+                    <div
+                      class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
+                      on:scroll={(event) => handleCarouselScroll(category.id, event)}
+                      data-category-id={category.id}
+                    >
+                      {#each loopedItems as entry (entry.key)}
+                        {@const distance = Math.abs(activeIndex - entry.loopIndex)}
+                        {@const fade = Math.max(0, 1 - distance * 0.2)}
+                        <button
+                          class={`carousel-card ${
+                            distance === 0 ? "active" : distance === 1 ? "near" : "far"
+                          }`}
+                          type="button"
+                          style={`--fade:${fade}`}
+                          on:click={() => openDish(category.id, entry.item.id)}
+                        >
+                          <div class="carousel-media">
+                            <img
+                              src={entry.item.media.hero360 ?? ""}
+                              alt={textOf(entry.item.name)}
+                            />
+                          </div>
+                          <div class="carousel-text">
+                            <p class="carousel-title">{textOf(entry.item.name)}</p>
+                            <p class="carousel-desc">{textOf(entry.item.description)}</p>
+                            <span class="carousel-price">
+                              {formatPrice(entry.item.price.amount)}
+                            </span>
+                          </div>
+                        </button>
+                      {/each}
+                    </div>
+                  </section>
+                {/each}
+              </div>
+            {/if}
           </section>
         </section>
       </section>

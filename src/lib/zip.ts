@@ -19,7 +19,7 @@ const crc32 = (data: Uint8Array) => {
   return (crc ^ 0xffffffff) >>> 0;
 };
 
-type ZipEntry = {
+export type ZipEntry = {
   name: string;
   data: Uint8Array;
 };
@@ -96,4 +96,59 @@ export const createZipBlob = (entries: ZipEntry[]): Blob => {
   return new Blob([...fileParts, ...centralParts, endRecord], {
     type: "application/zip"
   });
+};
+
+const decodeName = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+
+export const readZip = (buffer: ArrayBuffer): ZipEntry[] => {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= 0; i -= 1) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset < 0) {
+    throw new Error("Invalid zip file");
+  }
+  const totalEntries = view.getUint16(eocdOffset + 10, true);
+  const centralOffset = view.getUint32(eocdOffset + 16, true);
+  const entries: ZipEntry[] = [];
+  let offset = centralOffset;
+  for (let i = 0; i < totalEntries; i += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) {
+      break;
+    }
+    const compression = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const name = decodeName(bytes.subarray(offset + 46, offset + 46 + nameLength));
+    offset += 46 + nameLength + extraLength + commentLength;
+    if (name.endsWith("/")) {
+      continue;
+    }
+    if (compression !== 0) {
+      throw new Error("Zip compression not supported");
+    }
+    if (view.getUint32(localOffset, true) !== 0x04034b50) {
+      throw new Error("Invalid zip entry");
+    }
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const data = bytes.slice(dataStart, dataStart + compressedSize);
+    if (data.length !== uncompressedSize) {
+      // Fall back to reported size if mismatch.
+      entries.push({ name, data: bytes.slice(dataStart, dataStart + uncompressedSize) });
+    } else {
+      entries.push({ name, data });
+    }
+  }
+  return entries;
 };

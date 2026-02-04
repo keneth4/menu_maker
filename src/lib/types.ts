@@ -51,6 +51,8 @@ export type MenuProject = {
   meta: {
     slug: string;
     name: string;
+    restaurantName?: LocalizedText;
+    title?: LocalizedText;
     template: string;
     locales: LocaleCode[];
     defaultLocale: LocaleCode;

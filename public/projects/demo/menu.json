@@ -2,6 +2,14 @@
   "meta": {
     "slug": "demo",
     "name": "Bar / Pub elegante",
+    "restaurantName": {
+      "es": "Bar Eclipse",
+      "en": "Eclipse Bar"
+    },
+    "title": {
+      "es": "Menú elegante",
+      "en": "Elegant menu"
+    },
     "template": "bar-pub",
     "locales": ["es", "en"],
     "defaultLocale": "es",

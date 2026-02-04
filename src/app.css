@@ -410,6 +410,16 @@ body {
   font-size: 0.7rem;
 }
 
+.menu-blank {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: rgba(226, 232, 240, 0.6);
+  font-size: 0.85rem;
+  padding: 40px;
+}
+
 .menu-scroll {
   position: relative;
   z-index: 2;
