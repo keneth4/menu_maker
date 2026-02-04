@@ -7,7 +7,7 @@
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
-  import type { MenuCategory, MenuItem, MenuProject } from "./lib/types";
+  import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "./lib/types";
 
   let project: MenuProject | null = null;
   let draft: MenuProject | null = null;
@@ -116,6 +116,147 @@
     { value: "Poppins", label: "Poppins" }
   ];
 
+  const menuTerms = {
+    es: { allergens: "Alérgenos", vegan: "Vegano" },
+    en: { allergens: "Allergens", vegan: "Vegan" },
+    fr: { allergens: "Allergènes", vegan: "Végétalien" },
+    pt: { allergens: "Alergênicos", vegan: "Vegano" },
+    it: { allergens: "Allergeni", vegan: "Vegano" },
+    de: { allergens: "Allergene", vegan: "Vegan" },
+    ja: { allergens: "アレルゲン", vegan: "ヴィーガン" },
+    ko: { allergens: "알레르겐", vegan: "비건" },
+    zh: { allergens: "过敏原", vegan: "纯素" }
+  } as const;
+
+  const commonAllergenCatalog = [
+    {
+      id: "gluten",
+      label: {
+        es: "Gluten",
+        en: "Gluten",
+        fr: "Gluten",
+        pt: "Glúten",
+        it: "Glutine",
+        de: "Gluten",
+        ja: "グルテン",
+        ko: "글루텐",
+        zh: "麸质"
+      }
+    },
+    {
+      id: "dairy",
+      label: {
+        es: "Lácteos",
+        en: "Dairy",
+        fr: "Produits laitiers",
+        pt: "Laticínios",
+        it: "Latticini",
+        de: "Milchprodukte",
+        ja: "乳製品",
+        ko: "유제품",
+        zh: "乳制品"
+      }
+    },
+    {
+      id: "egg",
+      label: {
+        es: "Huevo",
+        en: "Egg",
+        fr: "Oeuf",
+        pt: "Ovo",
+        it: "Uovo",
+        de: "Ei",
+        ja: "卵",
+        ko: "달걀",
+        zh: "鸡蛋"
+      }
+    },
+    {
+      id: "nuts",
+      label: {
+        es: "Frutos secos",
+        en: "Nuts",
+        fr: "Fruits à coque",
+        pt: "Nozes",
+        it: "Frutta a guscio",
+        de: "Schalenfrüchte",
+        ja: "木の実",
+        ko: "견과류",
+        zh: "坚果"
+      }
+    },
+    {
+      id: "peanut",
+      label: {
+        es: "Cacahuate",
+        en: "Peanut",
+        fr: "Arachide",
+        pt: "Amendoim",
+        it: "Arachide",
+        de: "Erdnuss",
+        ja: "ピーナッツ",
+        ko: "땅콩",
+        zh: "花生"
+      }
+    },
+    {
+      id: "soy",
+      label: {
+        es: "Soya",
+        en: "Soy",
+        fr: "Soja",
+        pt: "Soja",
+        it: "Soia",
+        de: "Soja",
+        ja: "大豆",
+        ko: "대두",
+        zh: "大豆"
+      }
+    },
+    {
+      id: "fish",
+      label: {
+        es: "Pescado",
+        en: "Fish",
+        fr: "Poisson",
+        pt: "Peixe",
+        it: "Pesce",
+        de: "Fisch",
+        ja: "魚",
+        ko: "생선",
+        zh: "鱼类"
+      }
+    },
+    {
+      id: "shellfish",
+      label: {
+        es: "Mariscos",
+        en: "Shellfish",
+        fr: "Crustacés",
+        pt: "Mariscos",
+        it: "Crostacei",
+        de: "Schalentiere",
+        ja: "甲殻類",
+        ko: "갑각류",
+        zh: "甲壳类"
+      }
+    },
+    {
+      id: "sesame",
+      label: {
+        es: "Ajonjolí",
+        en: "Sesame",
+        fr: "Sésame",
+        pt: "Gergelim",
+        it: "Sesamo",
+        de: "Sesam",
+        ja: "ごま",
+        ko: "참깨",
+        zh: "芝麻"
+      }
+    }
+  ] satisfies { id: string; label: Record<string, string> }[];
+
   const uiCopy = {
     es: {
       appTitle: "Menú Interactivo",
@@ -195,6 +336,9 @@
       description: "Descripción",
       longDescription: "Historia / descripción larga",
       allergensLabel: "Alérgenos",
+      commonAllergens: "Alérgenos comunes",
+      customAllergens: "Alérgenos personalizados",
+      customAllergensHint: "Escribe separados por coma y tradúcelos en cada idioma.",
       veganLabel: "Vegano",
       price: "Precio",
       asset360: "Asset 360",
@@ -313,6 +457,9 @@
       description: "Description",
       longDescription: "History / long description",
       allergensLabel: "Allergens",
+      commonAllergens: "Common Allergens",
+      customAllergens: "Custom Allergens",
+      customAllergensHint: "Use comma-separated names and translate them for each language.",
       veganLabel: "Vegan",
       price: "Price",
       asset360: "360 asset",
@@ -704,6 +851,45 @@
     return entry[locale] ?? entry[activeProject?.meta.defaultLocale ?? "es"] ?? fallback;
   };
 
+  const normalizeLocaleCode = (lang: string) => lang.toLowerCase().split("-")[0];
+
+  const getLocalizedValue = (
+    labels: Record<string, string> | undefined,
+    lang: string,
+    defaultLang = "en"
+  ) => {
+    if (!labels) return "";
+    const normalized = normalizeLocaleCode(lang);
+    const defaultNormalized = normalizeLocaleCode(defaultLang);
+    return (
+      labels[lang] ??
+      labels[normalized] ??
+      labels[defaultLang] ??
+      labels[defaultNormalized] ??
+      labels.en ??
+      Object.values(labels).find((value) => value.trim().length > 0) ??
+      ""
+    );
+  };
+
+  const getMenuTerm = (term: "allergens" | "vegan", lang = locale) => {
+    const localeKey = normalizeLocaleCode(lang) as keyof typeof menuTerms;
+    return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
+  };
+
+  const getAllergenLabel = (entry: AllergenEntry, lang = locale) => {
+    const defaultLocale = activeProject?.meta.defaultLocale ?? "es";
+    return (
+      getLocalizedValue(entry.label, lang, defaultLocale) ||
+      getLocalizedValue(entry.label, defaultLocale, "en")
+    );
+  };
+
+  const getAllergenValues = (item: MenuItem, lang = locale) =>
+    (item.allergens ?? [])
+      .map((entry) => getAllergenLabel(entry, lang))
+      .filter((value) => value.trim().length > 0);
+
   const ensureMetaTitle = () => {
     if (!draft) return null;
     if (!draft.meta.title) {
@@ -738,6 +924,48 @@
     if (!value.meta.currencyPosition) {
       value.meta.currencyPosition = "left";
     }
+    value.categories = (value.categories ?? []).map((category) => ({
+      ...category,
+      items: (category.items ?? []).map((item) => {
+        const rawAllergens = (item as MenuItem & { allergens?: unknown }).allergens;
+        const normalizedAllergens: AllergenEntry[] = Array.isArray(rawAllergens)
+          ? rawAllergens
+              .map((entry) => {
+                if (typeof entry === "string") {
+                  const clean = entry.trim();
+                  if (!clean) return null;
+                  return {
+                    label: locales.reduce<Record<string, string>>((acc, lang) => {
+                      acc[lang] = clean;
+                      return acc;
+                    }, {})
+                  };
+                }
+                if (entry && typeof entry === "object" && "label" in entry) {
+                  const asEntry = entry as AllergenEntry;
+                  const safeLabel = locales.reduce<Record<string, string>>((acc, lang) => {
+                    acc[lang] = getLocalizedValue(
+                      asEntry.label,
+                      lang,
+                      value.meta.defaultLocale ?? "en"
+                    );
+                    return acc;
+                  }, {});
+                  return {
+                    id: asEntry.id,
+                    label: safeLabel
+                  };
+                }
+                return null;
+              })
+              .filter((entry): entry is AllergenEntry => Boolean(entry))
+          : [];
+        return {
+          ...item,
+          allergens: normalizedAllergens
+        };
+      })
+    }));
     const legacyTemplateMap: Record<string, string> = {
       "bar-pub": "focus-rows",
       "cafe-brunch": "focus-rows",
@@ -812,6 +1040,26 @@
     if (!draft.meta.locales.includes(draft.meta.defaultLocale)) {
       draft.meta.defaultLocale = draft.meta.locales[0];
     }
+    draft.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        (item.allergens ?? []).forEach((entry) => {
+          if (!entry.label) {
+            entry.label = {};
+          }
+          const common = entry.id
+            ? commonAllergenCatalog.find((catalogItem) => catalogItem.id === entry.id)
+            : null;
+          draft.meta.locales.forEach((lang) => {
+            if (entry.label[lang] === undefined) {
+              entry.label[lang] = common
+                ? getLocalizedValue(common.label, lang, draft.meta.defaultLocale)
+                : "";
+            }
+          });
+        });
+      });
+    });
+    touchDraft();
   };
 
   const setCurrency = (code: string) => {
@@ -1241,6 +1489,40 @@ const modalContent = document.getElementById("dish-modal-content");
 let carouselCleanup = [];
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
+const menuTerms = {
+  es: { allergens: "Alérgenos", vegan: "Vegano" },
+  en: { allergens: "Allergens", vegan: "Vegan" },
+  fr: { allergens: "Allergènes", vegan: "Végétalien" },
+  pt: { allergens: "Alergênicos", vegan: "Vegano" },
+  it: { allergens: "Allergeni", vegan: "Vegano" },
+  de: { allergens: "Allergene", vegan: "Vegan" },
+  ja: { allergens: "アレルゲン", vegan: "ヴィーガン" },
+  ko: { allergens: "알레르겐", vegan: "비건" },
+  zh: { allergens: "过敏原", vegan: "纯素" }
+};
+const getTerm = (key) => {
+  const lang = (locale || "").toLowerCase().split("-")[0];
+  return (menuTerms[lang] || menuTerms.en)[key];
+};
+const getAllergenValues = (dish) =>
+  (dish.allergens || [])
+    .map((entry) => {
+      if (!entry) return "";
+      if (typeof entry === "string") return entry;
+      const lang = (locale || "").toLowerCase();
+      const langBase = lang.split("-")[0];
+      const defaultLang = (DATA.meta.defaultLocale || "en").toLowerCase();
+      const defaultBase = defaultLang.split("-")[0];
+      return (
+        entry.label?.[lang] ??
+        entry.label?.[langBase] ??
+        entry.label?.[defaultLang] ??
+        entry.label?.[defaultBase] ??
+        entry.label?.en ??
+        ""
+      );
+    })
+    .filter((value) => value && value.trim().length > 0);
 const formatPrice = (amount) => {
   const symbol = currencySymbols[DATA.meta.currency] || DATA.meta.currency;
   const position = DATA.meta.currencyPosition || "left";
@@ -1299,7 +1581,7 @@ const buildCarousel = (category) => {
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
-                  <p class="carousel-title">\${textOf(entry.item.name)}\${entry.item.vegan ? '<span class="vegan-icon">🌿</span>' : ""}</p>
+                  <p class="carousel-title">\${textOf(entry.item.name)}\${entry.item.vegan ? '<span class="vegan-icon" title="' + getTerm("vegan") + '">🌿</span>' : ""}</p>
                   <span class="carousel-price">\${formatPrice(entry.item.price.amount)}</span>
                 </div>
                 <p class="carousel-desc">\${textOf(entry.item.description)}</p>
@@ -1640,10 +1922,10 @@ const bindCards = () => {
       const category = DATA.categories.find((item) => item.id === categoryId);
       const dish = category?.items.find((item) => item.id === itemId);
       if (!dish) return;
-      const allergenLabel = locale === "es" ? "Alérgenos" : "Allergens";
-      const veganLabel = locale === "es" ? "Vegano" : "Vegan";
+      const allergenLabel = getTerm("allergens");
+      const veganLabel = getTerm("vegan");
       const longDesc = textOf(dish.longDescription);
-      const allergens = dish.allergens?.length ? dish.allergens.join(", ") : "";
+      const allergens = getAllergenValues(dish).join(", ");
       modalContent.innerHTML = \`
         <button class="dish-modal__close" id="modal-close">✕</button>
         <p class="dish-modal__title">\${textOf(dish.name)}</p>
@@ -2789,6 +3071,19 @@ Windows:
           acc[lang] = lang === "en" ? enValue : esValue;
           return acc;
         }, {});
+      const buildCommonAllergens = (ids: string[]): AllergenEntry[] =>
+        ids
+          .map((id) => commonAllergenCatalog.find((entry) => entry.id === id))
+          .filter(
+            (entry): entry is { id: string; label: Record<string, string> } => Boolean(entry)
+          )
+          .map((entry) => ({
+            id: entry.id,
+            label: draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+              acc[lang] = getLocalizedValue(entry.label, lang, draft.meta.defaultLocale);
+              return acc;
+            }, {})
+          }));
       const createDish = (
         esName: string,
         enName: string,
@@ -2797,7 +3092,7 @@ Windows:
         esLong: string,
         enLong: string,
         amount: number,
-        allergens: string[],
+        allergenIds: string[],
         vegan = false
       ): MenuItem => ({
         id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -2808,7 +3103,7 @@ Windows:
           amount,
           currency: draft.meta.currency
         },
-        allergens,
+        allergens: buildCommonAllergens(allergenIds),
         vegan,
         media: {
           hero360: sampleHero
@@ -2831,7 +3126,7 @@ Windows:
               "Inspirado en las cafeterias de Melbourne, se sirve con microespuma fina para resaltar el perfil del grano.",
               "Inspired by Melbourne coffee bars, served with fine microfoam to highlight bean profile.",
               95,
-              ["Lacteos", "Nueces"]
+              ["dairy", "nuts"]
             ),
             createDish(
               "Cold Brew Cacao",
@@ -2863,7 +3158,7 @@ Windows:
               "Version inspirada en el chocolate de mesa tradicional mexicano, cremosa y aromatica.",
               "A version inspired by traditional Mexican table chocolate, creamy and aromatic.",
               98,
-              ["Lacteos"]
+              ["dairy"]
             )
           ]
         },
@@ -2879,7 +3174,7 @@ Windows:
               "Fermentacion de 24 horas para lograr una miga aireada y capas crujientes.",
               "24-hour fermentation for an airy crumb and crisp layers.",
               120,
-              ["Gluten", "Nueces"],
+              ["gluten", "nuts"],
               true
             ),
             createDish(
@@ -2890,7 +3185,7 @@ Windows:
               "El salmon se cura en sal y citricos para lograr textura firme y sabor limpio.",
               "Salmon is cured with salt and citrus for a firm texture and clean taste.",
               185,
-              ["Gluten", "Pescado", "Lacteos"]
+              ["gluten", "fish", "dairy"]
             ),
             createDish(
               "Hotcakes de Mora Azul",
@@ -2900,7 +3195,7 @@ Windows:
               "Se terminan con mantequilla batida de vainilla y ralladura de limon.",
               "Finished with whipped vanilla butter and lemon zest.",
               165,
-              ["Gluten", "Huevo", "Lacteos"]
+              ["gluten", "egg", "dairy"]
             ),
             createDish(
               "Bowl Verde de Temporada",
@@ -3146,13 +3441,76 @@ Windows:
     touchDraft();
   };
 
-  const handleAllergensInput = (item: MenuItem, event: Event) => {
+  const ensureAllergens = (item: MenuItem) => {
+    if (!item.allergens) {
+      item.allergens = [];
+    }
+    return item.allergens;
+  };
+
+  const isCommonAllergenChecked = (item: MenuItem, id: string) =>
+    (item.allergens ?? []).some((entry) => entry.id === id);
+
+  const getCommonAllergenLabel = (
+    entry: { label: Record<string, string> },
+    lang: string = editLang
+  ) => getLocalizedValue(entry.label, lang, activeProject?.meta.defaultLocale ?? "en");
+
+  const getCustomAllergensInput = (item: MenuItem, lang: string = editLang) =>
+    (item.allergens ?? [])
+      .filter((entry) => !entry.id)
+      .map((entry) => entry.label?.[lang] ?? "")
+      .join(", ");
+
+  const toggleCommonAllergen = (item: MenuItem, allergenId: string, checked: boolean) => {
+    if (!draft) return;
+    const list = ensureAllergens(item);
+    const index = list.findIndex((entry) => entry.id === allergenId);
+    if (checked && index === -1) {
+      const common = commonAllergenCatalog.find((entry) => entry.id === allergenId);
+      if (!common) return;
+      list.push({
+        id: common.id,
+        label: draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+          acc[lang] = getLocalizedValue(common.label, lang, draft.meta.defaultLocale);
+          return acc;
+        }, {})
+      });
+    }
+    if (!checked && index >= 0) {
+      list.splice(index, 1);
+    }
+    touchDraft();
+  };
+
+  const handleCommonAllergenToggle = (item: MenuItem, allergenId: string, event: Event) => {
     const input = event.currentTarget as HTMLInputElement;
-    const values = input.value
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    item.allergens = values;
+    toggleCommonAllergen(item, allergenId, input.checked);
+  };
+
+  const handleCustomAllergensInput = (item: MenuItem, lang: string, event: Event) => {
+    if (!draft) return;
+    const input = event.currentTarget as HTMLInputElement;
+    const values = input.value.split(",").map((value) => value.trim());
+    const list = ensureAllergens(item);
+    const common = list.filter((entry) => entry.id);
+    const custom = list.filter((entry) => !entry.id);
+    const nextCount = Math.max(custom.length, values.length);
+    const nextCustom: AllergenEntry[] = [];
+    for (let index = 0; index < nextCount; index += 1) {
+      const base = custom[index]?.label
+        ? { ...custom[index].label }
+        : draft.meta.locales.reduce<Record<string, string>>((acc, localeCode) => {
+            acc[localeCode] = "";
+            return acc;
+          }, {});
+      base[lang] = values[index] ?? "";
+      const hasAny = draft.meta.locales.some((localeCode) => (base[localeCode] ?? "").trim());
+      if (hasAny) {
+        nextCustom.push({ label: base });
+      }
+    }
+    item.allergens = [...common, ...nextCustom];
     touchDraft();
   };
 
@@ -3898,14 +4256,32 @@ Windows:
                               bind:value={selectedItem.price.amount}
                             />
                           </label>
+                          <div class="editor-field">
+                            <span>{t("commonAllergens")}</span>
+                            <div class="allergen-checklist">
+                              {#each commonAllergenCatalog as allergen}
+                                <label class="allergen-option">
+                                  <input
+                                    type="checkbox"
+                                    checked={isCommonAllergenChecked(selectedItem, allergen.id)}
+                                    on:change={(event) =>
+                                      handleCommonAllergenToggle(selectedItem, allergen.id, event)}
+                                  />
+                                  <span>{getCommonAllergenLabel(allergen, editLang)}</span>
+                                </label>
+                              {/each}
+                            </div>
+                          </div>
                           <label class="editor-field">
-                            <span>{t("allergensLabel")}</span>
+                            <span>{t("customAllergens")} ({editLang.toUpperCase()})</span>
                             <input
                               type="text"
                               class="editor-input"
-                              value={(selectedItem.allergens ?? []).join(", ")}
-                              on:input={(event) => handleAllergensInput(selectedItem, event)}
+                              value={getCustomAllergensInput(selectedItem, editLang)}
+                              on:input={(event) =>
+                                handleCustomAllergensInput(selectedItem, editLang, event)}
                             />
+                            <small class="editor-hint">{t("customAllergensHint")}</small>
                           </label>
                           <label class="editor-field editor-inline">
                             <span>{t("veganLabel")}</span>
@@ -4278,7 +4654,7 @@ Windows:
                               <p class="carousel-title">
                                 {textOf(entry.item.name)}
                                 {#if entry.item.vegan}
-                                  <span class="vegan-icon" title={t("veganLabel")}>🌿</span>
+                                  <span class="vegan-icon" title={getMenuTerm("vegan")}>🌿</span>
                                 {/if}
                               </p>
                               <span class="carousel-price">
@@ -4318,11 +4694,11 @@ Windows:
           {/if}
           {#if dish.allergens?.length}
             <p class="dish-modal__allergens">
-              {t("allergensLabel")}: {dish.allergens.join(", ")}
+              {getMenuTerm("allergens")}: {getAllergenValues(dish).join(", ")}
             </p>
           {/if}
           {#if dish.vegan}
-            <span class="dish-modal__badge">🌿 {t("veganLabel")}</span>
+            <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
           {/if}
         </div>
         <p class="dish-modal__price">

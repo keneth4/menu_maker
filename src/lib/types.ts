@@ -12,6 +12,11 @@ export type MediaAsset = {
   alt?: string;
 };
 
+export type AllergenEntry = {
+  id?: string;
+  label: LocalizedText;
+};
+
 export type MenuItem = {
   id: string;
   name: LocalizedText;
@@ -22,7 +27,7 @@ export type MenuItem = {
     currency: string;
     display?: string;
   };
-  allergens?: string[];
+  allergens?: AllergenEntry[];
   vegan?: boolean;
   media: {
     hero360?: string;
