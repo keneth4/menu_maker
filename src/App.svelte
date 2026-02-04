@@ -1061,7 +1061,7 @@ body {
   scroll-snap-type: x mandatory;
   scroll-padding-inline: var(--carousel-edge);
   scrollbar-width: none;
-  align-items: flex-start;
+  align-items: center;
   mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 }
@@ -1085,10 +1085,11 @@ body {
     opacity 220ms ease, filter 240ms ease;
   transform-origin: center center;
   opacity: var(--fade);
-  filter: blur(calc((1 - var(--fade)) * 3px));
+  filter: blur(calc((1 - var(--fade)) * 8px));
+  transform: scale(calc(0.4 + var(--fade) * 0.6));
   color: inherit;
 }
-.carousel-card.active { transform: scale(0.95); opacity: 1; filter: none; }
+.carousel-card.active { transform: scale(1); opacity: 1; filter: none; }
 .carousel-media {
   width: 100%;
   aspect-ratio: 1 / 1;
