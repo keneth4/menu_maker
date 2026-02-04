@@ -97,6 +97,10 @@
   let activeBackgroundIndex = 0;
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
+  let previewStartupLoading = false;
+  let previewStartupProgress = 100;
+  let previewStartupSignature = "";
+  let previewStartupToken = 0;
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -865,6 +869,7 @@
   });
 
   onDestroy(() => {
+    previewStartupToken += 1;
     clearBackgroundRotation();
     if (sectionFocusRaf) {
       cancelAnimationFrame(sectionFocusRaf);
@@ -970,6 +975,14 @@
     const localeKey = normalizeLocaleCode(lang) as keyof typeof menuTerms;
     return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
   };
+
+  const getLoadingLabel = (lang = locale) =>
+    normalizeLocaleCode(lang) === "es" ? "Cargando assets" : "Loading assets";
+
+  const getDishTapHint = (lang = locale) =>
+    normalizeLocaleCode(lang) === "es"
+      ? "Toca o haz clic en un platillo para ver detalles"
+      : "Tap or click a dish for details";
 
   const getAllergenLabel = (entry: AllergenEntry, lang = locale) => {
     const defaultLocale = activeProject?.meta.defaultLocale ?? "es";
@@ -1404,6 +1417,9 @@ const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
 let carouselCleanup = [];
+let startupLoading = true;
+let startupProgress = 0;
+let startupToken = 0;
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
 const menuTerms = {
@@ -1528,6 +1544,81 @@ const getDetailImageSrc = (item) =>
   item?.media?.responsive?.small ||
   item?.media?.hero360 ||
   "";
+const getLoadingLabel = () =>
+  (locale || "").toLowerCase().split("-")[0] === "es"
+    ? "Cargando assets"
+    : "Loading assets";
+const getTapHint = () =>
+  (locale || "").toLowerCase().split("-")[0] === "es"
+    ? "Toca o haz clic en un platillo para ver detalles"
+    : "Tap or click a dish for details";
+const collectStartupSources = () => {
+  const urls = new Set();
+  backgrounds.forEach((bg) => {
+    const src = (bg?.src || "").trim();
+    if (src) urls.add(src);
+  });
+  DATA.categories.forEach((category) => {
+    category.items.forEach((item) => {
+      const src = (getCarouselImageSrc(item) || "").trim();
+      if (src) urls.add(src);
+    });
+  });
+  return Array.from(urls);
+};
+const preloadImageAsset = (src) =>
+  new Promise((resolve) => {
+    if (!src) {
+      resolve();
+      return;
+    }
+    const image = new Image();
+    const done = () => resolve();
+    image.onload = done;
+    image.onerror = done;
+    image.src = src;
+    if (image.complete) {
+      resolve();
+    }
+  });
+const syncStartupUi = () => {
+  const preview = app.querySelector(".menu-preview");
+  const loader = app.querySelector(".menu-startup-loader");
+  const fill = app.querySelector(".menu-startup-loader__fill");
+  const value = app.querySelector(".menu-startup-loader__value");
+  preview?.classList.toggle("is-loading", startupLoading);
+  loader?.classList.toggle("active", startupLoading);
+  if (fill) fill.style.width = startupProgress + "%";
+  if (value) value.textContent = Math.round(startupProgress) + "%";
+};
+const preloadStartupAssets = async () => {
+  const token = ++startupToken;
+  const sources = collectStartupSources();
+  if (sources.length === 0) {
+    startupProgress = 100;
+    startupLoading = false;
+    syncStartupUi();
+    return;
+  }
+  startupLoading = true;
+  startupProgress = 0;
+  syncStartupUi();
+  let loaded = 0;
+  await Promise.all(
+    sources.map((src) =>
+      preloadImageAsset(src).finally(() => {
+        if (token !== startupToken) return;
+        loaded += 1;
+        startupProgress = Math.round((loaded / sources.length) * 100);
+        syncStartupUi();
+      })
+    )
+  );
+  if (token !== startupToken) return;
+  startupProgress = 100;
+  startupLoading = false;
+  syncStartupUi();
+};
 
 const buildCarousel = (category) => {
   const looped = getLoopedItems(category.items);
@@ -1581,7 +1672,16 @@ const render = () => {
   const templateClass = "template-" + (DATA.meta.template || "focus-rows");
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview \${templateClass}">
+    <div class="menu-preview \${templateClass} \${startupLoading ? "is-loading" : ""}">
+      <div class="menu-startup-loader \${startupLoading ? "active" : ""}">
+        <div class="menu-startup-loader__card">
+          <p class="menu-startup-loader__label">\${getLoadingLabel()}</p>
+          <div class="menu-startup-loader__track">
+            <span class="menu-startup-loader__fill" style="width:\${startupProgress}%"></span>
+          </div>
+          <p class="menu-startup-loader__value">\${Math.round(startupProgress)}%</p>
+        </div>
+      </div>
       \${backgrounds
         .map(
           (item, index) =>
@@ -1611,6 +1711,10 @@ const render = () => {
               )}</section>\`
           )
           .join("")}
+      </div>
+      <div class="menu-tap-hint" aria-hidden="true">
+        <span class="menu-tap-hint__dot"></span>
+        <span>\${getTapHint()}</span>
       </div>
     </div>
   \`;
@@ -1649,6 +1753,7 @@ const render = () => {
   bindCarouselNav();
   bindSectionFocus();
   bindCards();
+  syncStartupUi();
 };
 
 const centerCarousel = (container, index, behavior = "auto") => {
@@ -1920,6 +2025,7 @@ modal?.addEventListener("click", (event) => {
 });
 
 render();
+void preloadStartupAssets();
 `;
   };
 
@@ -2329,6 +2435,78 @@ Windows:
     item.media.responsive?.small ||
     item.media.hero360 ||
     "";
+
+  const preloadImageAsset = (src: string) =>
+    new Promise<void>((resolve) => {
+      if (!src) {
+        resolve();
+        return;
+      }
+      const image = new Image();
+      const done = () => resolve();
+      image.onload = done;
+      image.onerror = done;
+      image.src = src;
+      if (image.complete) {
+        resolve();
+      }
+    });
+
+  const collectPreviewStartupSources = (data: MenuProject) => {
+    const urls = new Set<string>();
+    data.backgrounds.forEach((bg) => {
+      const src = (bg.src || "").trim();
+      if (src) {
+        urls.add(src);
+      }
+    });
+    data.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const src = getCarouselImageSource(item).trim();
+        if (src) {
+          urls.add(src);
+        }
+      });
+    });
+    return Array.from(urls);
+  };
+
+  const preloadPreviewStartupAssets = async (sources: string[]) => {
+    const token = ++previewStartupToken;
+    if (sources.length === 0) {
+      previewStartupProgress = 100;
+      previewStartupLoading = false;
+      return;
+    }
+    previewStartupLoading = true;
+    previewStartupProgress = 0;
+    let loaded = 0;
+    await Promise.all(
+      sources.map((src) =>
+        preloadImageAsset(src).finally(() => {
+          if (token !== previewStartupToken) return;
+          loaded += 1;
+          previewStartupProgress = Math.round((loaded / sources.length) * 100);
+        })
+      )
+    );
+    if (token !== previewStartupToken) return;
+    previewStartupProgress = 100;
+    previewStartupLoading = false;
+  };
+
+  $: if (activeProject && typeof window !== "undefined") {
+    const sources = collectPreviewStartupSources(activeProject);
+    const signature = sources.join("|");
+    if (signature !== previewStartupSignature) {
+      previewStartupSignature = signature;
+      void preloadPreviewStartupAssets(sources);
+    }
+  } else {
+    previewStartupSignature = "";
+    previewStartupProgress = 100;
+    previewStartupLoading = false;
+  }
 
   const goToStep = (index: number) => {
     wizardStep = index;
@@ -4853,9 +5031,23 @@ Windows:
       <section class="preview-panel {layoutMode}">
         <section class="preview-shell {effectivePreview}">
         <section
-          class={`menu-preview template-${activeProject.meta.template || "focus-rows"}`}
+          class={`menu-preview template-${activeProject.meta.template || "focus-rows"} ${
+            previewStartupLoading ? "is-loading" : ""
+          }`}
           style={`--menu-font:${previewFontStack};`}
         >
+            <div class={`menu-startup-loader ${previewStartupLoading ? "active" : ""}`}>
+              <div class="menu-startup-loader__card">
+                <p class="menu-startup-loader__label">{getLoadingLabel(locale)}</p>
+                <div class="menu-startup-loader__track">
+                  <span
+                    class="menu-startup-loader__fill"
+                    style={`width:${previewStartupProgress}%`}
+                  ></span>
+                </div>
+                <p class="menu-startup-loader__value">{previewStartupProgress}%</p>
+              </div>
+            </div>
             {#if previewBackgrounds.length}
               {#each previewBackgrounds as background, index (`${background.id}-${index}`)}
                 <div
@@ -4965,6 +5157,10 @@ Windows:
                     </div>
                   </section>
                 {/each}
+              </div>
+              <div class="menu-tap-hint" aria-hidden="true">
+                <span class="menu-tap-hint__dot"></span>
+                <span>{getDishTapHint(locale)}</span>
               </div>
             {/if}
           </section>

@@ -568,6 +568,112 @@ body {
   padding: 40px;
 }
 
+.menu-startup-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 260ms ease, visibility 260ms ease;
+}
+
+.menu-startup-loader.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.menu-startup-loader__card {
+  width: min(340px, 84vw);
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.72);
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.menu-startup-loader__label {
+  margin: 0;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.menu-startup-loader__track {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.8);
+  overflow: hidden;
+}
+
+.menu-startup-loader__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  transition: width 180ms ease;
+}
+
+.menu-startup-loader__value {
+  margin: 0;
+  justify-self: end;
+  font-size: 0.68rem;
+  color: rgba(251, 191, 36, 0.92);
+}
+
+.menu-tap-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(2, 6, 23, 0.52);
+  color: rgba(226, 232, 240, 0.84);
+  padding: 6px 12px;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.menu-tap-hint__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #fbbf24;
+  box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.42);
+  animation: tap-hint-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes tap-hint-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.42);
+    opacity: 0.8;
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(251, 191, 36, 0);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+    opacity: 0.8;
+  }
+}
+
 .menu-scroll {
   position: relative;
   z-index: 2;
@@ -719,6 +825,17 @@ body {
   .menu-carousel {
     --carousel-card: clamp(160px, 60vw, 220px);
     gap: 12px;
+  }
+
+  .menu-startup-loader__card {
+    width: min(300px, 88vw);
+  }
+
+  .menu-tap-hint {
+    bottom: 10px;
+    font-size: 0.54rem;
+    letter-spacing: 0.12em;
+    padding: 6px 10px;
   }
 }
 
