@@ -370,19 +370,14 @@
 
   const templateOptions: TemplateOption[] = [
     {
-      id: "bar-pub",
-      label: { es: "Bar / Pub", en: "Bar / Pub" },
-      categories: { es: ["Cócteles", "Especiales"], en: ["Cocktails", "Specials"] }
+      id: "focus-rows",
+      label: { es: "Filas En Foco", en: "In Focus Rows" },
+      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
     },
     {
-      id: "cafe-brunch",
-      label: { es: "Cafe / Brunch", en: "Cafe / Brunch" },
-      categories: { es: ["Cafe", "Brunch", "Postres"], en: ["Cafe", "Brunch", "Desserts"] }
-    },
-    {
-      id: "street-food",
-      label: { es: "Street Food", en: "Street Food" },
-      categories: { es: ["Street Food", "Sides", "Bebidas"], en: ["Street Food", "Sides", "Drinks"] }
+      id: "jukebox",
+      label: { es: "Jukebox", en: "Jukebox" },
+      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
     }
   ];
 
@@ -638,6 +633,17 @@
       updateDeviceMode();
       query.addEventListener?.("change", updateDeviceMode);
       query.addListener?.(updateDeviceMode);
+      let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+      const handleViewportChange = () => {
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+        resizeTimeout = setTimeout(() => {
+          void syncCarousels();
+        }, 120);
+      };
+      window.addEventListener("resize", handleViewportChange);
+      window.addEventListener("orientationchange", handleViewportChange);
 
       try {
         const response = await fetch("/api/assets/ping");
@@ -732,6 +738,15 @@
     if (!value.meta.currencyPosition) {
       value.meta.currencyPosition = "left";
     }
+    const legacyTemplateMap: Record<string, string> = {
+      "bar-pub": "focus-rows",
+      "cafe-brunch": "focus-rows",
+      "street-food": "focus-rows"
+    };
+    value.meta.template = legacyTemplateMap[value.meta.template] ?? value.meta.template;
+    if (!value.meta.template) {
+      value.meta.template = "focus-rows";
+    }
     return value;
   };
 
@@ -766,7 +781,7 @@
       title: { es: "", en: "" },
       fontFamily: "Fraunces",
       fontSource: "",
-      template: "",
+      template: "focus-rows",
       locales: ["es", "en"],
       defaultLocale: "es",
       currency: "MXN",
@@ -1041,16 +1056,17 @@ body {
   gap: 24px;
 }
 .menu-section__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.3em;
   color: rgba(226, 232, 240, 0.7);
+  text-align: center;
 }
-.menu-section__title { font-size: 0.75rem; }
-.menu-section__count { font-size: 0.65rem; }
+.menu-section__title { margin: 0; font-size: 0.75rem; }
+.menu-section__count { margin: 0; font-size: 0.65rem; }
 .menu-carousel {
   --carousel-card: clamp(200px, 70vw, 260px);
   --carousel-edge: max(24px, calc(50% - (var(--carousel-card) / 2)));
@@ -1064,21 +1080,21 @@ body {
   align-items: center;
 }
 .menu-carousel::-webkit-scrollbar { display: none; }
-.menu-preview.is-enhanced .menu-carousel {
-  mask-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0),
-    rgba(255, 255, 255, 1) 8%,
-    rgba(255, 255, 255, 1) 92%,
-    rgba(255, 255, 255, 0)
-  );
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0),
-    rgba(255, 255, 255, 1) 8%,
-    rgba(255, 255, 255, 1) 92%,
-    rgba(255, 255, 255, 0)
-  );
+.template-jukebox .menu-scroll {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+}
+.template-jukebox .menu-scroll::-webkit-scrollbar { display: none; }
+.template-jukebox .menu-section {
+  min-width: 100%;
+  scroll-snap-align: start;
+}
+.template-jukebox .menu-carousel {
+  --carousel-card: clamp(220px, 62vw, 300px);
+  --carousel-edge: max(20px, calc(50% - (var(--carousel-card) / 2)));
 }
 @media (max-width: 640px) {
   .menu-carousel {
@@ -1194,12 +1210,12 @@ body {
   height: 70%;
   object-fit: contain;
 }
-.dish-modal__title { margin: 0; font-size: 1.2rem; }
+.dish-modal__title { margin: 0; font-size: 1.2rem; text-align: center; }
 .dish-modal__desc { margin: 0; font-size: 0.85rem; color: rgba(226,232,240,0.8); }
 .dish-modal__long { margin: 0; font-size: 0.8rem; color: rgba(226,232,240,0.7); }
 .dish-modal__allergens { margin: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(251, 191, 36, 0.7); }
 .dish-modal__badge { align-self: start; border-radius: 999px; padding: 4px 10px; border: 1px solid rgba(251, 191, 36, 0.5); color: #fde68a; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em; }
-.dish-modal__price { margin: 0; font-weight: 600; color: #fbbf24; }
+.dish-modal__price { margin: 0; justify-self: end; font-weight: 700; color: #fbbf24; }
 @media (min-width: 900px) {
   .menu-content {
     padding: 40px 48px 60px;
@@ -1222,6 +1238,7 @@ let fontInjected = false;
 const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
+let carouselCleanup = [];
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
 const formatPrice = (amount) => {
@@ -1268,9 +1285,9 @@ const getLoopedItems = (items) => {
 const buildCarousel = (category) => {
   const looped = getLoopedItems(category.items);
   return \`
-    <div class="menu-section__head" style="display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.8);">
+    <div class="menu-section__head" style="display:grid;justify-items:center;gap:2px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.3em;color:rgba(226,232,240,0.8);text-align:center;">
       <p class="menu-section__title" style="margin:0;font-size:0.75rem;">\${textOf(category.name)}</p>
-      <span class="menu-section__count" style="font-size:0.65rem;">\${category.items.length} items</span>
+      <span class="menu-section__count" style="margin:0;font-size:0.65rem;">\${category.items.length} items</span>
     </div>
     <div class="menu-carousel" data-category-id="\${category.id}" style="width:100%;max-width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;gap:16px;overflow-x:auto;overflow-y:hidden;padding:12px 24px 16px;scroll-snap-type:x mandatory;">
       \${looped
@@ -1305,9 +1322,10 @@ const render = () => {
     DATA.meta.title?.[locale] ??
     DATA.meta.title?.[DATA.meta.defaultLocale] ??
     "";
+  const templateClass = "template-" + (DATA.meta.template || "focus-rows");
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview" style="position:relative;min-height:100vh;overflow:hidden;color:#e2e8f0;">
+    <div class="menu-preview \${templateClass}" style="position:relative;min-height:100vh;overflow:hidden;color:#e2e8f0;">
       <div class="menu-background" style="position:absolute;inset:0;z-index:0;background-image:url('\${bg}');background-size:cover;background-position:center;opacity:0.92;filter:blur(2px);transform:scale(1.05);"></div>
       <div class="menu-overlay" style="position:absolute;inset:0;z-index:1;background:radial-gradient(circle at top, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.75));"></div>
       <div class="menu-content" style="position:relative;z-index:2;padding:32px 24px 40px;display:grid;gap:24px;width:100%;max-width:100vw;overflow-x:hidden;box-sizing:border-box;">
@@ -1400,9 +1418,10 @@ const render = () => {
       section.style.overflowX = "hidden";
     });
     app.querySelectorAll(".menu-section__head").forEach((head) => {
-      head.style.display = "flex";
-      head.style.justifyContent = "space-between";
-      head.style.alignItems = "center";
+      head.style.display = "grid";
+      head.style.justifyItems = "center";
+      head.style.gap = "2px";
+      head.style.textAlign = "center";
     });
     app.querySelectorAll(".menu-carousel").forEach((carousel) => {
       carousel.style.display = "flex";
@@ -1471,6 +1490,20 @@ const render = () => {
       desc.style.fontSize = "0.75rem";
       desc.style.color = "rgba(226, 232, 240, 0.82)";
     });
+
+    if (DATA.meta.template === "jukebox") {
+      if (scroll) {
+        scroll.style.display = "flex";
+        scroll.style.gap = "0";
+        scroll.style.overflowX = "auto";
+        scroll.style.overflowY = "hidden";
+        scroll.style.scrollSnapType = "x mandatory";
+      }
+      app.querySelectorAll(".menu-section").forEach((section) => {
+        section.style.minWidth = "100%";
+        section.style.scrollSnapAlign = "start";
+      });
+    }
   };
   const preview = app.querySelector(".menu-preview");
   if (preview) {
@@ -1491,14 +1524,8 @@ const centerCarousel = (container, index, behavior = "auto") => {
   const target = cards[index];
   if (!target) return;
   if (container.clientWidth === 0) return;
-  const containerRect = container.getBoundingClientRect();
-  const targetRect = target.getBoundingClientRect();
-  const delta =
-    targetRect.left +
-    targetRect.width / 2 -
-    (containerRect.left + containerRect.width / 2);
-  const nextLeft = container.scrollLeft + delta;
-  container.scrollTo({ left: nextLeft, behavior });
+  const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+  container.scrollTo({ left: targetLeft, behavior });
 };
 
 const applyFocusState = (container, activeIndex) => {
@@ -1533,6 +1560,8 @@ const getClosestIndex = (container) => {
 };
 
 const bindCarousels = () => {
+  carouselCleanup.forEach((dispose) => dispose());
+  carouselCleanup = [];
   const carousels = Array.from(document.querySelectorAll(".menu-carousel"));
   carousels.forEach((container) => {
     const id = container.dataset.categoryId;
@@ -1543,7 +1572,8 @@ const bindCarousels = () => {
 
     const alignTo = (index, behavior = "auto") => {
       centerCarousel(container, index, behavior);
-      applyFocusState(container, index);
+      const closest = getClosestIndex(container);
+      applyFocusState(container, closest);
     };
 
     requestAnimationFrame(() => {
@@ -1552,9 +1582,18 @@ const bindCarousels = () => {
     window.setTimeout(() => {
       alignTo(start, "auto");
     }, 180);
+    window.setTimeout(() => {
+      const closestIndex = getClosestIndex(container);
+      let finalIndex = closestIndex;
+      if (count > 1) {
+        const normalized = ((closestIndex % count) + count) % count;
+        finalIndex = getLoopStart(count) + normalized;
+      }
+      alignTo(finalIndex, "auto");
+    }, 360);
 
     let timeout;
-    container.addEventListener("scroll", () => {
+    const onScroll = () => {
       if (timeout) window.clearTimeout(timeout);
       const closestIndex = getClosestIndex(container);
       applyFocusState(container, closestIndex);
@@ -1567,6 +1606,28 @@ const bindCarousels = () => {
         const behavior = finalIndex === closestIndex ? "smooth" : "auto";
         alignTo(finalIndex, behavior);
       }, 140);
+    };
+    container.addEventListener("scroll", onScroll);
+
+    let resizeTimeout;
+    const onResize = () => {
+      if (resizeTimeout) window.clearTimeout(resizeTimeout);
+      resizeTimeout = window.setTimeout(() => {
+        const closestIndex = getClosestIndex(container);
+        let finalIndex = closestIndex;
+        if (count > 1) {
+          const normalized = ((closestIndex % count) + count) % count;
+          finalIndex = getLoopStart(count) + normalized;
+        }
+        alignTo(finalIndex, "auto");
+      }, 120);
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    carouselCleanup.push(() => {
+      container.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
     });
   });
 };
@@ -1585,17 +1646,17 @@ const bindCards = () => {
       const allergens = dish.allergens?.length ? dish.allergens.join(", ") : "";
       modalContent.innerHTML = \`
         <button class="dish-modal__close" id="modal-close">✕</button>
+        <p class="dish-modal__title">\${textOf(dish.name)}</p>
         <div class="dish-modal__media">
           <img src="\${dish.media.hero360 || ""}" alt="\${textOf(dish.name)}" />
         </div>
         <div>
-          <p class="dish-modal__title">\${textOf(dish.name)}</p>
           <p class="dish-modal__desc">\${textOf(dish.description)}</p>
           \${longDesc ? '<p class="dish-modal__long">' + longDesc + '</p>' : ""}
           \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
           \${dish.vegan ? '<span class="dish-modal__badge">🌿 ' + veganLabel + '</span>' : ""}
-          <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
         </div>
+        <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
       \`;
       modal.classList.add("open");
       modal.querySelector("#modal-close")?.addEventListener("click", closeModal);
@@ -1615,21 +1676,24 @@ render();
 `;
   };
 
-  const buildExportHtml = () => `
+  const buildExportHtml = (version: string) => `
 <!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Menu Export</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=${version}" />
   </head>
   <body>
     <div id="app"></div>
     <div id="dish-modal" class="dish-modal">
       <div id="dish-modal-content" class="dish-modal__card"></div>
     </div>
-    <script src="app.js"></scr${"ipt"}>
+    <script src="app.js?v=${version}"></scr${"ipt"}>
   </body>
 </html>
 `;
@@ -1795,31 +1859,32 @@ render();
 
       const encoder = new TextEncoder();
       const entries: { name: string; data: Uint8Array }[] = [];
+      const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
       const serveCommand = `#!/bin/bash
 set -e
 cd "$(dirname "$0")"
-python3 -m http.server 4173
+python3 -m http.server 4173 --bind 127.0.0.1
 `;
       const serveBat = `@echo off
 cd /d %~dp0
-python -m http.server 4173
+python -m http.server 4173 --bind 127.0.0.1
 `;
       const readme = `Open this exported site with a local server (recommended).
 
 macOS / Linux:
 1. Run chmod +x serve.command
 2. Run ./serve.command
-3. Open http://localhost:4173
+3. Open http://127.0.0.1:4173
 
 Windows:
 1. Run serve.bat
-2. Open http://localhost:4173
+2. Open http://127.0.0.1:4173
 `;
       entries.push({ name: "menu.json", data: encoder.encode(menuData) });
       entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
       entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
-      entries.push({ name: "index.html", data: encoder.encode(buildExportHtml()) });
+      entries.push({ name: "index.html", data: encoder.encode(buildExportHtml(exportVersion)) });
       entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
       entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
       entries.push({ name: "README.txt", data: encoder.encode(readme) });
@@ -2020,7 +2085,7 @@ Windows:
     exportStatus = "";
     exportError = "";
     wizardStep = 0;
-    initCarouselIndices(empty);
+    await applyTemplate(empty.meta.template || "focus-rows");
     if (assetMode === "bridge") {
       await refreshBridgeEntries();
     }
@@ -2134,14 +2199,8 @@ Windows:
     const target = cards[index];
     if (!target) return;
     if (container.clientWidth === 0) return;
-    const containerRect = container.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    const delta =
-      targetRect.left +
-      targetRect.width / 2 -
-      (containerRect.left + containerRect.width / 2);
-    const nextLeft = container.scrollLeft + delta;
-    container.scrollTo({ left: nextLeft, behavior });
+    const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+    container.scrollTo({ left: targetLeft, behavior });
   };
 
   const getClosestCarouselIndex = (container: HTMLElement) => {
@@ -2717,7 +2776,7 @@ Windows:
       draft.backgrounds = [
         {
           id: `bg-${Date.now()}`,
-          label: `${t("backgroundLabel")} 1`,
+          label: "Cafe / Brunch Hero",
           src: sampleBg,
           type: "image"
         }
@@ -2725,64 +2784,138 @@ Windows:
     }
 
     if (draft.categories.length === 0) {
-      const baseCategories =
-        template.categories[uiLang] ?? template.categories.es ?? template.categories.en ?? [];
-      const fallback = uiLang === "en" ? ["Starters", "Specials"] : ["Entradas", "Especiales"];
-      const categoryNames = Array.from({ length: 2 }).map((_, index) =>
-        baseCategories[index] ?? fallback[index] ?? `${t("section")} ${index + 1}`
-      );
-      const dishVariants = [
-        { es: "Clásico", en: "Classic" },
-        { es: "de la Casa", en: "House" },
-        { es: "Ahumado", en: "Smoked" },
-        { es: "Especial", en: "Special" }
-      ];
-      const buildDishForCategory = (nameMap: Record<string, string>) =>
-        dishVariants.map((variant, index) => {
-          const id = `dish-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`;
-          const name = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-            const base = nameMap[lang] ?? nameMap[uiLang] ?? categoryNames[0];
-            const suffix = lang === "en" ? variant.en : variant.es;
-            acc[lang] = `${base} ${suffix}`.trim();
-            return acc;
-          }, {});
-          const description = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-            const base = nameMap[lang] ?? nameMap[uiLang] ?? "";
-            acc[lang] =
-              lang === "en"
-                ? `A ${variant.en.toLowerCase()} ${base.toLowerCase()} selection.`
-                : `Selección ${variant.es.toLowerCase()} de ${base.toLowerCase()}.`;
-            return acc;
-          }, {});
-          return {
-            id,
-            name,
-            description,
-            longDescription: createLocalized(draft.meta.locales),
-            price: {
-              amount: 140 + index * 20,
-              currency: draft.meta.currency
-            },
-            allergens: [],
-            vegan: false,
-            media: {
-              hero360: sampleHero
-            }
-          };
-        });
-
-      draft.categories = categoryNames.map((label, index) => {
-        const nameMap = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-          const localized = template.categories[lang] ?? categoryNames;
-          acc[lang] = localized[index] ?? label;
+      const toLocalized = (esValue: string, enValue: string) =>
+        draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+          acc[lang] = lang === "en" ? enValue : esValue;
           return acc;
         }, {});
-        return {
-          id: `section-${Math.random().toString(36).slice(2, 8)}`,
-          name: nameMap,
-          items: buildDishForCategory(nameMap)
-        };
+      const createDish = (
+        esName: string,
+        enName: string,
+        esDesc: string,
+        enDesc: string,
+        esLong: string,
+        enLong: string,
+        amount: number,
+        allergens: string[],
+        vegan = false
+      ): MenuItem => ({
+        id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: toLocalized(esName, enName),
+        description: toLocalized(esDesc, enDesc),
+        longDescription: toLocalized(esLong, enLong),
+        price: {
+          amount,
+          currency: draft.meta.currency
+        },
+        allergens,
+        vegan,
+        media: {
+          hero360: sampleHero
+        }
       });
+
+      draft.meta.restaurantName = toLocalized("Cafe Aurora", "Cafe Aurora");
+      draft.meta.title = toLocalized("Menu Brunch de la Casa", "House Brunch Menu");
+
+      draft.categories = [
+        {
+          id: `section-${Math.random().toString(36).slice(2, 8)}`,
+          name: toLocalized("Cafe", "Cafe"),
+          items: [
+            createDish(
+              "Flat White Avellana",
+              "Hazelnut Flat White",
+              "Espresso doble con leche cremosa y avellana tostada.",
+              "Double espresso with velvety milk and toasted hazelnut notes.",
+              "Inspirado en las cafeterias de Melbourne, se sirve con microespuma fina para resaltar el perfil del grano.",
+              "Inspired by Melbourne coffee bars, served with fine microfoam to highlight bean profile.",
+              95,
+              ["Lacteos", "Nueces"]
+            ),
+            createDish(
+              "Cold Brew Cacao",
+              "Cocoa Cold Brew",
+              "Extraccion en frio de 16 horas con nibs de cacao.",
+              "16-hour cold extraction with cocoa nibs.",
+              "Su maceracion lenta reduce la acidez y aporta un final achocolatado natural, sin jarabes pesados.",
+              "Its slow brew lowers acidity and adds a natural cocoa finish without heavy syrups.",
+              88,
+              [],
+              true
+            ),
+            createDish(
+              "Matcha Nube",
+              "Cloud Matcha",
+              "Matcha ceremonial batido con leche de avena.",
+              "Ceremonial matcha whisked with oat milk.",
+              "La receta equilibra umami y dulzor vegetal para una taza ligera y energizante.",
+              "The recipe balances umami and plant sweetness for a light, energizing cup.",
+              102,
+              [],
+              true
+            ),
+            createDish(
+              "Chocolate Especiado",
+              "Spiced Hot Chocolate",
+              "Cacao oscuro con canela y un toque de chile ancho.",
+              "Dark cocoa with cinnamon and a hint of ancho chili.",
+              "Version inspirada en el chocolate de mesa tradicional mexicano, cremosa y aromatica.",
+              "A version inspired by traditional Mexican table chocolate, creamy and aromatic.",
+              98,
+              ["Lacteos"]
+            )
+          ]
+        },
+        {
+          id: `section-${Math.random().toString(36).slice(2, 8)}`,
+          name: toLocalized("Brunch", "Brunch"),
+          items: [
+            createDish(
+              "Croissant Vegano de Pistache",
+              "Vegan Pistachio Croissant",
+              "Laminado artesanal con crema ligera de pistache.",
+              "Artisanal laminated pastry with light pistachio cream.",
+              "Fermentacion de 24 horas para lograr una miga aireada y capas crujientes.",
+              "24-hour fermentation for an airy crumb and crisp layers.",
+              120,
+              ["Gluten", "Nueces"],
+              true
+            ),
+            createDish(
+              "Toast de Salmon Curado",
+              "Cured Salmon Toast",
+              "Pan de masa madre, queso crema de eneldo y salmon curado.",
+              "Sourdough toast with dill cream cheese and cured salmon.",
+              "El salmon se cura en sal y citricos para lograr textura firme y sabor limpio.",
+              "Salmon is cured with salt and citrus for a firm texture and clean taste.",
+              185,
+              ["Gluten", "Pescado", "Lacteos"]
+            ),
+            createDish(
+              "Hotcakes de Mora Azul",
+              "Blueberry Pancakes",
+              "Hotcakes esponjosos con compota de mora azul.",
+              "Fluffy pancakes with blueberry compote.",
+              "Se terminan con mantequilla batida de vainilla y ralladura de limon.",
+              "Finished with whipped vanilla butter and lemon zest.",
+              165,
+              ["Gluten", "Huevo", "Lacteos"]
+            ),
+            createDish(
+              "Bowl Verde de Temporada",
+              "Seasonal Green Bowl",
+              "Quinoa, aguacate, pepino, brotes y aderezo citrico.",
+              "Quinoa, avocado, cucumber, sprouts and citrus dressing.",
+              "Plato fresco de temporada pensado para una opcion ligera y completa.",
+              "Fresh seasonal plate designed as a light yet complete option.",
+              148,
+              [],
+              true
+            )
+          ]
+        }
+      ];
       wizardCategoryId = draft.categories[0]?.id ?? "";
     }
     touchDraft();
@@ -4073,7 +4206,10 @@ Windows:
 
       <section class="preview-panel {layoutMode}">
         <section class="preview-shell {effectivePreview}">
-          <section class="menu-preview" style={`--menu-font:${previewFontStack};`}>
+        <section
+          class={`menu-preview template-${activeProject.meta.template || "focus-rows"}`}
+          style={`--menu-font:${previewFontStack};`}
+        >
             {#if activeProject.backgrounds[0]?.src}
               <div
                 class="menu-background"
@@ -4171,11 +4307,11 @@ Windows:
     <div class="dish-modal" on:click={closeDish}>
       <div class="dish-modal__card" on:click|stopPropagation>
         <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
+        <p class="dish-modal__title">{textOf(dish.name)}</p>
         <div class="dish-modal__media">
           <img src={dish.media.hero360 ?? ""} alt={textOf(dish.name)} />
         </div>
         <div class="dish-modal__content">
-          <p class="dish-modal__title">{textOf(dish.name)}</p>
           <p class="dish-modal__desc">{textOf(dish.description)}</p>
           {#if textOf(dish.longDescription)}
             <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
@@ -4188,10 +4324,10 @@ Windows:
           {#if dish.vegan}
             <span class="dish-modal__badge">🌿 {t("veganLabel")}</span>
           {/if}
-          <p class="dish-modal__price">
-            {formatPrice(dish.price.amount)}
-          </p>
         </div>
+        <p class="dish-modal__price">
+          {formatPrice(dish.price.amount)}
+        </p>
       </div>
     </div>
   {/if}

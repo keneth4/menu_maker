@@ -575,20 +575,23 @@ body {
 }
 
 .menu-section__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.3em;
   color: rgba(226, 232, 240, 0.7);
+  text-align: center;
 }
 
 .menu-section__title {
+  margin: 0;
   font-size: 0.75rem;
 }
 
 .menu-section__count {
+  margin: 0;
   font-size: 0.65rem;
 }
 
@@ -624,6 +627,26 @@ body {
   justify-content: center;
   padding-inline: 0;
   scroll-padding-inline: 0;
+}
+
+.template-jukebox .menu-scroll {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+
+.template-jukebox .menu-section {
+  min-width: 100%;
+  scroll-snap-align: start;
+  padding-inline: 4px;
+}
+
+.template-jukebox .menu-carousel {
+  --carousel-card: clamp(220px, 62vw, 300px);
+  --carousel-edge: max(20px, calc(50% - (var(--carousel-card) / 2)));
 }
 
 .menu-carousel::-webkit-scrollbar {
@@ -781,8 +804,10 @@ body {
 }
 
 .dish-modal__title {
+  margin: 0;
   font-size: 1.1rem;
   color: #f8fafc;
+  text-align: center;
 }
 
 .dish-modal__desc {
@@ -814,7 +839,10 @@ body {
 }
 
 .dish-modal__price {
+  margin: 0;
+  justify-self: end;
   font-size: 1rem;
+  font-weight: 700;
   color: #fbbf24;
 }
 
