@@ -2442,33 +2442,91 @@ render();
     draft.meta.template = templateId;
     const template = templateOptions.find((item) => item.id === templateId);
     if (!template) return;
-    if (draft.categories.length === 0) {
-      const baseCategories =
-        template.categories[uiLang] ?? template.categories.es ?? template.categories.en ?? [];
-      draft.categories = baseCategories.map((_, index) => ({
-        id: `section-${Math.random().toString(36).slice(2, 8)}`,
-        name: draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-          const localized = template.categories[lang] ?? baseCategories;
-          acc[lang] = localized[index] ?? baseCategories[index] ?? "";
-          return acc;
-        }, {}),
-        items: []
-      }));
-      wizardCategoryId = draft.categories[0]?.id ?? "";
-    }
-    if (draft.backgrounds.length === 0 && assetMode === "bridge") {
+    const slug = getProjectSlug();
+    const assetRoot =
+      assetMode === "bridge" ? `/projects/${slug}/assets` : "/projects/demo/assets";
+    const sampleHero = `${assetRoot}/dishes/sample360food.gif`;
+    const sampleBg = `${assetRoot}/backgrounds/background.webp`;
+
+    const needsSampleAssets = draft.backgrounds.length === 0 || draft.categories.length === 0;
+    if (needsSampleAssets && assetMode === "bridge") {
       await seedDemoAssets();
-      const slug = getProjectSlug();
+    }
+
+    if (draft.backgrounds.length === 0) {
       draft.backgrounds = [
         {
           id: `bg-${Date.now()}`,
           label: `${t("backgroundLabel")} 1`,
-          src: `/projects/${slug}/assets/backgrounds/background.webp`,
+          src: sampleBg,
           type: "image"
         }
       ];
     }
+
+    if (draft.categories.length === 0) {
+      const baseCategories =
+        template.categories[uiLang] ?? template.categories.es ?? template.categories.en ?? [];
+      const fallback = uiLang === "en" ? ["Starters", "Specials"] : ["Entradas", "Especiales"];
+      const categoryNames = Array.from({ length: 2 }).map((_, index) =>
+        baseCategories[index] ?? fallback[index] ?? `${t("section")} ${index + 1}`
+      );
+      const dishVariants = [
+        { es: "Clásico", en: "Classic" },
+        { es: "de la Casa", en: "House" },
+        { es: "Ahumado", en: "Smoked" },
+        { es: "Especial", en: "Special" }
+      ];
+      const buildDishForCategory = (nameMap: Record<string, string>) =>
+        dishVariants.map((variant, index) => {
+          const id = `dish-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`;
+          const name = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+            const base = nameMap[lang] ?? nameMap[uiLang] ?? categoryNames[0];
+            const suffix = lang === "en" ? variant.en : variant.es;
+            acc[lang] = `${base} ${suffix}`.trim();
+            return acc;
+          }, {});
+          const description = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+            const base = nameMap[lang] ?? nameMap[uiLang] ?? "";
+            acc[lang] =
+              lang === "en"
+                ? `A ${variant.en.toLowerCase()} ${base.toLowerCase()} selection.`
+                : `Selección ${variant.es.toLowerCase()} de ${base.toLowerCase()}.`;
+            return acc;
+          }, {});
+          return {
+            id,
+            name,
+            description,
+            longDescription: createLocalized(draft.meta.locales),
+            price: {
+              amount: 140 + index * 20,
+              currency: draft.meta.currency
+            },
+            allergens: [],
+            vegan: false,
+            media: {
+              hero360: sampleHero
+            }
+          };
+        });
+
+      draft.categories = categoryNames.map((label, index) => {
+        const nameMap = draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
+          const localized = template.categories[lang] ?? categoryNames;
+          acc[lang] = localized[index] ?? label;
+          return acc;
+        }, {});
+        return {
+          id: `section-${Math.random().toString(36).slice(2, 8)}`,
+          name: nameMap,
+          items: buildDishForCategory(nameMap)
+        };
+      });
+      wizardCategoryId = draft.categories[0]?.id ?? "";
+    }
     touchDraft();
+    initCarouselIndices(draft);
   };
 
   const addBackground = () => {
