@@ -43,6 +43,17 @@
   let carouselRaf: Record<string, number | null> = {};
   let carouselSnapTimeout: Record<string, number | null> = {};
   let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
+  let jukeboxTouchState: Record<
+    string,
+    | {
+        touchId: number;
+        startX: number;
+        startY: number;
+        lastY: number;
+        axis: "pending" | "vertical" | "horizontal";
+      }
+    | null
+  > = {};
   let sectionFocusRaf: number | null = null;
   let sectionSnapTimeout: ReturnType<typeof setTimeout> | null = null;
   let languageMenuOpen = false;
@@ -1568,6 +1579,8 @@ let startupToken = 0;
 const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
 const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
+const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
+const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 const jukeboxWheelState = new Map();
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
@@ -1837,7 +1850,7 @@ const buildCarousel = (category) => {
           (entry) => \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
-                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" loading="lazy" decoding="async" fetchpriority="low" />
+                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -2147,17 +2160,9 @@ const bindCarousels = () => {
       const start = 0;
       container.dataset.activeIndex = String(start);
       applyFocusState(container, start, count);
-      const state = jukeboxWheelState.get(id) || { settle: 0 };
+      const state = jukeboxWheelState.get(id) || { settle: 0, touch: null };
       jukeboxWheelState.set(id, state);
-      const onWheel = (event) => {
-        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-        event.preventDefault();
-        const delta = normalizeJukeboxWheelDelta(event);
-        if (!delta) return;
-        const current = Number(container.dataset.activeIndex || "0") || 0;
-        const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
-        container.dataset.activeIndex = String(next);
-        applyFocusState(container, next, count);
+      const queueSnap = () => {
         if (state.settle) window.clearTimeout(state.settle);
         state.settle = window.setTimeout(() => {
           const activeIndex = Number(container.dataset.activeIndex || "0") || 0;
@@ -2167,12 +2172,76 @@ const bindCarousels = () => {
           state.settle = 0;
         }, JUKEBOX_WHEEL_SETTLE_MS);
       };
+      const applyDelta = (delta) => {
+        if (!delta) return;
+        const current = Number(container.dataset.activeIndex || "0") || 0;
+        const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+        container.dataset.activeIndex = String(next);
+        applyFocusState(container, next, count);
+        queueSnap();
+      };
+      const onWheel = (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        const delta = normalizeJukeboxWheelDelta(event);
+        if (!delta) return;
+        applyDelta(delta);
+      };
+      const onTouchStart = (event) => {
+        const touch = event.changedTouches?.[0];
+        if (!touch) return;
+        state.touch = {
+          id: touch.identifier,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          lastY: touch.clientY,
+          axis: "pending"
+        };
+      };
+      const onTouchMove = (event) => {
+        if (!state.touch) return;
+        const touch = Array.from(event.touches || []).find(
+          (entry) => entry.identifier === state.touch.id
+        );
+        if (!touch) return;
+        const totalDx = touch.clientX - state.touch.startX;
+        const totalDy = touch.clientY - state.touch.startY;
+        if (
+          state.touch.axis === "pending" &&
+          Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
+        ) {
+          state.touch.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
+        }
+        if (state.touch.axis !== "vertical") return;
+        event.preventDefault();
+        const deltaY = touch.clientY - state.touch.lastY;
+        state.touch.lastY = touch.clientY;
+        if (Math.abs(deltaY) < 0.2) return;
+        applyDelta(-deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
+      };
+      const clearTouch = (event) => {
+        if (!state.touch) return;
+        const ended = Array.from(event.changedTouches || []).some(
+          (entry) => entry.identifier === state.touch.id
+        );
+        if (!ended) return;
+        state.touch = null;
+      };
       container.addEventListener("wheel", onWheel, { passive: false });
+      container.addEventListener("touchstart", onTouchStart, { passive: true });
+      container.addEventListener("touchmove", onTouchMove, { passive: false });
+      container.addEventListener("touchend", clearTouch, { passive: true });
+      container.addEventListener("touchcancel", clearTouch, { passive: true });
       carouselCleanup.push(() => {
         container.removeEventListener("wheel", onWheel);
+        container.removeEventListener("touchstart", onTouchStart);
+        container.removeEventListener("touchmove", onTouchMove);
+        container.removeEventListener("touchend", clearTouch);
+        container.removeEventListener("touchcancel", clearTouch);
         if (state.settle) {
           window.clearTimeout(state.settle);
         }
+        state.touch = null;
         jukeboxWheelState.delete(id);
       });
       return;
@@ -2247,7 +2316,7 @@ const bindCards = () => {
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
-          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" decoding="async" />
+          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
         <div class="dish-modal__content">
           <div class="dish-modal__text">
@@ -2371,6 +2440,12 @@ const closeModal = () => {
 
 modal?.addEventListener("click", (event) => {
   if (event.target === modal) closeModal();
+});
+modal?.addEventListener("contextmenu", (event) => event.preventDefault());
+modal?.addEventListener("dragstart", (event) => {
+  if (event.target instanceof HTMLImageElement) {
+    event.preventDefault();
+  }
 });
 
 render();
@@ -2704,6 +2779,8 @@ Windows:
   const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
   const JUKEBOX_WHEEL_SETTLE_MS = 240;
   const JUKEBOX_WHEEL_DELTA_CAP = 140;
+  const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
+  const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 
   const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
 
@@ -2793,6 +2870,7 @@ Windows:
       }
     });
     jukeboxWheelSnapTimeout = {};
+    jukeboxTouchState = {};
   };
 
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
@@ -4147,18 +4225,8 @@ Windows:
     }, 160);
   };
 
-  const handleJukeboxWheel = (categoryId: string, event: WheelEvent) => {
-    if (!isJukeboxTemplate) return;
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    event.preventDefault();
-    const category = activeProject?.categories.find((item) => item.id === categoryId);
-    const count = category?.items.length ?? 0;
+  const queueJukeboxSnap = (categoryId: string, count: number) => {
     if (count <= 1) return;
-    const delta = normalizeJukeboxWheelDelta(event);
-    if (!delta) return;
-    const current = carouselActive[categoryId] ?? 0;
-    const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
-    carouselActive = { ...carouselActive, [categoryId]: next };
     if (jukeboxWheelSnapTimeout[categoryId]) {
       clearTimeout(jukeboxWheelSnapTimeout[categoryId] ?? undefined);
     }
@@ -4169,6 +4237,83 @@ Windows:
       jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
     }, JUKEBOX_WHEEL_SETTLE_MS);
     jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: settleTimer };
+  };
+
+  const applyJukeboxDelta = (categoryId: string, count: number, delta: number) => {
+    if (!delta || count <= 1) return;
+    const current = carouselActive[categoryId] ?? 0;
+    const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+    carouselActive = { ...carouselActive, [categoryId]: next };
+    queueJukeboxSnap(categoryId, count);
+  };
+
+  const handleJukeboxWheel = (categoryId: string, event: WheelEvent) => {
+    if (!isJukeboxTemplate) return;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    const category = activeProject?.categories.find((item) => item.id === categoryId);
+    const count = category?.items.length ?? 0;
+    if (count <= 1) return;
+    const delta = normalizeJukeboxWheelDelta(event);
+    if (!delta) return;
+    applyJukeboxDelta(categoryId, count, delta);
+  };
+
+  const handleJukeboxTouchStart = (categoryId: string, event: TouchEvent) => {
+    if (!isJukeboxTemplate) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    jukeboxTouchState = {
+      ...jukeboxTouchState,
+      [categoryId]: {
+        touchId: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastY: touch.clientY,
+        axis: "pending"
+      }
+    };
+  };
+
+  const handleJukeboxTouchMove = (categoryId: string, event: TouchEvent) => {
+    if (!isJukeboxTemplate) return;
+    const state = jukeboxTouchState[categoryId];
+    if (!state) return;
+    const category = activeProject?.categories.find((item) => item.id === categoryId);
+    const count = category?.items.length ?? 0;
+    if (count <= 1) return;
+    const trackedTouch = Array.from(event.touches).find(
+      (touch) => touch.identifier === state.touchId
+    );
+    if (!trackedTouch) return;
+
+    const totalDx = trackedTouch.clientX - state.startX;
+    const totalDy = trackedTouch.clientY - state.startY;
+    if (
+      state.axis === "pending" &&
+      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
+    ) {
+      state.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
+    }
+
+    if (state.axis !== "vertical") return;
+
+    event.preventDefault();
+    const deltaY = trackedTouch.clientY - state.lastY;
+    state.lastY = trackedTouch.clientY;
+    if (Math.abs(deltaY) < 0.2) return;
+    applyJukeboxDelta(categoryId, count, -deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
+  };
+
+  const handleJukeboxTouchEnd = (categoryId: string, event: TouchEvent) => {
+    if (!isJukeboxTemplate) return;
+    const state = jukeboxTouchState[categoryId];
+    if (!state) return;
+    const ended = Array.from(event.changedTouches).some(
+      (touch) => touch.identifier === state.touchId
+    );
+    if (!ended) return;
+    jukeboxTouchState = { ...jukeboxTouchState, [categoryId]: null };
   };
 
   const openDish = (categoryId: string, itemId: string) => {
@@ -5539,6 +5684,11 @@ Windows:
                       class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
                       on:scroll={(event) => handleCarouselScroll(category.id, event)}
                       on:wheel={(event) => handleJukeboxWheel(category.id, event)}
+                      on:touchstart={(event) => handleJukeboxTouchStart(category.id, event)}
+                      on:touchmove|nonpassive={(event) =>
+                        handleJukeboxTouchMove(category.id, event)}
+                      on:touchend={(event) => handleJukeboxTouchEnd(category.id, event)}
+                      on:touchcancel={(event) => handleJukeboxTouchEnd(category.id, event)}
                       data-category-id={category.id}
                     >
                       {#each loopedItems as entry (entry.key)}
@@ -5580,6 +5730,8 @@ Windows:
                               sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
                               alt={textOf(entry.item.name)}
                               draggable="false"
+                              on:contextmenu|preventDefault
+                              on:dragstart|preventDefault
                               loading="lazy"
                               decoding="async"
                               fetchpriority="low"
@@ -5636,6 +5788,8 @@ Windows:
             sizes="(max-width: 720px) 90vw, 440px"
             alt={textOf(dish.name)}
             draggable="false"
+            on:contextmenu|preventDefault
+            on:dragstart|preventDefault
             decoding="async"
           />
         </div>
