@@ -693,6 +693,27 @@ body {
   pointer-events: none;
 }
 
+@media (orientation: landscape) {
+  .menu-tap-hint {
+    left: 14px;
+    right: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    transform: none;
+    justify-content: flex-start;
+    text-align: left;
+    max-width: min(48%, 540px);
+  }
+
+  .menu-asset-disclaimer {
+    left: auto;
+    right: 14px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    transform: none;
+    width: min(48%, 760px);
+    text-align: right;
+  }
+}
+
 .section-nav {
   position: relative;
   z-index: 3;
@@ -863,6 +884,7 @@ body {
   align-content: center;
   min-height: 100%;
   gap: 12px;
+  overflow: hidden;
 }
 
 .template-jukebox .menu-section__head {
@@ -873,7 +895,7 @@ body {
   --carousel-card: clamp(250px, 34vw, 320px);
   display: block;
   position: relative;
-  width: min(720px, 96vw);
+  width: min(720px, 100%);
   max-width: 100%;
   height: clamp(470px, 66vh, 620px);
   overflow: hidden;
@@ -924,9 +946,9 @@ body {
 }
 
 .template-jukebox .carousel-card.active {
-  width: min(420px, calc(100% - 24px));
-  min-width: min(420px, calc(100% - 24px));
-  max-width: min(420px, calc(100% - 24px));
+  width: min(420px, calc(100% - 8px));
+  min-width: min(420px, calc(100% - 8px));
+  max-width: min(420px, calc(100% - 8px));
   transform:
     translate(-50%, -50%)
     translate(0, var(--arc-y))
@@ -977,6 +999,7 @@ body {
 }
 
 .template-jukebox .carousel-text {
+  box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   opacity: 0;
@@ -1068,7 +1091,15 @@ body {
   }
 
   .template-jukebox .menu-carousel {
+    width: 100%;
     height: clamp(430px, 62vh, 560px);
+    padding: 0 6px;
+  }
+
+  .template-jukebox .carousel-card.active {
+    width: min(360px, 100%);
+    min-width: min(360px, 100%);
+    max-width: min(360px, 100%);
   }
 
   .template-jukebox .carousel-card.active .carousel-media {
@@ -1098,10 +1129,6 @@ body {
     transition:
       transform 360ms cubic-bezier(0.18, 0.78, 0.2, 1),
       opacity 200ms ease;
-  }
-
-  .template-jukebox .carousel-card:not(.active) {
-    opacity: 0.28;
   }
 
   .template-jukebox .carousel-card.active .carousel-media {

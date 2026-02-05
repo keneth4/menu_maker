@@ -1993,8 +1993,7 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
       const focusShift = distance < 0.5 ? -arcX : 0;
       const arcY = clampedY;
       const scale = distance < 0.5 ? 1 : 0.88;
-      const opacity =
-        distance < 0.5 ? 1 : distance <= 1.2 ? 0.9 : distance <= 2.2 ? 0.42 : 0;
+      const opacity = distance < 0.5 ? 1 : distance <= 1.2 ? 0.82 : 0;
       const depth = Math.max(1, 220 - Math.round(distance * 26));
       card.style.setProperty("--arc-x", arcX.toFixed(1) + "px");
       card.style.setProperty("--arc-y", arcY.toFixed(1) + "px");
@@ -2772,8 +2771,7 @@ Windows:
     const focusShift = distance < 0.5 ? -arcX : 0;
     const arcY = clampedY;
     const scale = distance < 0.5 ? 1 : 0.88;
-    const opacity =
-      distance < 0.5 ? 1 : distance <= 1.2 ? 0.9 : distance <= 2.2 ? 0.42 : 0;
+    const opacity = distance < 0.5 ? 1 : distance <= 1.2 ? 0.82 : 0;
     const depth = Math.max(1, 220 - Math.round(distance * 26));
     return `--arc-x:${arcX.toFixed(1)}px;--arc-y:${arcY.toFixed(1)}px;--card-scale:${scale.toFixed(
       3
@@ -5553,7 +5551,7 @@ Windows:
                         {@const stateClass = isJukeboxTemplate
                           ? distance < 0.5
                             ? "active"
-                            : distance < 1.5
+                            : distance < 1.25
                               ? "near"
                               : "far"
                           : distance === 0
