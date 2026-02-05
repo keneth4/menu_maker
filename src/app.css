@@ -848,6 +848,7 @@ body {
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
+  padding: 4px 10px 18px;
 }
 
 .template-jukebox .menu-section {
@@ -858,56 +859,152 @@ body {
   place-items: center;
   align-content: center;
   min-height: 100%;
+  gap: 12px;
+}
+
+.template-jukebox .menu-section__head {
+  gap: 5px;
 }
 
 .template-jukebox .menu-carousel {
-  --carousel-card: clamp(200px, 36vw, 280px);
-  --orbit-radius: clamp(86px, 14vh, 130px);
+  --carousel-card: clamp(250px, 34vw, 320px);
   display: block;
   position: relative;
-  width: min(560px, 92vw);
+  width: min(720px, 96vw);
   max-width: 100%;
-  height: clamp(280px, 54vh, 460px);
+  height: clamp(470px, 66vh, 620px);
   overflow: hidden;
   padding: 0;
+  margin-inline: auto;
   mask-image: none;
   -webkit-mask-image: none;
 }
 
 .template-jukebox .carousel-card {
+  --arc-x: 0px;
+  --arc-y: 0px;
+  --card-scale: 1;
+  --card-opacity: 1;
   position: absolute;
   left: 50%;
   top: 50%;
+  width: var(--carousel-card);
+  min-width: var(--carousel-card);
+  max-width: var(--carousel-card);
+  border-radius: 24px;
+  border: none;
+  padding: 0;
+  background: transparent;
+  gap: 12px;
+  justify-items: center;
+  overflow: visible;
   transform-origin: center center;
-  pointer-events: none;
   transform:
     translate(-50%, -50%)
-    rotate(calc(var(--ring-offset, 0) * 18deg))
-    translateY(calc(-1 * var(--orbit-radius)))
-    rotate(calc(var(--ring-offset, 0) * -18deg))
-    scale(calc(0.62 + (var(--fade, 1) * 0.38)));
-  opacity: var(--fade, 1);
-  filter: blur(calc((1 - var(--fade, 1)) * 6px));
+    translate(var(--arc-x), var(--arc-y))
+    scale(var(--card-scale));
+  opacity: var(--card-opacity);
   z-index: var(--ring-depth, 1);
-  transition: transform 360ms cubic-bezier(0.2, 0.75, 0.2, 1), opacity 220ms ease,
-    filter 240ms ease, box-shadow 260ms ease;
+  pointer-events: none;
+  transition:
+    transform 520ms cubic-bezier(0.16, 0.8, 0.2, 1),
+    opacity 230ms ease;
+}
+
+.template-jukebox .carousel-card.near,
+.template-jukebox .carousel-card.far {
+  transform:
+    translate(-50%, -50%)
+    translate(var(--arc-x), var(--arc-y))
+    scale(var(--card-scale));
 }
 
 .template-jukebox .carousel-card.active {
-  transform: translate(-50%, -50%) scale(1.02);
+  transform:
+    translate(-50%, -50%)
+    translate(var(--arc-x), var(--arc-y))
+    scale(var(--card-scale));
+  opacity: var(--card-opacity);
   pointer-events: auto;
-  filter: none;
-  opacity: 1;
-  z-index: 160;
+}
+
+.template-jukebox .carousel-media {
+  width: clamp(102px, 15vw, 146px);
+  aspect-ratio: 1 / 1;
+  margin: 0;
+  border-radius: 0;
+  overflow: visible;
+  border: none;
+  background: transparent;
+}
+
+.template-jukebox .carousel-card.active .carousel-media {
+  width: clamp(198px, 29vw, 258px);
+}
+
+.template-jukebox .carousel-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 26px rgba(2, 6, 23, 0.44));
+  transition: filter 220ms ease, opacity 220ms ease;
+}
+
+.template-jukebox .carousel-card:not(.active) .carousel-media img {
+  filter: blur(1.1px) saturate(0.9) brightness(0.92);
+  opacity: 0.84;
 }
 
 .template-jukebox .carousel-card.active .carousel-text {
-  background: rgba(2, 6, 23, 0.86);
-  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.48);
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  max-height: 240px;
+  padding: 16px 18px;
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.82);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.52);
 }
 
 .template-jukebox .carousel-text {
-  background: rgba(2, 6, 23, 0.78);
+  width: min(420px, 90vw);
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 18px;
+  border-color: transparent;
+  background: rgba(2, 6, 23, 0.22);
+  transition:
+    opacity 220ms ease,
+    transform 260ms ease,
+    max-height 260ms ease,
+    padding 220ms ease;
+}
+
+.template-jukebox .carousel-row {
+  width: 100%;
+  align-items: flex-start;
+}
+
+.template-jukebox .carousel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.template-jukebox .carousel-price {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.template-jukebox .carousel-card.active .carousel-title {
+  font-size: 1.08rem;
+}
+
+.template-jukebox .carousel-card.active .carousel-desc {
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
 
 .template-jukebox .carousel-nav {
@@ -947,6 +1044,59 @@ body {
   .section-nav__label {
     font-size: 0.48rem;
     letter-spacing: 0.1em;
+  }
+
+  .template-jukebox .menu-carousel {
+    height: clamp(430px, 62vh, 560px);
+  }
+
+  .template-jukebox .carousel-card.active .carousel-media {
+    width: clamp(168px, 46vw, 220px);
+  }
+
+  .template-jukebox .carousel-media {
+    width: clamp(90px, 24vw, 118px);
+  }
+
+  .template-jukebox .carousel-text {
+    width: min(88vw, 340px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .template-jukebox .menu-carousel {
+    height: clamp(210px, 50vh, 290px);
+  }
+
+  .template-jukebox .carousel-card {
+    transition:
+      transform 360ms cubic-bezier(0.18, 0.78, 0.2, 1),
+      opacity 200ms ease;
+  }
+
+  .template-jukebox .carousel-card:not(.active) {
+    opacity: 0.28;
+  }
+
+  .template-jukebox .carousel-card.active .carousel-media {
+    width: clamp(122px, 23vw, 164px);
+  }
+
+  .template-jukebox .carousel-media {
+    width: clamp(58px, 12vw, 82px);
+  }
+
+  .template-jukebox .carousel-card.active .carousel-text {
+    max-height: 118px;
+    padding: 8px 12px;
+    width: min(72vw, 380px);
+  }
+
+  .template-jukebox .carousel-card.active .carousel-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
 

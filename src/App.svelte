@@ -1567,10 +1567,10 @@ let carouselCleanup = [];
 let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
-const JUKEBOX_WHEEL_STEP_THRESHOLD = 110;
-const JUKEBOX_WHEEL_COOLDOWN_MS = 180;
-const JUKEBOX_WHEEL_SETTLE_MS = 160;
-const JUKEBOX_WHEEL_DELTA_CAP = 260;
+const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
+const JUKEBOX_WHEEL_COOLDOWN_MS = 340;
+const JUKEBOX_WHEEL_SETTLE_MS = 240;
+const JUKEBOX_WHEEL_DELTA_CAP = 140;
 const jukeboxWheelState = new Map();
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
@@ -1981,10 +1981,22 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
     cards.forEach((card, index) => {
       const sourceIndex = Number(card.dataset.source || index);
       const offset = getCircularOffset(activeIndex, sourceIndex, count);
-      const fade = Math.max(0.16, 1 - Math.abs(offset) * 0.2);
-      const depth = Math.max(1, 120 - Math.round(Math.abs(offset) * 10));
-      card.style.setProperty("--fade", String(fade));
-      card.style.setProperty("--ring-offset", String(offset));
+      const distance = Math.abs(offset);
+      const wheelRadius = 420;
+      const stepY = 210;
+      const rawY = offset * stepY;
+      const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
+      const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
+      const arcX = distance < 0.5 ? 0 : -(wheelRadius - chord);
+      const arcY = clampedY;
+      const scale = distance < 0.5 ? 1 : 0.88;
+      const opacity =
+        distance < 0.5 ? 1 : distance <= 1.2 ? 0.9 : distance <= 2.2 ? 0.42 : 0;
+      const depth = Math.max(1, 220 - Math.round(distance * 26));
+      card.style.setProperty("--arc-x", arcX.toFixed(1) + "px");
+      card.style.setProperty("--arc-y", arcY.toFixed(1) + "px");
+      card.style.setProperty("--card-scale", scale.toFixed(3));
+      card.style.setProperty("--card-opacity", opacity.toFixed(3));
       card.style.setProperty("--ring-depth", String(depth));
       card.classList.toggle("active", Math.abs(offset) < 0.5);
     });
@@ -2695,10 +2707,10 @@ Windows:
   ];
 
   const LOOP_COPIES = 5;
-  const JUKEBOX_WHEEL_STEP_THRESHOLD = 110;
-  const JUKEBOX_WHEEL_COOLDOWN_MS = 180;
-  const JUKEBOX_WHEEL_SETTLE_MS = 160;
-  const JUKEBOX_WHEEL_DELTA_CAP = 260;
+  const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
+  const JUKEBOX_WHEEL_COOLDOWN_MS = 340;
+  const JUKEBOX_WHEEL_SETTLE_MS = 240;
+  const JUKEBOX_WHEEL_DELTA_CAP = 140;
 
   const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
 
@@ -2750,9 +2762,21 @@ Windows:
 
   const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
     const offset = getCircularOffset(activeIndex, sourceIndex, count);
-    const fade = Math.max(0.16, 1 - Math.abs(offset) * 0.2);
-    const depth = Math.max(1, 120 - Math.round(Math.abs(offset) * 10));
-    return `--fade:${fade};--ring-offset:${offset};--ring-depth:${depth};`;
+    const distance = Math.abs(offset);
+    const wheelRadius = 420;
+    const stepY = 210;
+    const rawY = offset * stepY;
+    const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
+    const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
+    const arcX = distance < 0.5 ? 0 : -(wheelRadius - chord);
+    const arcY = clampedY;
+    const scale = distance < 0.5 ? 1 : 0.88;
+    const opacity =
+      distance < 0.5 ? 1 : distance <= 1.2 ? 0.9 : distance <= 2.2 ? 0.42 : 0;
+    const depth = Math.max(1, 220 - Math.round(distance * 26));
+    return `--arc-x:${arcX.toFixed(1)}px;--arc-y:${arcY.toFixed(1)}px;--card-scale:${scale.toFixed(
+      3
+    )};--card-opacity:${opacity.toFixed(3)};--ring-depth:${depth};`;
   };
 
   const normalizeJukeboxWheelDelta = (event: WheelEvent) => {
