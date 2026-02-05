@@ -4,3 +4,8 @@ dist
 coverage
 playwright-report
 playwright/.cache
+.DS_Store
+public/projects/*
+!public/projects/index.json
+!public/projects/sample-cafebrunch-menu/
+!public/projects/sample-cafebrunch-menu/**

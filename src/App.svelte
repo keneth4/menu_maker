@@ -16,7 +16,7 @@
   let project: MenuProject | null = null;
   let draft: MenuProject | null = null;
   let projects: ProjectSummary[] = [];
-  let activeSlug = "demo";
+  let activeSlug = "nuevo-proyecto";
   let locale = "es";
   let loadError = "";
   let activeProject: MenuProject | null = null;
@@ -28,6 +28,7 @@
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
   let deviceMode: "mobile" | "desktop" = "desktop";
+  let isJukeboxTemplate = false;
   let editorTab: "info" | "assets" | "edit" | "wizard" = "info";
   let wizardStep = 0;
   let projectFileInput: HTMLInputElement | null = null;
@@ -41,6 +42,9 @@
   let carouselActive: Record<string, number> = {};
   let carouselRaf: Record<string, number | null> = {};
   let carouselSnapTimeout: Record<string, number | null> = {};
+  let jukeboxWheelLock: Record<string, number> = {};
+  let jukeboxWheelCarry: Record<string, number> = {};
+  let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
   let sectionFocusRaf: number | null = null;
   let sectionSnapTimeout: ReturnType<typeof setTimeout> | null = null;
   let languageMenuOpen = false;
@@ -83,6 +87,7 @@
   let rootFiles: string[] = [];
   let assetOptions: string[] = [];
   let rootLabel = "";
+  let assetProjectReadOnly = false;
   let expandedPaths: Record<string, boolean> = {};
   let treeRows: {
     entry: (typeof fsEntries)[number];
@@ -101,6 +106,22 @@
   let previewStartupProgress = 100;
   let previewStartupSignature = "";
   let previewStartupToken = 0;
+  let templateSyncSignature = "";
+  let wizardDemoPreview = false;
+  let wizardNeedsRootBackground = false;
+  let wizardShowcaseProject: MenuProject | null = null;
+  let templateDemoProjectCache: MenuProject | null = null;
+  let templateDemoProjectPromise: Promise<MenuProject | null> | null = null;
+
+  const TEMPLATE_DEMO_PROJECT_SLUG = "sample-cafebrunch-menu";
+  const TEMPLATE_DEMO_ASSET_PREFIXES = [
+    `/projects/${TEMPLATE_DEMO_PROJECT_SLUG}/assets/`,
+    "/projects/demo/assets/"
+  ] as const;
+  const READ_ONLY_ASSET_PROJECTS = new Set<string>([
+    TEMPLATE_DEMO_PROJECT_SLUG,
+    "demo"
+  ]);
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -327,6 +348,10 @@
       wizardBack: "Anterior",
       wizardComplete: "Completo",
       wizardMissingBackground: "Agrega al menos un fondo con src.",
+      wizardRequireRootBackground:
+        "Sube y selecciona al menos un fondo propio para dejar de usar el demo.",
+      wizardDemoPreviewHint:
+        "Vista demo activa: sube tus assets y selecciona al menos un fondo para usar tu carpeta raíz.",
       wizardMissingCategories: "Crea al menos una sección con nombre.",
       wizardMissingDishes: "Agrega al menos un platillo con nombre y precio.",
       exporting: "Exportando...",
@@ -418,6 +443,10 @@
       errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
       errZipNoBridge: "Para abrir zips necesitas el almacenamiento local activo.",
       assetsRequired: "Carga los assets del proyecto para completar el preview.",
+      assetsReadOnly:
+        "Este proyecto demo es de solo lectura. No puedes modificar ni borrar sus assets.",
+      assetsOwnershipNotice:
+        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
       promptNewFolder: "Nombre de la nueva carpeta",
       promptRename: "Nuevo nombre",
       promptSaveName: "Nombre del archivo del proyecto (zip)"
@@ -454,6 +483,10 @@
       wizardBack: "Back",
       wizardComplete: "Complete",
       wizardMissingBackground: "Add at least one background with src.",
+      wizardRequireRootBackground:
+        "Upload and select at least one of your own backgrounds to stop using demo assets.",
+      wizardDemoPreviewHint:
+        "Demo preview is active: upload your assets and pick at least one background from your root folder.",
       wizardMissingCategories: "Create at least one section with a name.",
       wizardMissingDishes: "Add at least one dish with name and price.",
       exporting: "Exporting...",
@@ -545,6 +578,10 @@
       errZipCompression: "The zip uses unsupported compression. Use a stored zip.",
       errZipNoBridge: "Zip import requires local bridge storage.",
       assetsRequired: "Upload the project assets to complete the preview.",
+      assetsReadOnly:
+        "This demo project is read-only. You cannot modify or delete its assets.",
+      assetsOwnershipNotice:
+        "Assets belong to their owners. Do not copy or reuse this content without permission.",
       promptNewFolder: "New folder name",
       promptRename: "New name",
       promptSaveName: "Project file name (zip)"
@@ -647,7 +684,9 @@
 
   $: assetOptions = rootFiles.length
     ? rootFiles
-    : projectAssets.map((asset) => asset.src).filter(Boolean);
+    : editorTab === "wizard" && wizardDemoPreview
+      ? []
+      : projectAssets.map((asset) => asset.src).filter(Boolean);
   $: rootLabel = rootHandle
     ? rootHandle.name
     : bridgeAvailable
@@ -779,6 +818,13 @@
     const defaultLocale = draft.meta.defaultLocale || "es";
     const hasTemplate = Boolean(draft.meta.template);
     const hasBackground = draft.backgrounds.some((bg) => bg.src && bg.src.trim().length > 0);
+    const hasOwnBackground = hasWizardCustomBackground(draft, rootFiles, assetMode === "none");
+    const hasDemoBackground = draft.backgrounds.some((bg) =>
+      isTemplateDemoAssetPath(bg.src || "")
+    );
+    wizardNeedsRootBackground =
+      hasBackground && (hasDemoBackground || (editorTab === "wizard" && !hasOwnBackground));
+    const hasIdentity = hasBackground && !wizardNeedsRootBackground;
     const hasCategories =
       draft.categories.length > 0 &&
       draft.categories.every((category) => category.name?.[defaultLocale]?.trim());
@@ -795,10 +841,10 @@
       );
     wizardStatus = {
       structure: hasTemplate,
-      identity: hasBackground,
+      identity: hasIdentity,
       categories: hasCategories,
       dishes: hasDishes,
-      preview: hasTemplate && hasBackground && hasCategories && hasDishes
+      preview: hasTemplate && hasIdentity && hasCategories && hasDishes
     };
     const completed = [
       wizardStatus.structure,
@@ -809,6 +855,8 @@
     ].filter(Boolean).length;
     wizardProgress = completed / wizardSteps.length;
   } else {
+    wizardNeedsRootBackground = false;
+    templateSyncSignature = "";
     wizardStatus = {
       structure: false,
       identity: false,
@@ -817,6 +865,17 @@
       preview: false
     };
     wizardProgress = 0;
+  }
+
+  $: if (draft) {
+    const categorySignature = draft.categories
+      .map((category) => `${category.id}:${category.items.length}`)
+      .join("|");
+    const signature = `${draft.meta.template || "focus-rows"}::${categorySignature}`;
+    if (signature !== templateSyncSignature) {
+      templateSyncSignature = signature;
+      initCarouselIndices(draft);
+    }
   }
 
   onMount(async () => {
@@ -871,6 +930,7 @@
   onDestroy(() => {
     previewStartupToken += 1;
     clearBackgroundRotation();
+    clearJukeboxWheelState();
     if (sectionFocusRaf) {
       cancelAnimationFrame(sectionFocusRaf);
       sectionFocusRaf = null;
@@ -881,7 +941,18 @@
     }
   });
 
-  $: activeProject = draft ?? project;
+  $: {
+    const showcaseActive =
+      editorTab === "wizard" &&
+      wizardStep === 0 &&
+      wizardDemoPreview &&
+      wizardShowcaseProject;
+    activeProject = showcaseActive ? wizardShowcaseProject : (draft ?? project);
+  }
+  $: isJukeboxTemplate = activeProject?.meta.template === "jukebox";
+  $: assetProjectReadOnly = isProtectedAssetProjectSlug(
+    draft?.meta.slug || activeSlug || "nuevo-proyecto"
+  );
   $: previewFontStack = activeProject ? buildFontStack(activeProject.meta.fontFamily) : "";
   $: fontFaceCss = activeProject
     ? buildFontFaceCss(activeProject.meta.fontFamily, activeProject.meta.fontSource)
@@ -971,6 +1042,30 @@
     );
   };
 
+  const normalizeAssetSrc = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    return trimmed.startsWith("/") ? trimmed : `/${trimmed.replace(/^\/+/, "")}`;
+  };
+
+  const isTemplateDemoAssetPath = (value: string) => {
+    const normalized = normalizeAssetSrc(value);
+    if (!normalized) return false;
+    return TEMPLATE_DEMO_ASSET_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  };
+
+  const hasWizardCustomBackground = (
+    value: MenuProject,
+    availableRootFiles: string[],
+    allowManualWhenRootMissing: boolean
+  ) =>
+    value.backgrounds.some((bg) => {
+      const src = (bg.src || "").trim();
+      if (!src || isTemplateDemoAssetPath(src)) return false;
+      if (availableRootFiles.length === 0) return allowManualWhenRootMissing;
+      return availableRootFiles.includes(src);
+    });
+
   const getMenuTerm = (term: "allergens" | "vegan", lang = locale) => {
     const localeKey = normalizeLocaleCode(lang) as keyof typeof menuTerms;
     return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
@@ -983,6 +1078,18 @@
     normalizeLocaleCode(lang) === "es"
       ? "Toca o haz clic en un platillo para ver detalles"
       : "Tap or click a dish for details";
+
+  const getAssetOwnershipDisclaimer = (lang = locale) =>
+    normalizeLocaleCode(lang) === "es"
+      ? "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización."
+      : "Assets belong to their owners. Do not copy or reuse this content without permission.";
+
+  const getJukeboxScrollHint = (lang = locale) =>
+    normalizeLocaleCode(lang) === "es"
+      ? "Desliza vertical para girar el disco. Horizontal para cambiar sección."
+      : "Scroll vertically to spin the disc. Horizontal to switch sections.";
+
+  const isProtectedAssetProjectSlug = (slug: string) => READ_ONLY_ASSET_PROJECTS.has(slug);
 
   const getAllergenLabel = (entry: AllergenEntry, lang = locale) => {
     const defaultLocale = activeProject?.meta.defaultLocale ?? "es";
@@ -1090,6 +1197,8 @@
       activeSlug = slug;
       project = normalizeProject(await loadProject(slug));
       draft = cloneProject(project);
+      wizardDemoPreview = false;
+      wizardShowcaseProject = null;
       locale = project.meta.defaultLocale;
       loadError = "";
       initCarouselIndices(project);
@@ -1106,6 +1215,44 @@
       return structuredClone(value);
     }
     return JSON.parse(JSON.stringify(value)) as MenuProject;
+  };
+
+  const loadTemplateDemoProject = async () => {
+    if (templateDemoProjectCache) {
+      return cloneProject(templateDemoProjectCache);
+    }
+    if (!templateDemoProjectPromise) {
+      templateDemoProjectPromise = loadProject(TEMPLATE_DEMO_PROJECT_SLUG)
+        .then((value) => normalizeProject(value))
+        .then((value) => {
+          templateDemoProjectCache = cloneProject(value);
+          return cloneProject(value);
+        })
+        .catch((error) => {
+          console.warn("Unable to load template demo project", error);
+          return null;
+        })
+        .finally(() => {
+          templateDemoProjectPromise = null;
+        });
+    }
+    const loaded = await templateDemoProjectPromise;
+    return loaded ? cloneProject(loaded) : null;
+  };
+
+  const buildWizardShowcaseProject = async (templateId: string) => {
+    if (!draft) return null;
+    const demo = await loadTemplateDemoProject();
+    if (!demo) return null;
+    const showcase = cloneProject(demo);
+    showcase.meta.template = templateId;
+    showcase.meta.locales = [...draft.meta.locales];
+    showcase.meta.defaultLocale = draft.meta.defaultLocale;
+    showcase.meta.currency = draft.meta.currency;
+    showcase.meta.currencyPosition = draft.meta.currencyPosition;
+    showcase.meta.fontFamily = draft.meta.fontFamily;
+    showcase.meta.fontSource = draft.meta.fontSource;
+    return showcase;
   };
 
   const createEmptyProject = (): MenuProject => ({
@@ -1420,6 +1567,11 @@ let carouselCleanup = [];
 let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
+const JUKEBOX_WHEEL_STEP_THRESHOLD = 110;
+const JUKEBOX_WHEEL_COOLDOWN_MS = 180;
+const JUKEBOX_WHEEL_SETTLE_MS = 160;
+const JUKEBOX_WHEEL_DELTA_CAP = 260;
+const jukeboxWheelState = new Map();
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
 const menuTerms = {
@@ -1500,16 +1652,46 @@ const getLoopCopies = (count) => (count > 1 ? LOOP_COPIES : 1);
 const getLoopStart = (count) => count * Math.floor(getLoopCopies(count) / 2);
 const getLoopedItems = (items) => {
   if (items.length <= 1) {
-    return items.map((item, index) => ({ item, loopIndex: index, key: item.id + "-0" }));
+    return items.map((item, index) => ({
+      item,
+      loopIndex: index,
+      sourceIndex: index,
+      key: item.id + "-0"
+    }));
   }
   const copies = getLoopCopies(items.length);
   const looped = [];
   for (let copy = 0; copy < copies; copy += 1) {
     items.forEach((item, index) => {
-      looped.push({ item, loopIndex: copy * items.length + index, key: item.id + "-" + copy });
+      looped.push({
+        item,
+        loopIndex: copy * items.length + index,
+        sourceIndex: index,
+        key: item.id + "-" + copy
+      });
     });
   }
   return looped;
+};
+const getJukeboxItems = (items) =>
+  items.map((item, index) => ({
+    item,
+    loopIndex: index,
+    sourceIndex: index,
+    key: item.id + "-jukebox"
+  }));
+const getCircularOffset = (activeIndex, targetIndex, count) => {
+  if (count <= 1) return 0;
+  let offset = targetIndex - activeIndex;
+  const half = count / 2;
+  while (offset > half) offset -= count;
+  while (offset < -half) offset += count;
+  return offset;
+};
+const normalizeJukeboxWheelDelta = (event) => {
+  const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
+  const scaled = event.deltaY * modeScale;
+  return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
 };
 
 const responsiveWidths = { small: 480, medium: 960, large: 1440 };
@@ -1552,6 +1734,15 @@ const getTapHint = () =>
   (locale || "").toLowerCase().split("-")[0] === "es"
     ? "Toca o haz clic en un platillo para ver detalles"
     : "Tap or click a dish for details";
+const getAssetDisclaimer = () =>
+  (locale || "").toLowerCase().split("-")[0] === "es"
+    ? "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización."
+    : "Assets belong to their owners. Do not copy or reuse this content without permission.";
+const getJukeboxHint = () =>
+  (locale || "").toLowerCase().split("-")[0] === "es"
+    ? "Desliza vertical para girar el disco. Horizontal para cambiar sección."
+    : "Scroll vertically to spin the disc. Horizontal to switch sections.";
+const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
 const collectStartupSources = () => {
   const urls = new Set();
   backgrounds.forEach((bg) => {
@@ -1621,13 +1812,15 @@ const preloadStartupAssets = async () => {
 };
 
 const buildCarousel = (category) => {
-  const looped = getLoopedItems(category.items);
+  const looped = isJukeboxTemplate()
+    ? getJukeboxItems(category.items)
+    : getLoopedItems(category.items);
   return \`
     <div class="menu-section__head">
       <p class="menu-section__title">\${textOf(category.name)}</p>
       <span class="menu-section__count">\${category.items.length} items</span>
     </div>
-    \${category.items.length > 1
+    \${category.items.length > 1 && !isJukeboxTemplate()
       ? '<div class="carousel-nav">' +
         '<button class="carousel-nav__btn prev" type="button" data-category-id="' +
         category.id +
@@ -1641,9 +1834,9 @@ const buildCarousel = (category) => {
       \${looped
         .map(
           (entry) => \`
-            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}">
+            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
-                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" loading="lazy" decoding="async" fetchpriority="low" />
+                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -1702,6 +1895,13 @@ const render = () => {
           </select>
         </div>
       </header>
+      \${isJukeboxTemplate() && DATA.categories.length > 1
+        ? '<div class="section-nav">' +
+          '<button class="section-nav__btn prev" type="button" data-section-dir="-1" aria-label="Previous section"><span aria-hidden="true">‹</span></button>' +
+          '<span class="section-nav__label">' + getJukeboxHint() + "</span>" +
+          '<button class="section-nav__btn next" type="button" data-section-dir="1" aria-label="Next section"><span aria-hidden="true">›</span></button>' +
+          "</div>"
+        : ""}
       <div class="menu-scroll">
         \${DATA.categories
           .map(
@@ -1716,11 +1916,19 @@ const render = () => {
         <span class="menu-tap-hint__dot"></span>
         <span>\${getTapHint()}</span>
       </div>
+      <p class="menu-asset-disclaimer" aria-hidden="true">\${getAssetDisclaimer()}</p>
     </div>
   \`;
   const preview = app.querySelector(".menu-preview");
   if (preview) {
     preview.style.setProperty("--menu-font", getFontStack(fontFamily));
+    preview.addEventListener("contextmenu", (event) => event.preventDefault());
+    preview.addEventListener("dragstart", (event) => {
+      const target = event.target;
+      if (target instanceof HTMLImageElement) {
+        event.preventDefault();
+      }
+    });
   }
   const applyBackgroundState = () => {
     const layers = Array.from(app.querySelectorAll(".menu-background"));
@@ -1751,6 +1959,7 @@ const render = () => {
   });
   bindCarousels();
   bindCarouselNav();
+  bindSectionNav();
   bindSectionFocus();
   bindCards();
   syncStartupUi();
@@ -1765,8 +1974,22 @@ const centerCarousel = (container, index, behavior = "auto") => {
   container.scrollTo({ left: targetLeft, behavior });
 };
 
-const applyFocusState = (container, activeIndex) => {
+const applyFocusState = (container, activeIndex, itemCount = 0) => {
   const cards = Array.from(container.querySelectorAll(".carousel-card"));
+  if (isJukeboxTemplate()) {
+    const count = itemCount || cards.length || 1;
+    cards.forEach((card, index) => {
+      const sourceIndex = Number(card.dataset.source || index);
+      const offset = getCircularOffset(activeIndex, sourceIndex, count);
+      const fade = Math.max(0.16, 1 - Math.abs(offset) * 0.2);
+      const depth = Math.max(1, 120 - Math.round(Math.abs(offset) * 10));
+      card.style.setProperty("--fade", String(fade));
+      card.style.setProperty("--ring-offset", String(offset));
+      card.style.setProperty("--ring-depth", String(depth));
+      card.classList.toggle("active", Math.abs(offset) < 0.5);
+    });
+    return;
+  }
   cards.forEach((card, index) => {
     const distance = Math.abs(activeIndex - index);
     const opacity = Math.max(0.18, 1 - distance * 0.2);
@@ -1811,10 +2034,18 @@ const shiftCarousel = (categoryId, direction) => {
     '.menu-carousel[data-category-id="' + categoryId + '"]'
   );
   if (!container) return;
-  const total = container.querySelectorAll(".carousel-card").length;
-  if (total === 0) return;
   const category = DATA.categories.find((item) => item.id === categoryId);
   const count = category?.items.length || 0;
+  if (count === 0) return;
+  if (isJukeboxTemplate()) {
+    const current = Number(container.dataset.activeIndex || "0") || 0;
+    const next = (current + direction + count) % count;
+    container.dataset.activeIndex = String(next);
+    applyFocusState(container, next, count);
+    return;
+  }
+  const total = container.querySelectorAll(".carousel-card").length;
+  if (total === 0) return;
   const current = getClosestIndex(container);
   const nextIndex = (current + direction + total) % total;
   const finalIndex = remapLoopIndexIfEdge(container, nextIndex, count);
@@ -1838,6 +2069,56 @@ const bindCarouselNav = () => {
   });
 };
 
+const getClosestHorizontalSectionIndex = (container) => {
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  if (sections.length === 0) return -1;
+  const center = container.scrollLeft + container.clientWidth / 2;
+  let closest = 0;
+  let minDistance = Number.POSITIVE_INFINITY;
+  sections.forEach((section, index) => {
+    const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+    const distance = Math.abs(sectionCenter - center);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = index;
+    }
+  });
+  return closest;
+};
+
+const centerSectionHorizontally = (container, index, behavior = "smooth") => {
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  const target = sections[index];
+  if (!target || container.clientWidth === 0) return;
+  const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+  container.scrollTo({ left: targetLeft, behavior });
+};
+
+const shiftSection = (direction) => {
+  const container = app.querySelector(".menu-scroll");
+  if (!container) return;
+  const sections = Array.from(container.querySelectorAll(".menu-section"));
+  if (sections.length <= 1) return;
+  const current = getClosestHorizontalSectionIndex(container);
+  if (current < 0) return;
+  const next = (current + direction + sections.length) % sections.length;
+  centerSectionHorizontally(container, next, "smooth");
+};
+
+const bindSectionNav = () => {
+  const buttons = Array.from(app.querySelectorAll(".section-nav__btn"));
+  buttons.forEach((button) => {
+    const handler = () => {
+      const direction = Number(button.dataset.sectionDir || "1");
+      shiftSection(direction);
+    };
+    button.addEventListener("click", handler);
+    carouselCleanup.push(() => {
+      button.removeEventListener("click", handler);
+    });
+  });
+};
+
 const bindCarousels = () => {
   carouselCleanup.forEach((dispose) => dispose());
   carouselCleanup = [];
@@ -1847,6 +2128,49 @@ const bindCarousels = () => {
     const category = DATA.categories.find((item) => item.id === id);
     const count = category?.items.length || 0;
     if (count === 0) return;
+    if (isJukeboxTemplate()) {
+      const start = 0;
+      container.dataset.activeIndex = String(start);
+      applyFocusState(container, start, count);
+      const state = jukeboxWheelState.get(id) || { lock: 0, carry: 0, settle: 0 };
+      jukeboxWheelState.set(id, state);
+      const onWheel = (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        event.preventDefault();
+        const delta = normalizeJukeboxWheelDelta(event);
+        if (!delta) return;
+        state.carry += delta;
+        const now = performance.now();
+        const readyToAdvance =
+          Math.abs(state.carry) >= JUKEBOX_WHEEL_STEP_THRESHOLD &&
+          now - state.lock >= JUKEBOX_WHEEL_COOLDOWN_MS;
+        if (readyToAdvance) {
+          const direction = state.carry > 0 ? 1 : -1;
+          shiftCarousel(id, direction);
+          state.carry +=
+            direction > 0 ? -JUKEBOX_WHEEL_STEP_THRESHOLD : JUKEBOX_WHEEL_STEP_THRESHOLD;
+          state.lock = now;
+        }
+        if (state.settle) window.clearTimeout(state.settle);
+        state.settle = window.setTimeout(() => {
+          const activeIndex = Number(container.dataset.activeIndex || "0") || 0;
+          const normalized = ((activeIndex % count) + count) % count;
+          container.dataset.activeIndex = String(normalized);
+          applyFocusState(container, normalized, count);
+          state.carry = 0;
+          state.settle = 0;
+        }, JUKEBOX_WHEEL_SETTLE_MS);
+      };
+      container.addEventListener("wheel", onWheel, { passive: false });
+      carouselCleanup.push(() => {
+        container.removeEventListener("wheel", onWheel);
+        if (state.settle) {
+          window.clearTimeout(state.settle);
+        }
+        jukeboxWheelState.delete(id);
+      });
+      return;
+    }
     const start = getLoopStart(count);
 
     const alignTo = (index, behavior = "auto") => {
@@ -1917,7 +2241,7 @@ const bindCards = () => {
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
-          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" decoding="async" />
+          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" decoding="async" />
         </div>
         <div class="dish-modal__content">
           <div class="dish-modal__text">
@@ -1981,6 +2305,25 @@ const bindSectionFocus = () => {
   if (!scroll) return;
   const sections = Array.from(scroll.querySelectorAll(".menu-section"));
   if (sections.length === 0) return;
+  if (isJukeboxTemplate()) {
+    if (scroll.scrollWidth <= scroll.clientWidth + 4) return;
+    let snapTimeout;
+    const onScroll = () => {
+      if (snapTimeout) window.clearTimeout(snapTimeout);
+      snapTimeout = window.setTimeout(() => {
+        const closestIndex = getClosestHorizontalSectionIndex(scroll);
+        if (closestIndex >= 0) {
+          centerSectionHorizontally(scroll, closestIndex, "smooth");
+        }
+      }, 170);
+    };
+    scroll.addEventListener("scroll", onScroll);
+    carouselCleanup.push(() => {
+      scroll.removeEventListener("scroll", onScroll);
+      if (snapTimeout) window.clearTimeout(snapTimeout);
+    });
+    return;
+  }
   applySectionFocus(scroll);
   if (scroll.scrollHeight <= scroll.clientHeight + 4) return;
 
@@ -2074,24 +2417,29 @@ void preloadStartupAssets();
     sourcePath: string
   ): Promise<Uint8Array | null> => {
     if (assetMode === "filesystem" && rootHandle) {
-      const fileHandle = await getFileHandleByPath(sourcePath);
-      const file = await fileHandle.getFile();
-      const buffer = await file.arrayBuffer();
-      return new Uint8Array(buffer);
+      try {
+        const fileHandle = await getFileHandleByPath(sourcePath);
+        const file = await fileHandle.getFile();
+        const buffer = await file.arrayBuffer();
+        return new Uint8Array(buffer);
+      } catch {
+        // Fall back to static fetch for demo assets referenced from /projects/*.
+      }
     }
     if (assetMode === "bridge") {
-      const prefix = `projects/${slug}/assets/`;
-      let bridgePath = sourcePath.startsWith(prefix)
-        ? sourcePath.slice(prefix.length)
-        : sourcePath;
-      if (bridgePath.includes("assets/")) {
-        bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
-      }
+      const lookup = resolveBridgeAssetLookup(sourcePath, slug);
       const response = await fetch(
-        `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
-          bridgePath
+        `/api/assets/file?project=${encodeURIComponent(lookup.slug)}&path=${encodeURIComponent(
+          lookup.path
         )}`
       );
+      if (!response.ok) return null;
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+    const publicPath = normalizeAssetSrc(sourcePath);
+    if (publicPath.startsWith("/projects/")) {
+      const response = await fetch(publicPath);
       if (!response.ok) return null;
       const buffer = await response.arrayBuffer();
       return new Uint8Array(buffer);
@@ -2156,38 +2504,13 @@ void preloadStartupAssets();
     const menuData = JSON.stringify(exportProject, null, 2);
     entries.push({ name: `${slug}/menu.json`, data: encoder.encode(menuData) });
 
-    if (assetMode === "filesystem" && rootHandle) {
-      for (const pair of assetPairs) {
-        try {
-          const fileHandle = await getFileHandleByPath(pair.sourcePath);
-          const file = await fileHandle.getFile();
-          const buffer = await file.arrayBuffer();
-          entries.push({ name: pair.zipPath, data: new Uint8Array(buffer) });
-        } catch (error) {
-          console.warn("Missing asset", pair.sourcePath, error);
-        }
-      }
-    } else if (assetMode === "bridge") {
-      for (const pair of assetPairs) {
-        try {
-          const prefix = `projects/${slug}/assets/`;
-          let bridgePath = pair.sourcePath.startsWith(prefix)
-            ? pair.sourcePath.slice(prefix.length)
-            : pair.sourcePath;
-          if (bridgePath.includes("assets/")) {
-            bridgePath = bridgePath.slice(bridgePath.lastIndexOf("assets/") + "assets/".length);
-          }
-          const response = await fetch(
-            `/api/assets/file?project=${encodeURIComponent(slug)}&path=${encodeURIComponent(
-              bridgePath
-            )}`
-          );
-          if (!response.ok) continue;
-          const buffer = await response.arrayBuffer();
-          entries.push({ name: pair.zipPath, data: new Uint8Array(buffer) });
-        } catch (error) {
-          console.warn("Missing asset", pair.sourcePath, error);
-        }
+    for (const pair of assetPairs) {
+      try {
+        const data = await readAssetBytes(slug, pair.sourcePath);
+        if (!data) continue;
+        entries.push({ name: pair.zipPath, data });
+      } catch (error) {
+        console.warn("Missing asset", pair.sourcePath, error);
       }
     }
 
@@ -2208,6 +2531,8 @@ void preloadStartupAssets();
         let exportPath = normalized;
         if (normalized.startsWith(prefix)) {
           exportPath = `assets/${normalized.slice(prefix.length)}`;
+        } else if (normalized.includes("assets/")) {
+          exportPath = `assets/${normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)}`;
         } else if (!normalized.startsWith("assets/")) {
           const fileName = normalized.split("/").filter(Boolean).pop() ?? "asset";
           exportPath = `assets/${fileName}`;
@@ -2370,6 +2695,10 @@ Windows:
   ];
 
   const LOOP_COPIES = 5;
+  const JUKEBOX_WHEEL_STEP_THRESHOLD = 110;
+  const JUKEBOX_WHEEL_COOLDOWN_MS = 180;
+  const JUKEBOX_WHEEL_SETTLE_MS = 160;
+  const JUKEBOX_WHEEL_DELTA_CAP = 260;
 
   const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
 
@@ -2400,6 +2729,47 @@ Windows:
       });
     }
     return looped;
+  };
+
+  const getJukeboxRenderItems = (items: MenuItem[]) =>
+    items.map((item, index) => ({
+      item,
+      loopIndex: index,
+      sourceIndex: index,
+      key: `${item.id}-jukebox`
+    }));
+
+  const getCircularOffset = (activeIndex: number, targetIndex: number, count: number) => {
+    if (count <= 1) return 0;
+    let offset = targetIndex - activeIndex;
+    const half = count / 2;
+    while (offset > half) offset -= count;
+    while (offset < -half) offset += count;
+    return offset;
+  };
+
+  const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
+    const offset = getCircularOffset(activeIndex, sourceIndex, count);
+    const fade = Math.max(0.16, 1 - Math.abs(offset) * 0.2);
+    const depth = Math.max(1, 120 - Math.round(Math.abs(offset) * 10));
+    return `--fade:${fade};--ring-offset:${offset};--ring-depth:${depth};`;
+  };
+
+  const normalizeJukeboxWheelDelta = (event: WheelEvent) => {
+    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
+    const scaled = event.deltaY * modeScale;
+    return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
+  };
+
+  const clearJukeboxWheelState = () => {
+    Object.values(jukeboxWheelSnapTimeout).forEach((timer) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+    jukeboxWheelLock = {};
+    jukeboxWheelCarry = {};
+    jukeboxWheelSnapTimeout = {};
   };
 
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
@@ -2508,8 +2878,14 @@ Windows:
     previewStartupLoading = false;
   }
 
+  const syncWizardShowcaseVisibility = () => {
+    wizardDemoPreview =
+      editorTab === "wizard" && wizardStep === 0 && Boolean(wizardShowcaseProject);
+  };
+
   const goToStep = (index: number) => {
     wizardStep = index;
+    syncWizardShowcaseVisibility();
   };
 
   const isWizardStepValid = (index: number) => {
@@ -2524,20 +2900,25 @@ Windows:
     if (wizardStep >= wizardSteps.length - 1) return;
     if (!isWizardStepValid(wizardStep)) return;
     wizardStep += 1;
+    syncWizardShowcaseVisibility();
   };
 
   const goPrevStep = () => {
     if (wizardStep <= 0) return;
     wizardStep -= 1;
+    syncWizardShowcaseVisibility();
   };
 
   const setEditorTab = (tab: "info" | "assets" | "edit" | "wizard") => {
     editorTab = tab;
+    syncWizardShowcaseVisibility();
   };
 
   const applyLoadedProject = async (data: MenuProject, sourceName = "") => {
     project = data;
     draft = cloneProject(data);
+    wizardDemoPreview = false;
+    wizardShowcaseProject = null;
     activeSlug = data.meta.slug || "importado";
     lastSaveName = sourceName || `${activeSlug}.zip`;
     locale = data.meta.defaultLocale || "es";
@@ -2562,7 +2943,7 @@ Windows:
     showLanding = false;
   };
 
-  const createNewProject = async () => {
+  const createNewProject = async (options: { forWizard?: boolean } = {}) => {
     const empty = createEmptyProject();
     empty.meta.name = uiLang === "en" ? "New project" : "Nuevo proyecto";
     empty.meta.slug = "new-project";
@@ -2577,13 +2958,29 @@ Windows:
     editLang = uiLang;
     editPanel = "identity";
     wizardLang = uiLang;
+    wizardCategoryId = "";
+    wizardItemId = "";
+    wizardDemoPreview = false;
+    wizardShowcaseProject = null;
     lastSaveName = "";
     needsAssets = false;
     openError = "";
     exportStatus = "";
     exportError = "";
     wizardStep = 0;
-    await applyTemplate(empty.meta.template || "focus-rows");
+    if (options.forWizard) {
+      draft.backgrounds = [
+        {
+          id: `bg-${Date.now()}`,
+          label: `${t("backgroundLabel")} 1`,
+          src: "",
+          type: "image"
+        }
+      ];
+      await applyTemplate(empty.meta.template || "focus-rows", { source: "wizard" });
+    } else {
+      initCarouselIndices(empty);
+    }
     if (assetMode === "bridge") {
       await refreshBridgeEntries();
     }
@@ -2591,20 +2988,20 @@ Windows:
 
   const startCreateProject = async () => {
     await createNewProject();
-    editorTab = "info";
+    setEditorTab("info");
     editorOpen = true;
     showLanding = false;
   };
 
   const startWizard = async () => {
-    await createNewProject();
-    editorTab = "wizard";
+    await createNewProject({ forWizard: true });
+    setEditorTab("wizard");
     editorOpen = true;
     showLanding = false;
   };
 
   const startOpenProject = () => {
-    editorTab = "info";
+    setEditorTab("info");
     editorOpen = true;
     showLanding = false;
     openProjectDialog();
@@ -2787,6 +3184,19 @@ Windows:
 
   const handleMenuScroll = (event: Event) => {
     const container = event.currentTarget as HTMLElement;
+    if (isJukeboxTemplate) {
+      if (container.scrollWidth <= container.clientWidth + 4) return;
+      if (sectionSnapTimeout) {
+        clearTimeout(sectionSnapTimeout);
+      }
+      sectionSnapTimeout = setTimeout(() => {
+        const closestIndex = getClosestHorizontalSectionIndex(container);
+        if (closestIndex >= 0) {
+          centerSectionHorizontally(container, closestIndex, "smooth");
+        }
+      }, 170);
+      return;
+    }
     if (sectionFocusRaf) {
       cancelAnimationFrame(sectionFocusRaf);
     }
@@ -2803,6 +3213,9 @@ Windows:
 
   const syncCarousels = async () => {
     await tick();
+    if (isJukeboxTemplate) {
+      return;
+    }
     const containers = Array.from(
       document.querySelectorAll<HTMLElement>(".menu-carousel")
     );
@@ -2827,10 +3240,52 @@ Windows:
     });
   };
 
+  const getClosestHorizontalSectionIndex = (container: HTMLElement) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (sections.length === 0) return -1;
+    const centerX = container.scrollLeft + container.clientWidth / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+      const distance = Math.abs(sectionCenter - centerX);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
+  };
+
+  const centerSectionHorizontally = (
+    container: HTMLElement,
+    index: number,
+    behavior: ScrollBehavior
+  ) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    const target = sections[index];
+    if (!target || container.clientWidth === 0) return;
+    const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
+    container.scrollTo({ left: targetLeft, behavior });
+  };
+
+  const shiftSection = (direction: number) => {
+    const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
+    if (!container) return;
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (sections.length <= 1) return;
+    const current = getClosestHorizontalSectionIndex(container);
+    if (current < 0) return;
+    const next = (current + direction + sections.length) % sections.length;
+    centerSectionHorizontally(container, next, "smooth");
+  };
+
   const initCarouselIndices = (value: MenuProject) => {
+    clearJukeboxWheelState();
     const next: Record<string, number> = {};
+    const isJukebox = value.meta.template === "jukebox";
     value.categories.forEach((category) => {
-      next[category.id] = getLoopStart(category.items.length);
+      next[category.id] = isJukebox ? 0 : getLoopStart(category.items.length);
     });
     carouselActive = next;
     void syncCarousels();
@@ -2898,7 +3353,13 @@ Windows:
     rootFiles = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
   };
 
-  const getProjectSlug = () => draft?.meta.slug || activeSlug || "demo";
+  const getProjectSlug = () => draft?.meta.slug || activeSlug || "nuevo-proyecto";
+
+  const ensureAssetProjectWritable = () => {
+    if (!assetProjectReadOnly) return true;
+    fsError = t("assetsReadOnly");
+    return false;
+  };
 
   const updateAssetMode = () => {
     if (rootHandle) {
@@ -2964,17 +3425,22 @@ Windows:
     }
   };
 
-  const seedDemoAssets = async () => {
-    if (assetMode !== "bridge") return;
-    try {
-      await bridgeRequest("seed", { from: "demo" });
-      await refreshBridgeEntries();
-    } catch (error) {
-      fsError = error instanceof Error ? error.message : t("errOpenFolder");
-    }
-  };
-
   const normalizePath = (value: string) => value.replace(/^\/+/, "").trim();
+
+  const resolveBridgeAssetLookup = (sourcePath: string, fallbackSlug: string) => {
+    const normalized = normalizePath(sourcePath);
+    const match = normalized.match(/^projects\/([^/]+)\/assets\/(.+)$/);
+    if (match) {
+      return { slug: match[1], path: match[2] };
+    }
+    if (normalized.includes("assets/")) {
+      return {
+        slug: fallbackSlug,
+        path: normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)
+      };
+    }
+    return { slug: fallbackSlug, path: normalized };
+  };
 
   const toBase64 = (data: Uint8Array) => {
     let binary = "";
@@ -3127,6 +3593,7 @@ Windows:
   };
 
   const createFolder = async () => {
+    if (!ensureAssetProjectWritable()) return;
     const name = window.prompt(t("promptNewFolder"));
     if (!name) return;
     if (assetMode === "filesystem") {
@@ -3184,6 +3651,7 @@ Windows:
   };
 
   const renameEntry = async (entry: (typeof fsEntries)[number]) => {
+    if (!ensureAssetProjectWritable()) return;
     const newName = window.prompt(t("promptRename"), entry.name);
     if (!newName || newName === entry.name) return;
     if (assetMode === "filesystem") {
@@ -3270,6 +3738,7 @@ Windows:
   };
 
   const moveEntry = async (entry: (typeof fsEntries)[number]) => {
+    if (!ensureAssetProjectWritable()) return;
     const target = window.prompt(t("promptMoveTo"), entry.path);
     if (!target) return;
     try {
@@ -3285,6 +3754,7 @@ Windows:
   };
 
   const deleteEntry = async (entry: (typeof fsEntries)[number]) => {
+    if (!ensureAssetProjectWritable()) return;
     if (assetMode === "filesystem") {
       if (!entry.parent) return;
       await entry.parent.removeEntry(entry.name, { recursive: entry.kind === "directory" });
@@ -3302,6 +3772,7 @@ Windows:
   };
 
   const bulkDelete = async () => {
+    if (!ensureAssetProjectWritable()) return;
     const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
     for (const entry of targets) {
       if (assetMode === "filesystem") {
@@ -3320,6 +3791,7 @@ Windows:
   };
 
   const bulkMove = async () => {
+    if (!ensureAssetProjectWritable()) return;
     const target = window.prompt(t("promptMoveTo"), "");
     if (!target) return;
     const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
@@ -3335,6 +3807,7 @@ Windows:
   };
 
   const uploadAssets = async (files: FileList | File[]) => {
+    if (!ensureAssetProjectWritable()) return;
     const target = uploadTargetPath;
     const uploads = Array.from(files);
     fsError = "";
@@ -3371,6 +3844,10 @@ Windows:
   };
 
   const handleAssetUpload = async (event: Event) => {
+    if (assetProjectReadOnly) {
+      fsError = t("assetsReadOnly");
+      return;
+    }
     const input = event.currentTarget as HTMLInputElement;
     const files = input.files;
     if (!files || files.length === 0) return;
@@ -3380,6 +3857,10 @@ Windows:
 
   const handleAssetDrop = async (event: DragEvent) => {
     event.preventDefault();
+    if (assetProjectReadOnly) {
+      fsError = t("assetsReadOnly");
+      return;
+    }
     const files = event.dataTransfer?.files;
     if (!files || files.length === 0) return;
     await uploadAssets(files);
@@ -3421,181 +3902,22 @@ Windows:
     }, {});
   };
 
-  const applyTemplate = async (templateId: string) => {
+  const applyTemplate = async (
+    templateId: string,
+    options: { source?: "wizard" | "project" } = {}
+  ) => {
     if (!draft) return;
     draft.meta.template = templateId;
     const template = templateOptions.find((item) => item.id === templateId);
     if (!template) return;
-    const slug = getProjectSlug();
-    const assetRoot =
-      assetMode === "bridge" ? `/projects/${slug}/assets` : "/projects/demo/assets";
-    const sampleHero = `${assetRoot}/dishes/sample360food.gif`;
-    const sampleBg = `${assetRoot}/backgrounds/background.webp`;
-
-    const needsSampleAssets = draft.backgrounds.length === 0 || draft.categories.length === 0;
-    if (needsSampleAssets && assetMode === "bridge") {
-      await seedDemoAssets();
+    if (options.source === "wizard") {
+      wizardShowcaseProject = await buildWizardShowcaseProject(templateId);
+      syncWizardShowcaseVisibility();
+    } else {
+      wizardShowcaseProject = null;
+      wizardDemoPreview = false;
     }
 
-    if (draft.backgrounds.length === 0) {
-      draft.backgrounds = [
-        {
-          id: `bg-${Date.now()}`,
-          label: "Cafe / Brunch Hero",
-          src: sampleBg,
-          type: "image"
-        }
-      ];
-    }
-
-    if (draft.categories.length === 0) {
-      const toLocalized = (esValue: string, enValue: string) =>
-        draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-          acc[lang] = lang === "en" ? enValue : esValue;
-          return acc;
-        }, {});
-      const buildCommonAllergens = (ids: string[]): AllergenEntry[] =>
-        ids
-          .map((id) => commonAllergenCatalog.find((entry) => entry.id === id))
-          .filter(
-            (entry): entry is { id: string; label: Record<string, string> } => Boolean(entry)
-          )
-          .map((entry) => ({
-            id: entry.id,
-            label: draft.meta.locales.reduce<Record<string, string>>((acc, lang) => {
-              acc[lang] = getLocalizedValue(entry.label, lang, draft.meta.defaultLocale);
-              return acc;
-            }, {})
-          }));
-      const createDish = (
-        esName: string,
-        enName: string,
-        esDesc: string,
-        enDesc: string,
-        esLong: string,
-        enLong: string,
-        amount: number,
-        allergenIds: string[],
-        vegan = false
-      ): MenuItem => ({
-        id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        name: toLocalized(esName, enName),
-        description: toLocalized(esDesc, enDesc),
-        longDescription: toLocalized(esLong, enLong),
-        price: {
-          amount,
-          currency: draft.meta.currency
-        },
-        allergens: buildCommonAllergens(allergenIds),
-        vegan,
-        media: {
-          hero360: sampleHero
-        }
-      });
-
-      draft.meta.restaurantName = toLocalized("Cafe Aurora", "Cafe Aurora");
-      draft.meta.title = toLocalized("Menu Brunch de la Casa", "House Brunch Menu");
-
-      draft.categories = [
-        {
-          id: `section-${Math.random().toString(36).slice(2, 8)}`,
-          name: toLocalized("Cafe", "Cafe"),
-          items: [
-            createDish(
-              "Flat White Avellana",
-              "Hazelnut Flat White",
-              "Espresso doble con leche cremosa y avellana tostada.",
-              "Double espresso with velvety milk and toasted hazelnut notes.",
-              "Inspirado en las cafeterias de Melbourne, se sirve con microespuma fina para resaltar el perfil del grano.",
-              "Inspired by Melbourne coffee bars, served with fine microfoam to highlight bean profile.",
-              95,
-              ["dairy", "nuts"]
-            ),
-            createDish(
-              "Cold Brew Cacao",
-              "Cocoa Cold Brew",
-              "Extraccion en frio de 16 horas con nibs de cacao.",
-              "16-hour cold extraction with cocoa nibs.",
-              "Su maceracion lenta reduce la acidez y aporta un final achocolatado natural, sin jarabes pesados.",
-              "Its slow brew lowers acidity and adds a natural cocoa finish without heavy syrups.",
-              88,
-              [],
-              true
-            ),
-            createDish(
-              "Matcha Nube",
-              "Cloud Matcha",
-              "Matcha ceremonial batido con leche de avena.",
-              "Ceremonial matcha whisked with oat milk.",
-              "La receta equilibra umami y dulzor vegetal para una taza ligera y energizante.",
-              "The recipe balances umami and plant sweetness for a light, energizing cup.",
-              102,
-              [],
-              true
-            ),
-            createDish(
-              "Chocolate Especiado",
-              "Spiced Hot Chocolate",
-              "Cacao oscuro con canela y un toque de chile ancho.",
-              "Dark cocoa with cinnamon and a hint of ancho chili.",
-              "Version inspirada en el chocolate de mesa tradicional mexicano, cremosa y aromatica.",
-              "A version inspired by traditional Mexican table chocolate, creamy and aromatic.",
-              98,
-              ["dairy"]
-            )
-          ]
-        },
-        {
-          id: `section-${Math.random().toString(36).slice(2, 8)}`,
-          name: toLocalized("Brunch", "Brunch"),
-          items: [
-            createDish(
-              "Croissant Vegano de Pistache",
-              "Vegan Pistachio Croissant",
-              "Laminado artesanal con crema ligera de pistache.",
-              "Artisanal laminated pastry with light pistachio cream.",
-              "Fermentacion de 24 horas para lograr una miga aireada y capas crujientes.",
-              "24-hour fermentation for an airy crumb and crisp layers.",
-              120,
-              ["gluten", "nuts"],
-              true
-            ),
-            createDish(
-              "Toast de Salmon Curado",
-              "Cured Salmon Toast",
-              "Pan de masa madre, queso crema de eneldo y salmon curado.",
-              "Sourdough toast with dill cream cheese and cured salmon.",
-              "El salmon se cura en sal y citricos para lograr textura firme y sabor limpio.",
-              "Salmon is cured with salt and citrus for a firm texture and clean taste.",
-              185,
-              ["gluten", "fish", "dairy"]
-            ),
-            createDish(
-              "Hotcakes de Mora Azul",
-              "Blueberry Pancakes",
-              "Hotcakes esponjosos con compota de mora azul.",
-              "Fluffy pancakes with blueberry compote.",
-              "Se terminan con mantequilla batida de vainilla y ralladura de limon.",
-              "Finished with whipped vanilla butter and lemon zest.",
-              165,
-              ["gluten", "egg", "dairy"]
-            ),
-            createDish(
-              "Bowl Verde de Temporada",
-              "Seasonal Green Bowl",
-              "Quinoa, aguacate, pepino, brotes y aderezo citrico.",
-              "Quinoa, avocado, cucumber, sprouts and citrus dressing.",
-              "Plato fresco de temporada pensado para una opcion ligera y completa.",
-              "Fresh seasonal plate designed as a light yet complete option.",
-              148,
-              [],
-              true
-            )
-          ]
-        }
-      ];
-      wizardCategoryId = draft.categories[0]?.id ?? "";
-    }
     touchDraft();
     initCarouselIndices(draft);
   };
@@ -3753,6 +4075,15 @@ Windows:
   };
 
   const shiftCarousel = (categoryId: string, direction: number) => {
+    if (isJukeboxTemplate) {
+      const category = activeProject?.categories.find((item) => item.id === categoryId);
+      const count = category?.items.length ?? 0;
+      if (count <= 1) return;
+      const current = carouselActive[categoryId] ?? 0;
+      const next = (current + direction + count) % count;
+      carouselActive = { ...carouselActive, [categoryId]: next };
+      return;
+    }
     const container = document.querySelector<HTMLElement>(
       `.menu-carousel[data-category-id="${categoryId}"]`
     );
@@ -3769,6 +4100,7 @@ Windows:
   };
 
   const handleCarouselScroll = (categoryId: string, event: Event) => {
+    if (isJukeboxTemplate) return;
     const container = event.currentTarget as HTMLElement;
     if (carouselRaf[categoryId]) {
       cancelAnimationFrame(carouselRaf[categoryId] ?? 0);
@@ -3790,6 +4122,42 @@ Windows:
       centerCarousel(container, finalIndex, behavior);
       carouselActive = { ...carouselActive, [categoryId]: finalIndex };
     }, 160);
+  };
+
+  const handleJukeboxWheel = (categoryId: string, event: WheelEvent) => {
+    if (!isJukeboxTemplate) return;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    const category = activeProject?.categories.find((item) => item.id === categoryId);
+    const count = category?.items.length ?? 0;
+    if (count <= 1) return;
+    const delta = normalizeJukeboxWheelDelta(event);
+    if (!delta) return;
+    let carry = (jukeboxWheelCarry[categoryId] ?? 0) + delta;
+    const now = performance.now();
+    const last = jukeboxWheelLock[categoryId] ?? 0;
+    const readyToAdvance =
+      Math.abs(carry) >= JUKEBOX_WHEEL_STEP_THRESHOLD &&
+      now - last >= JUKEBOX_WHEEL_COOLDOWN_MS;
+    if (readyToAdvance) {
+      const direction = carry > 0 ? 1 : -1;
+      shiftCarousel(categoryId, direction);
+      carry +=
+        direction > 0 ? -JUKEBOX_WHEEL_STEP_THRESHOLD : JUKEBOX_WHEEL_STEP_THRESHOLD;
+      jukeboxWheelLock = { ...jukeboxWheelLock, [categoryId]: now };
+    }
+    jukeboxWheelCarry = { ...jukeboxWheelCarry, [categoryId]: carry };
+    if (jukeboxWheelSnapTimeout[categoryId]) {
+      clearTimeout(jukeboxWheelSnapTimeout[categoryId] ?? undefined);
+    }
+    const settleTimer = window.setTimeout(() => {
+      const current = carouselActive[categoryId] ?? 0;
+      const normalized = ((current % count) + count) % count;
+      carouselActive = { ...carouselActive, [categoryId]: normalized };
+      jukeboxWheelCarry = { ...jukeboxWheelCarry, [categoryId]: 0 };
+      jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
+    }, JUKEBOX_WHEEL_SETTLE_MS);
+    jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: settleTimer };
   };
 
   const openDish = (categoryId: string, itemId: string) => {
@@ -4361,9 +4729,12 @@ Windows:
                   <span>{rootLabel}</span>
                 </div>
                 <div class="asset-actions">
-                  <button type="button" on:click={createFolder}>{t("newFolder")}</button>
+                  <button type="button" on:click={createFolder} disabled={assetProjectReadOnly}>
+                    {t("newFolder")}
+                  </button>
                   <button
                     type="button"
+                    disabled={assetProjectReadOnly}
                     on:click={() => assetUploadInput?.click()}
                   >
                     {t("uploadAssets")}
@@ -4372,6 +4743,7 @@ Windows:
                     class="sr-only"
                     type="file"
                     multiple
+                    disabled={assetProjectReadOnly}
                     bind:this={assetUploadInput}
                     on:change={handleAssetUpload}
                   />
@@ -4380,7 +4752,7 @@ Windows:
               <div class="asset-drop">
                 <label class="editor-field">
                   <span>{t("uploadTo")}</span>
-                  <select bind:value={uploadTargetPath} class="editor-select">
+                  <select bind:value={uploadTargetPath} class="editor-select" disabled={assetProjectReadOnly}>
                     {#each uploadFolderOptions as folder}
                       <option value={folder.value}>{folder.label}</option>
                     {/each}
@@ -4391,21 +4763,30 @@ Windows:
                 {/if}
                 <p>{t("uploadHint")}</p>
                 <div
-                  class="asset-drop__zone"
+                  class={`asset-drop__zone ${assetProjectReadOnly ? "disabled" : ""}`}
                   on:dragover={handleAssetDragOver}
                   on:drop={handleAssetDrop}
                 >
                   {t("dragDrop")}
                 </div>
               </div>
+              {#if assetProjectReadOnly}
+                <p class="text-xs text-amber-200">{t("assetsReadOnly")}</p>
+              {/if}
               {#if fsError}
                 <p class="text-xs text-red-300">{fsError}</p>
               {/if}
               <div class="asset-bulk">
-                <button type="button" on:click={selectAllAssets}>{t("selectAll")}</button>
+                <button type="button" on:click={selectAllAssets} disabled={assetProjectReadOnly}>
+                  {t("selectAll")}
+                </button>
                 <button type="button" on:click={clearAssetSelection}>{t("clear")}</button>
-                <button type="button" on:click={bulkMove}>{t("move")}</button>
-                <button type="button" on:click={bulkDelete}>{t("delete")}</button>
+                <button type="button" on:click={bulkMove} disabled={assetProjectReadOnly}>
+                  {t("move")}
+                </button>
+                <button type="button" on:click={bulkDelete} disabled={assetProjectReadOnly}>
+                  {t("delete")}
+                </button>
               </div>
               <div class="asset-list">
                 {#if assetMode === "none"}
@@ -4418,6 +4799,7 @@ Windows:
                       <label class="asset-check">
                         <input
                           type="checkbox"
+                          disabled={assetProjectReadOnly}
                           checked={selectedAssetIds.includes(row.entry.id)}
                           on:change={() => toggleAssetSelection(row.entry.id)}
                         />
@@ -4451,6 +4833,7 @@ Windows:
                           class="asset-icon-btn"
                           title={t("rename")}
                           aria-label={t("rename")}
+                          disabled={assetProjectReadOnly}
                           on:click={() => renameEntry(row.entry)}
                         >
                           ✎
@@ -4460,6 +4843,7 @@ Windows:
                           class="asset-icon-btn"
                           title={t("move")}
                           aria-label={t("move")}
+                          disabled={assetProjectReadOnly}
                           on:click={() => moveEntry(row.entry)}
                         >
                           ⇄
@@ -4469,6 +4853,7 @@ Windows:
                           class="asset-icon-btn danger"
                           title={t("delete")}
                           aria-label={t("delete")}
+                          disabled={assetProjectReadOnly}
                           on:click={() => deleteEntry(row.entry)}
                         >
                           ✕
@@ -4789,7 +5174,7 @@ Windows:
                       <button
                         class="wizard-card {draft?.meta.template === template.id ? 'active' : ''}"
                         type="button"
-                        on:click={() => applyTemplate(template.id)}
+                        on:click={() => applyTemplate(template.id, { source: "wizard" })}
                       >
                         <p class="wizard-card__title">
                           {template.label[uiLang] ?? template.label.es ?? template.id}
@@ -4800,14 +5185,17 @@ Windows:
                       </button>
                     {/each}
                   </div>
-                  {#if draft?.categories.length}
-                    <p class="text-xs text-slate-400">
-                      {t("wizardTip")}
-                    </p>
+                  <p class="text-xs text-slate-400">
+                    {t("wizardTip")}
+                  </p>
+                  {#if wizardDemoPreview}
+                    <p class="text-xs text-amber-200">{t("wizardDemoPreviewHint")}</p>
                   {/if}
                 {:else if wizardStep === 1}
                   <p class="text-sm text-slate-200">{t("wizardIdentity")}</p>
-                  {#if !wizardStatus.identity}
+                  {#if wizardNeedsRootBackground}
+                    <p class="wizard-warning">{t("wizardRequireRootBackground")}</p>
+                  {:else if !wizardStatus.identity}
                     <p class="wizard-warning">{t("wizardMissingBackground")}</p>
                   {/if}
                   {#if assetOptions.length === 0}
@@ -5081,17 +5469,42 @@ Windows:
                 </div>
               </header>
 
-              <div class="menu-scroll" on:scroll={handleMenuScroll}>
+              {#if isJukeboxTemplate && activeProject.categories.length > 1}
+                <div class="section-nav">
+                  <button
+                    class="section-nav__btn prev"
+                    type="button"
+                    aria-label={t("prevDish")}
+                    on:click={() => shiftSection(-1)}
+                  >
+                    <span aria-hidden="true">‹</span>
+                  </button>
+                  <span class="section-nav__label">{getJukeboxScrollHint(locale)}</span>
+                  <button
+                    class="section-nav__btn next"
+                    type="button"
+                    aria-label={t("nextDish")}
+                    on:click={() => shiftSection(1)}
+                  >
+                    <span aria-hidden="true">›</span>
+                  </button>
+                </div>
+              {/if}
+
+              <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
                 {#each activeProject.categories as category}
-                  {@const loopedItems = getLoopedItems(category.items)}
+                  {@const loopedItems = isJukeboxTemplate
+                    ? getJukeboxRenderItems(category.items)
+                    : getLoopedItems(category.items)}
                   {@const activeIndex =
-                    carouselActive[category.id] ?? getLoopStart(category.items.length)}
+                    carouselActive[category.id] ??
+                    (isJukeboxTemplate ? 0 : getLoopStart(category.items.length))}
                   <section class="menu-section">
                     <div class="menu-section__head">
                       <p class="menu-section__title">{textOf(category.name)}</p>
                       <span class="menu-section__count">{category.items.length} items</span>
                     </div>
-                    {#if deviceMode === "desktop" && category.items.length > 1}
+                    {#if deviceMode === "desktop" && category.items.length > 1 && !isJukeboxTemplate}
                       <div class="carousel-nav">
                         <button
                           class="carousel-nav__btn prev"
@@ -5114,17 +5527,30 @@ Windows:
                     <div
                       class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
                       on:scroll={(event) => handleCarouselScroll(category.id, event)}
+                      on:wheel={(event) => handleJukeboxWheel(category.id, event)}
                       data-category-id={category.id}
                     >
                       {#each loopedItems as entry (entry.key)}
-                        {@const distance = Math.abs(activeIndex - entry.loopIndex)}
+                        {@const distance = isJukeboxTemplate
+                          ? Math.abs(
+                              getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
+                            )
+                          : Math.abs(activeIndex - entry.loopIndex)}
                         {@const fade = Math.max(0, 1 - distance * 0.2)}
                         <button
                           class={`carousel-card ${
                             distance === 0 ? "active" : distance === 1 ? "near" : "far"
                           }`}
                           type="button"
-                          style={`--fade:${fade}`}
+                          style={
+                            isJukeboxTemplate
+                              ? getJukeboxCardStyle(
+                                  activeIndex,
+                                  entry.sourceIndex,
+                                  category.items.length
+                                )
+                              : `--fade:${fade}`
+                          }
                           on:click={() => openDish(category.id, entry.item.id)}
                         >
                           <div class="carousel-media">
@@ -5133,6 +5559,7 @@ Windows:
                               srcset={buildResponsiveSrcSetFromMedia(entry.item)}
                               sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
                               alt={textOf(entry.item.name)}
+                              draggable="false"
                               loading="lazy"
                               decoding="async"
                               fetchpriority="low"
@@ -5162,6 +5589,9 @@ Windows:
                 <span class="menu-tap-hint__dot"></span>
                 <span>{getDishTapHint(locale)}</span>
               </div>
+              <p class="menu-asset-disclaimer" aria-hidden="true">
+                {getAssetOwnershipDisclaimer(locale)}
+              </p>
             {/if}
           </section>
         </section>
@@ -5185,6 +5615,7 @@ Windows:
             srcset={buildResponsiveSrcSetFromMedia(dish)}
             sizes="(max-width: 720px) 90vw, 440px"
             alt={textOf(dish.name)}
+            draggable="false"
             decoding="async"
           />
         </div>

@@ -1,12 +1,6 @@
 {
   "projects": [
     {
-      "slug": "cafe-the-okinawan",
-      "name": "Café The Okinawan",
-      "template": "bar-pub",
-      "cover": "/projects/cafe-the-okinawan/assets/backgrounds/background.webp"
-    },
-    {
       "slug": "sample-cafebrunch-menu",
       "name": "SampleCafeBrunchMenu",
       "template": "focus-rows",

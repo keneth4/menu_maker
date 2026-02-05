@@ -11,6 +11,7 @@ export default defineConfig({
       configureServer(server) {
         const root = path.resolve(process.cwd(), "public", "projects");
         const indexPath = path.resolve(root, "index.json");
+        const readOnlyAssetProjects = new Set(["sample-cafebrunch-menu", "demo"]);
         const ensureProjectRoot = async (project: string) => {
           const base = path.resolve(root, project, "assets");
           await fs.mkdir(base, { recursive: true });
@@ -59,7 +60,7 @@ export default defineConfig({
             await fs.rm(from, { recursive: true, force: true });
           }
         };
-        const seedAssets = async (project: string, fromProject = "demo") => {
+        const seedAssets = async (project: string, fromProject = "sample-cafebrunch-menu") => {
           const source = path.resolve(root, fromProject, "assets");
           const destination = await ensureProjectRoot(project);
           try {
@@ -86,8 +87,19 @@ export default defineConfig({
           try {
             const url = new URL(req.url ?? "", "http://localhost");
             const pathname = url.pathname.replace(/^\/api\/assets/, "");
-            const project = url.searchParams.get("project") || "demo";
-            const safeProject = sanitizeSlug(project || "demo") || "demo";
+            const project = url.searchParams.get("project") || "nuevo-proyecto";
+            const safeProject = sanitizeSlug(project || "nuevo-proyecto") || "nuevo-proyecto";
+            const isReadOnlyProject = readOnlyAssetProjects.has(safeProject);
+            const denyReadOnlyMutation = () => {
+              res.statusCode = 403;
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  error:
+                    "This demo asset project is read-only. Create a new project folder to upload or edit assets."
+                })
+              );
+            };
             if (req.method === "GET" && pathname === "/ping") {
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
@@ -109,6 +121,10 @@ export default defineConfig({
               return;
             }
             if (req.method === "POST" && pathname === "/upload") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
               const body = await readJson(req);
               const targetPath = body.path ?? "";
               const name = body.name ?? "asset";
@@ -123,6 +139,10 @@ export default defineConfig({
               return;
             }
             if (req.method === "POST" && pathname === "/delete") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
               const body = await readJson(req);
               const { full } = await resolveAssetPath(safeProject, body.path ?? "");
               await fs.rm(full, { recursive: true, force: true });
@@ -131,6 +151,10 @@ export default defineConfig({
               return;
             }
             if (req.method === "POST" && pathname === "/mkdir") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
               const body = await readJson(req);
               const { full } = await resolveAssetPath(safeProject, body.path ?? "");
               await fs.mkdir(full, { recursive: true });
@@ -139,6 +163,10 @@ export default defineConfig({
               return;
             }
             if (req.method === "POST" && pathname === "/move") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
               const body = await readJson(req);
               const fromPath = body.from ?? "";
               const toPath = body.to ?? "";
@@ -150,8 +178,12 @@ export default defineConfig({
               return;
             }
             if (req.method === "POST" && pathname === "/seed") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
               const body = await readJson(req);
-              const fromProject = body.from ?? "demo";
+              const fromProject = body.from ?? "sample-cafebrunch-menu";
               await seedAssets(safeProject, fromProject);
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
@@ -160,6 +192,10 @@ export default defineConfig({
             if (req.method === "POST" && pathname === "/save-project") {
               const body = await readJson(req);
               const slug = sanitizeSlug(body.slug ?? safeProject) || safeProject;
+              if (readOnlyAssetProjects.has(slug)) {
+                denyReadOnlyMutation();
+                return;
+              }
               const projectDir = path.resolve(root, slug);
               await fs.mkdir(projectDir, { recursive: true });
               const projectData = body.project ?? {};
@@ -190,6 +226,10 @@ export default defineConfig({
               const body = await readJson(req);
               const fromSlug = sanitizeSlug(body.from ?? "");
               const toSlug = sanitizeSlug(body.to ?? "");
+              if (readOnlyAssetProjects.has(fromSlug) || readOnlyAssetProjects.has(toSlug)) {
+                denyReadOnlyMutation();
+                return;
+              }
               if (!fromSlug || !toSlug || fromSlug === toSlug) {
                 res.setHeader("Content-Type", "application/json");
                 res.end(JSON.stringify({ ok: true }));
