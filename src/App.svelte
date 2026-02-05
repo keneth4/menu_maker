@@ -42,8 +42,6 @@
   let carouselActive: Record<string, number> = {};
   let carouselRaf: Record<string, number | null> = {};
   let carouselSnapTimeout: Record<string, number | null> = {};
-  let jukeboxWheelLock: Record<string, number> = {};
-  let jukeboxWheelCarry: Record<string, number> = {};
   let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
   let sectionFocusRaf: number | null = null;
   let sectionSnapTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1568,7 +1566,6 @@ let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
 const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
-const JUKEBOX_WHEEL_COOLDOWN_MS = 340;
 const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
 const jukeboxWheelState = new Map();
@@ -1687,6 +1684,10 @@ const getCircularOffset = (activeIndex, targetIndex, count) => {
   while (offset > half) offset -= count;
   while (offset < -half) offset += count;
   return offset;
+};
+const wrapJukeboxIndex = (value, count) => {
+  if (count <= 0) return 0;
+  return ((value % count) + count) % count;
 };
 const normalizeJukeboxWheelDelta = (event) => {
   const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
@@ -1984,10 +1985,12 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
       const distance = Math.abs(offset);
       const wheelRadius = 420;
       const stepY = 210;
+      const discBiasX = -72;
       const rawY = offset * stepY;
       const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
       const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
-      const arcX = distance < 0.5 ? 0 : -(wheelRadius - chord);
+      const arcX = distance < 0.5 ? discBiasX : discBiasX - (wheelRadius - chord);
+      const focusShift = distance < 0.5 ? -arcX : 0;
       const arcY = clampedY;
       const scale = distance < 0.5 ? 1 : 0.88;
       const opacity =
@@ -1997,6 +2000,7 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
       card.style.setProperty("--arc-y", arcY.toFixed(1) + "px");
       card.style.setProperty("--card-scale", scale.toFixed(3));
       card.style.setProperty("--card-opacity", opacity.toFixed(3));
+      card.style.setProperty("--focus-shift", focusShift.toFixed(1) + "px");
       card.style.setProperty("--ring-depth", String(depth));
       card.classList.toggle("active", Math.abs(offset) < 0.5);
     });
@@ -2050,8 +2054,8 @@ const shiftCarousel = (categoryId, direction) => {
   const count = category?.items.length || 0;
   if (count === 0) return;
   if (isJukeboxTemplate()) {
-    const current = Number(container.dataset.activeIndex || "0") || 0;
-    const next = (current + direction + count) % count;
+    const current = Math.round(Number(container.dataset.activeIndex || "0") || 0);
+    const next = wrapJukeboxIndex(current + direction, count);
     container.dataset.activeIndex = String(next);
     applyFocusState(container, next, count);
     return;
@@ -2144,32 +2148,23 @@ const bindCarousels = () => {
       const start = 0;
       container.dataset.activeIndex = String(start);
       applyFocusState(container, start, count);
-      const state = jukeboxWheelState.get(id) || { lock: 0, carry: 0, settle: 0 };
+      const state = jukeboxWheelState.get(id) || { settle: 0 };
       jukeboxWheelState.set(id, state);
       const onWheel = (event) => {
         if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
         event.preventDefault();
         const delta = normalizeJukeboxWheelDelta(event);
         if (!delta) return;
-        state.carry += delta;
-        const now = performance.now();
-        const readyToAdvance =
-          Math.abs(state.carry) >= JUKEBOX_WHEEL_STEP_THRESHOLD &&
-          now - state.lock >= JUKEBOX_WHEEL_COOLDOWN_MS;
-        if (readyToAdvance) {
-          const direction = state.carry > 0 ? 1 : -1;
-          shiftCarousel(id, direction);
-          state.carry +=
-            direction > 0 ? -JUKEBOX_WHEEL_STEP_THRESHOLD : JUKEBOX_WHEEL_STEP_THRESHOLD;
-          state.lock = now;
-        }
+        const current = Number(container.dataset.activeIndex || "0") || 0;
+        const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+        container.dataset.activeIndex = String(next);
+        applyFocusState(container, next, count);
         if (state.settle) window.clearTimeout(state.settle);
         state.settle = window.setTimeout(() => {
           const activeIndex = Number(container.dataset.activeIndex || "0") || 0;
-          const normalized = ((activeIndex % count) + count) % count;
+          const normalized = wrapJukeboxIndex(Math.round(activeIndex), count);
           container.dataset.activeIndex = String(normalized);
           applyFocusState(container, normalized, count);
-          state.carry = 0;
           state.settle = 0;
         }, JUKEBOX_WHEEL_SETTLE_MS);
       };
@@ -2708,7 +2703,6 @@ Windows:
 
   const LOOP_COPIES = 5;
   const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
-  const JUKEBOX_WHEEL_COOLDOWN_MS = 340;
   const JUKEBOX_WHEEL_SETTLE_MS = 240;
   const JUKEBOX_WHEEL_DELTA_CAP = 140;
 
@@ -2760,15 +2754,22 @@ Windows:
     return offset;
   };
 
+  const wrapJukeboxIndex = (value: number, count: number) => {
+    if (count <= 0) return 0;
+    return ((value % count) + count) % count;
+  };
+
   const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
     const offset = getCircularOffset(activeIndex, sourceIndex, count);
     const distance = Math.abs(offset);
     const wheelRadius = 420;
     const stepY = 210;
+    const discBiasX = -72;
     const rawY = offset * stepY;
     const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
     const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
-    const arcX = distance < 0.5 ? 0 : -(wheelRadius - chord);
+    const arcX = distance < 0.5 ? discBiasX : discBiasX - (wheelRadius - chord);
+    const focusShift = distance < 0.5 ? -arcX : 0;
     const arcY = clampedY;
     const scale = distance < 0.5 ? 1 : 0.88;
     const opacity =
@@ -2776,7 +2777,9 @@ Windows:
     const depth = Math.max(1, 220 - Math.round(distance * 26));
     return `--arc-x:${arcX.toFixed(1)}px;--arc-y:${arcY.toFixed(1)}px;--card-scale:${scale.toFixed(
       3
-    )};--card-opacity:${opacity.toFixed(3)};--ring-depth:${depth};`;
+    )};--card-opacity:${opacity.toFixed(3)};--focus-shift:${focusShift.toFixed(
+      1
+    )}px;--ring-depth:${depth};`;
   };
 
   const normalizeJukeboxWheelDelta = (event: WheelEvent) => {
@@ -2791,8 +2794,6 @@ Windows:
         clearTimeout(timer);
       }
     });
-    jukeboxWheelLock = {};
-    jukeboxWheelCarry = {};
     jukeboxWheelSnapTimeout = {};
   };
 
@@ -4103,8 +4104,8 @@ Windows:
       const category = activeProject?.categories.find((item) => item.id === categoryId);
       const count = category?.items.length ?? 0;
       if (count <= 1) return;
-      const current = carouselActive[categoryId] ?? 0;
-      const next = (current + direction + count) % count;
+      const current = Math.round(carouselActive[categoryId] ?? 0);
+      const next = wrapJukeboxIndex(current + direction, count);
       carouselActive = { ...carouselActive, [categoryId]: next };
       return;
     }
@@ -4157,28 +4158,16 @@ Windows:
     if (count <= 1) return;
     const delta = normalizeJukeboxWheelDelta(event);
     if (!delta) return;
-    let carry = (jukeboxWheelCarry[categoryId] ?? 0) + delta;
-    const now = performance.now();
-    const last = jukeboxWheelLock[categoryId] ?? 0;
-    const readyToAdvance =
-      Math.abs(carry) >= JUKEBOX_WHEEL_STEP_THRESHOLD &&
-      now - last >= JUKEBOX_WHEEL_COOLDOWN_MS;
-    if (readyToAdvance) {
-      const direction = carry > 0 ? 1 : -1;
-      shiftCarousel(categoryId, direction);
-      carry +=
-        direction > 0 ? -JUKEBOX_WHEEL_STEP_THRESHOLD : JUKEBOX_WHEEL_STEP_THRESHOLD;
-      jukeboxWheelLock = { ...jukeboxWheelLock, [categoryId]: now };
-    }
-    jukeboxWheelCarry = { ...jukeboxWheelCarry, [categoryId]: carry };
+    const current = carouselActive[categoryId] ?? 0;
+    const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+    carouselActive = { ...carouselActive, [categoryId]: next };
     if (jukeboxWheelSnapTimeout[categoryId]) {
       clearTimeout(jukeboxWheelSnapTimeout[categoryId] ?? undefined);
     }
     const settleTimer = window.setTimeout(() => {
       const current = carouselActive[categoryId] ?? 0;
-      const normalized = ((current % count) + count) % count;
+      const normalized = wrapJukeboxIndex(Math.round(current), count);
       carouselActive = { ...carouselActive, [categoryId]: normalized };
-      jukeboxWheelCarry = { ...jukeboxWheelCarry, [categoryId]: 0 };
       jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
     }, JUKEBOX_WHEEL_SETTLE_MS);
     jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: settleTimer };
@@ -5561,10 +5550,19 @@ Windows:
                             )
                           : Math.abs(activeIndex - entry.loopIndex)}
                         {@const fade = Math.max(0, 1 - distance * 0.2)}
+                        {@const stateClass = isJukeboxTemplate
+                          ? distance < 0.5
+                            ? "active"
+                            : distance < 1.5
+                              ? "near"
+                              : "far"
+                          : distance === 0
+                            ? "active"
+                            : distance === 1
+                              ? "near"
+                              : "far"}
                         <button
-                          class={`carousel-card ${
-                            distance === 0 ? "active" : distance === 1 ? "near" : "far"
-                          }`}
+                          class={`carousel-card ${stateClass}`}
                           type="button"
                           style={
                             isJukeboxTemplate
