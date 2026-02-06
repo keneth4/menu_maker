@@ -39,6 +39,14 @@
   let exportError = "";
   let exportStatus = "";
   let activeItem: { category: string; itemId: string } | null = null;
+  let modalMediaHost: HTMLDivElement | null = null;
+  let modalMediaImage: HTMLImageElement | null = null;
+  let modalMediaCleanup: (() => void) | null = null;
+  let modalMediaToken = 0;
+  let detailRotateDirection: 1 | -1 = -1;
+  let detailRotateSource = "";
+  const detailRotateDirectionBySource = new Map<string, 1 | -1>();
+  let interactivePrewarmSignature = "";
   let carouselActive: Record<string, number> = {};
   let carouselRaf: Record<string, number | null> = {};
   let carouselSnapTimeout: Record<string, number | null> = {};
@@ -938,6 +946,7 @@
 
   onDestroy(() => {
     previewStartupToken += 1;
+    teardownInteractiveDetailMedia();
     clearBackgroundRotation();
     clearJukeboxWheelState();
     if (sectionFocusRaf) {
@@ -957,6 +966,20 @@
       wizardDemoPreview &&
       wizardShowcaseProject;
     activeProject = showcaseActive ? wizardShowcaseProject : (draft ?? project);
+  }
+  $: if (activeProject && supportsInteractiveMedia()) {
+    const signature = activeProject.categories
+      .map((category) =>
+        category.items
+          .map((item) => getInteractiveDetailAsset(item)?.source || "")
+          .filter(Boolean)
+          .join("|")
+      )
+      .join("::");
+    if (signature !== interactivePrewarmSignature) {
+      interactivePrewarmSignature = signature;
+      void prewarmInteractiveDetailAssets(activeProject);
+    }
   }
   $: isJukeboxTemplate = activeProject?.meta.template === "jukebox";
   $: assetProjectReadOnly = isProtectedAssetProjectSlug(
@@ -1572,6 +1595,8 @@ let fontLinkInjected = false;
 const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
+let modalMediaCleanup = null;
+let modalMediaToken = 0;
 let carouselCleanup = [];
 let startupLoading = true;
 let startupProgress = 0;
@@ -1581,6 +1606,15 @@ const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
 const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
 const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
+const INTERACTIVE_GIF_MAX_FRAMES = 72;
+const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
+const DEBUG_INTERACTIVE_CENTER = new URLSearchParams(window.location.search).has("debugRotate");
+const interactiveDetailBytesCache = new Map();
+const interactiveDetailBytesPending = new Map();
+const interactiveDetailCenterOffsetCache = new Map();
+let detailRotateDirection = -1;
+let detailRotateSource = "";
+const detailRotateDirectionBySource = new Map();
 const jukeboxWheelState = new Map();
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
@@ -1740,6 +1774,814 @@ const getDetailImageSrc = (item) =>
   item?.media?.responsive?.small ||
   item?.media?.hero360 ||
   "";
+const decodeMaybe = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+const getInteractiveAssetMime = (source) => {
+  if (!source) return null;
+  const candidates = [decodeMaybe(source.trim()).toLowerCase()];
+  try {
+    const url = new URL(source, window.location.href);
+    const encodedPath = url.searchParams.get("path");
+    if (encodedPath) {
+      candidates.push(decodeMaybe(encodedPath).toLowerCase());
+    }
+  } catch {}
+  for (const candidate of candidates) {
+    if (/\\.gif(?:$|[?#&])/i.test(candidate)) return "image/gif";
+    if (/\\.webp(?:$|[?#&])/i.test(candidate)) return "image/webp";
+  }
+  return null;
+};
+const getInteractiveDetailAsset = (item) => {
+  const candidates = [
+    item?.media?.hero360,
+    item?.media?.responsive?.large,
+    item?.media?.responsive?.medium,
+    item?.media?.responsive?.small
+  ];
+  for (const candidate of candidates) {
+    const source = (candidate || "").trim();
+    if (!source) continue;
+    const mime = getInteractiveAssetMime(source);
+    if (mime) return { source, mime };
+  }
+  return null;
+};
+const supportsInteractiveMedia = () => "ImageDecoder" in window;
+const getDetailRotateHint = () => {
+  const lang = (locale || "").toLowerCase().split("-")[0];
+  const isTouch = window.matchMedia("(pointer: coarse)").matches;
+  if (isTouch) {
+    return lang === "es"
+      ? "Desliza horizontal sobre la imagen para girar"
+      : "Swipe horizontally on image to rotate";
+  }
+  return lang === "es"
+    ? "Arrastra horizontal con el mouse para girar"
+    : "Drag horizontally with the mouse to rotate";
+};
+const getDetailRotateToggleHint = () => {
+  const lang = (locale || "").toLowerCase().split("-")[0];
+  return lang === "es" ? "Invertir giro" : "Reverse rotation";
+};
+const toggleDetailRotateDirection = () => {
+  detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
+  if (detailRotateSource) {
+    detailRotateDirectionBySource.set(detailRotateSource, detailRotateDirection);
+  }
+};
+const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
+  const readForegroundCenterFromBitmap = (bitmap) => {
+    const maxSize = 140;
+    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const offscreen = document.createElement("canvas");
+  offscreen.width = width;
+  offscreen.height = height;
+  const ctx = offscreen.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  const alphaThreshold = 16;
+
+  const readAlphaBounds = () => {
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = (y * width + x) * 4;
+        if (data[idx + 3] <= alphaThreshold) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < 0 || maxY < 0) return null;
+    return { minX, minY, maxX, maxY };
+  };
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let r2 = 0;
+  let g2 = 0;
+  let b2 = 0;
+  let samples = 0;
+  const sampleEdge = (x, y) => {
+    const idx = (y * width + x) * 4;
+    if (data[idx + 3] <= alphaThreshold) return;
+    const rv = data[idx];
+    const gv = data[idx + 1];
+    const bv = data[idx + 2];
+    r += rv;
+    g += gv;
+    b += bv;
+    r2 += rv * rv;
+    g2 += gv * gv;
+    b2 += bv * bv;
+    samples += 1;
+  };
+  for (let x = 0; x < width; x += 1) {
+    sampleEdge(x, 0);
+    if (height > 1) sampleEdge(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    sampleEdge(0, y);
+    if (width > 1) sampleEdge(width - 1, y);
+  }
+  if (samples === 0) {
+    const bounds = readAlphaBounds();
+    if (!bounds) return null;
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const invScale = scale > 0 ? 1 / scale : 1;
+    return {
+      center: { x: centerX * invScale, y: centerY * invScale },
+      bounds: {
+        minX: bounds.minX * invScale,
+        minY: bounds.minY * invScale,
+        maxX: bounds.maxX * invScale,
+        maxY: bounds.maxY * invScale
+      }
+    };
+  }
+  const meanR = r / samples;
+  const meanG = g / samples;
+  const meanB = b / samples;
+  const varR = Math.max(0, r2 / samples - meanR * meanR);
+  const varG = Math.max(0, g2 / samples - meanG * meanG);
+  const varB = Math.max(0, b2 / samples - meanB * meanB);
+  const colorStd = Math.sqrt(varR + varG + varB);
+  const threshold = Math.max(12, Math.min(60, colorStd * 2.6 + 10));
+  const thresholdSq = threshold * threshold;
+
+  const isBackground = (idx) => {
+    if (data[idx + 3] <= alphaThreshold) return true;
+    const dr = data[idx] - meanR;
+    const dg = data[idx + 1] - meanG;
+    const db = data[idx + 2] - meanB;
+    return dr * dr + dg * dg + db * db <= thresholdSq;
+  };
+
+  const pixelTotal = width * height;
+  const visited = new Uint8Array(pixelTotal);
+  const queue = [];
+  const pushIfBackground = (x, y) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const idx = y * width + x;
+    if (visited[idx]) return;
+    if (!isBackground(idx * 4)) return;
+    visited[idx] = 1;
+    queue.push(idx);
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    pushIfBackground(x, 0);
+    if (height > 1) pushIfBackground(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    pushIfBackground(0, y);
+    if (width > 1) pushIfBackground(width - 1, y);
+  }
+
+  while (queue.length) {
+    const idx = queue.pop() ?? 0;
+    const x = idx % width;
+    const y = Math.floor(idx / width);
+    pushIfBackground(x + 1, y);
+    pushIfBackground(x - 1, y);
+    pushIfBackground(x, y + 1);
+    pushIfBackground(x, y - 1);
+  }
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  const rowCounts = new Uint32Array(height);
+  const colCounts = new Uint32Array(width);
+  let foregroundTotal = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      if (visited[idx]) continue;
+      const dataIdx = idx * 4;
+      if (data[dataIdx + 3] <= alphaThreshold) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      rowCounts[y] += 1;
+      colCounts[x] += 1;
+      foregroundTotal += 1;
+    }
+  }
+  if (maxX < 0 || maxY < 0) {
+    const bounds = readAlphaBounds();
+    if (!bounds) return null;
+    minX = bounds.minX;
+    minY = bounds.minY;
+    maxX = bounds.maxX;
+    maxY = bounds.maxY;
+  } else if (foregroundTotal > 0) {
+    const trimCount = Math.max(1, Math.round(foregroundTotal * 0.01));
+    const findMinIndex = (counts) => {
+      let acc = 0;
+      for (let i = 0; i < counts.length; i += 1) {
+        acc += counts[i];
+        if (acc >= trimCount) return i;
+      }
+      return 0;
+    };
+    const findMaxIndex = (counts) => {
+      let acc = 0;
+      for (let i = counts.length - 1; i >= 0; i -= 1) {
+        acc += counts[i];
+        if (acc >= trimCount) return i;
+      }
+      return counts.length - 1;
+    };
+    const trimmedMinY = findMinIndex(rowCounts);
+    const trimmedMaxY = findMaxIndex(rowCounts);
+    const trimmedMinX = findMinIndex(colCounts);
+    const trimmedMaxX = findMaxIndex(colCounts);
+    const baseW = maxX - minX;
+    const baseH = maxY - minY;
+    const trimmedW = trimmedMaxX - trimmedMinX;
+    const trimmedH = trimmedMaxY - trimmedMinY;
+    if (trimmedW > baseW * 0.4 && trimmedH > baseH * 0.4) {
+      minX = Math.min(Math.max(trimmedMinX, 0), width - 1);
+      maxX = Math.min(Math.max(trimmedMaxX, minX), width - 1);
+      minY = Math.min(Math.max(trimmedMinY, 0), height - 1);
+      maxY = Math.min(Math.max(trimmedMaxY, minY), height - 1);
+    }
+  }
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const invScale = scale > 0 ? 1 / scale : 1;
+  return {
+    center: { x: centerX * invScale, y: centerY * invScale },
+    bounds: {
+      minX: minX * invScale,
+      minY: minY * invScale,
+      maxX: maxX * invScale,
+      maxY: maxY * invScale
+    }
+  };
+};
+const readCenterOffsetFromBitmaps = (bitmaps) => {
+  if (!bitmaps.length) return null;
+  const sampleTarget = Math.min(INTERACTIVE_CENTER_SAMPLE_TARGET, bitmaps.length);
+  const step = Math.max(1, Math.floor(bitmaps.length / sampleTarget));
+  const centers = [];
+  for (let index = 0; index < bitmaps.length && centers.length < sampleTarget; index += step) {
+    const info = readForegroundCenterFromBitmap(bitmaps[index]);
+    if (info) centers.push(info.center);
+  }
+  if (!centers.length) return null;
+  const xs = centers.map((center) => center.x).sort((a, b) => a - b);
+  const ys = centers.map((center) => center.y).sort((a, b) => a - b);
+  const medianX = xs[Math.floor(xs.length / 2)];
+  const medianY = ys[Math.floor(ys.length / 2)];
+  const width = bitmaps[0].width;
+  const height = bitmaps[0].height;
+  return {
+    x: Math.round(width / 2 - medianX),
+    y: Math.round(height / 2 - medianY)
+  };
+};
+const readContentBoundsFromBitmaps = (bitmaps) => {
+  if (!bitmaps.length) return null;
+  const sampleTarget = Math.min(INTERACTIVE_CENTER_SAMPLE_TARGET, bitmaps.length);
+  const step = Math.max(1, Math.floor(bitmaps.length / sampleTarget));
+  const boundsList = [];
+  for (let index = 0; index < bitmaps.length && boundsList.length < sampleTarget; index += step) {
+    const info = readForegroundCenterFromBitmap(bitmaps[index]);
+    if (info) boundsList.push(info.bounds);
+  }
+  if (!boundsList.length) return null;
+  const median = (values) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  };
+  const minX = median(boundsList.map((b) => b.minX));
+  const minY = median(boundsList.map((b) => b.minY));
+  const maxX = median(boundsList.map((b) => b.maxX));
+  const maxY = median(boundsList.map((b) => b.maxY));
+  return { minX, minY, maxX, maxY };
+};
+const getInteractiveAssetBytes = async (source) => {
+  const cached = interactiveDetailBytesCache.get(source);
+  if (cached) return cached;
+  const pending = interactiveDetailBytesPending.get(source);
+  if (pending) return pending;
+  const task = (async () => {
+    try {
+      const response = await fetch(source, { cache: "force-cache" });
+      if (!response.ok) return null;
+      const bytes = await response.arrayBuffer();
+      interactiveDetailBytesCache.set(source, bytes);
+      return bytes;
+    } catch {
+      return null;
+    } finally {
+      interactiveDetailBytesPending.delete(source);
+    }
+  })();
+  interactiveDetailBytesPending.set(source, task);
+  return task;
+};
+const prewarmInteractiveDetailAssets = async () => {
+  if (!supportsInteractiveMedia()) return;
+  const sources = new Set();
+  DATA.categories.forEach((category) => {
+    category.items.forEach((item) => {
+      const asset = getInteractiveDetailAsset(item);
+      if (asset) sources.add(asset.source);
+    });
+  });
+  await Promise.allSettled(Array.from(sources).slice(0, 12).map((source) => getInteractiveAssetBytes(source)));
+};
+const teardownInteractiveModalMedia = () => {
+  modalMediaToken += 1;
+  if (modalMediaCleanup) {
+    modalMediaCleanup();
+    modalMediaCleanup = null;
+  }
+};
+const setupInteractiveModalMedia = async (asset) => {
+  teardownInteractiveModalMedia();
+  if (!asset || !modalContent) return;
+  const Decoder = window.ImageDecoder;
+  if (!Decoder) return;
+  const host = modalContent.querySelector(".dish-modal__media");
+  const image = host?.querySelector("img");
+  if (!host || !image) return;
+  const token = ++modalMediaToken;
+  const abortController = new AbortController();
+  let disposed = false;
+  let decoder = null;
+  const bitmaps = [];
+  let canvas = null;
+  let ctx = null;
+  let canvasDisplayWidth = 0;
+  let canvasDisplayHeight = 0;
+  let resizeObserver = null;
+  let pointerId = null;
+  let lastX = 0;
+  let frameCursor = 0;
+  let interactiveReady = false;
+  let imageHidden = false;
+  const allowAutoCenter = !INTERACTIVE_KEEP_ORIGINAL_PLACEMENT;
+  let centerOffset = allowAutoCenter
+    ? interactiveDetailCenterOffsetCache.get(asset.source) || { x: 0, y: 0 }
+    : { x: 0, y: 0 };
+  let contentBounds = null;
+  let renderSpec = null;
+  const debugEnabled = DEBUG_INTERACTIVE_CENTER;
+  let debugEl = null;
+  let debugBounds = null;
+  let debugVisibleRect = null;
+  let debugFrameSize = null;
+  host.classList.add("is-loading-interactive");
+  if (debugEnabled) {
+    debugEl = document.createElement("div");
+    debugEl.className = "dish-modal__media-debug";
+    host.appendChild(debugEl);
+  }
+  const hideImage = () => {
+    if (imageHidden) return;
+    imageHidden = true;
+    image.classList.add("is-hidden");
+  };
+  const updateDebugOverlay = () => {
+    if (!debugEnabled || !debugEl) return;
+    const frameLabel = canvas ? canvas.width + "x" + canvas.height : "-";
+    const offsetLabel = Math.round(centerOffset.x) + ", " + Math.round(centerOffset.y);
+    const boundsLabel = debugBounds
+      ? Math.round(debugBounds.minX) +
+        "," +
+        Math.round(debugBounds.minY) +
+        " " +
+        Math.round(debugBounds.maxX - debugBounds.minX) +
+        "x" +
+        Math.round(debugBounds.maxY - debugBounds.minY)
+      : "-";
+    const visibleLabel = debugVisibleRect
+      ? Math.round(debugVisibleRect.x) +
+        "," +
+        Math.round(debugVisibleRect.y) +
+        " " +
+        Math.round(debugVisibleRect.width) +
+        "x" +
+        Math.round(debugVisibleRect.height)
+      : "-";
+    const frameSizeLabel = debugFrameSize
+      ? Math.round(debugFrameSize.width) + "x" + Math.round(debugFrameSize.height)
+      : "-";
+    debugEl.textContent =
+      "offset: " +
+      offsetLabel +
+      "\\nframe: " +
+      frameLabel +
+      "\\nsource: " +
+      frameSizeLabel +
+      "\\nvisible: " +
+      visibleLabel +
+      "\\nbounds: " +
+      boundsLabel;
+  };
+  const cleanup = () => {
+    if (disposed) return;
+    disposed = true;
+    abortController.abort();
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
+    if (canvas) {
+      canvas.remove();
+    }
+    if (debugEl) {
+      debugEl.remove();
+      debugEl = null;
+    }
+    if (imageHidden) {
+      image.classList.remove("is-hidden");
+    }
+    host.classList.remove("is-loading-interactive");
+    host.classList.remove("is-interactive");
+    bitmaps.forEach((bitmap) => bitmap.close?.());
+    bitmaps.length = 0;
+    try {
+      decoder?.close?.();
+    } catch {}
+  };
+  modalMediaCleanup = cleanup;
+  try {
+    const bytes = await getInteractiveAssetBytes(asset.source);
+    if (!bytes) {
+      cleanup();
+      return;
+    }
+    if (disposed || token !== modalMediaToken) {
+      cleanup();
+      return;
+    }
+    decoder = new Decoder({ data: bytes, type: asset.mime });
+    await decoder.tracks.ready;
+    const frameCount = Number(decoder.tracks?.selectedTrack?.frameCount ?? 0);
+    if (frameCount < 2) {
+      cleanup();
+      return;
+    }
+    const frameStep = Math.max(1, Math.ceil(frameCount / INTERACTIVE_GIF_MAX_FRAMES));
+    const decodeIndices = [];
+    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += frameStep) {
+      decodeIndices.push(frameIndex);
+    }
+    if (decodeIndices[decodeIndices.length - 1] !== frameCount - 1) {
+      decodeIndices.push(frameCount - 1);
+    }
+    const pixelsPerFrame = window.matchMedia("(pointer: coarse)").matches ? 7 : 4;
+    const computeRenderSpec = () => {
+      if (!canvas || !contentBounds) return null;
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvasDisplayWidth || canvas.width / dpr;
+      const height = canvasDisplayHeight || canvas.height / dpr;
+      const boundsW = Math.max(1, contentBounds.maxX - contentBounds.minX);
+      const boundsH = Math.max(1, contentBounds.maxY - contentBounds.minY);
+      const padding = Math.max(boundsW, boundsH) * 0.08;
+      let sx = contentBounds.minX - padding;
+      let sy = contentBounds.minY - padding;
+      let sw = boundsW + padding * 2;
+      let sh = boundsH + padding * 2;
+
+      sx = Math.max(0, Math.min(sx, width - 1));
+      sy = Math.max(0, Math.min(sy, height - 1));
+      sw = Math.max(1, Math.min(sw, width));
+      sh = Math.max(1, Math.min(sh, height));
+      if (sx + sw > width) {
+        sx = Math.max(0, width - sw);
+      }
+      if (sy + sh > height) {
+        sy = Math.max(0, height - sh);
+      }
+
+      const scale = Math.min(width / sw, height / sh);
+      const dw = sw * scale;
+      const dh = sh * scale;
+      const dx = (width - dw) / 2;
+      const dy = (height - dh) / 2;
+      return { sx, sy, sw, sh, dx, dy, dw, dh };
+    };
+  const render = () => {
+    if (!canvas || !ctx || disposed) return;
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = canvasDisplayWidth || canvas.width / dpr;
+    const displayHeight = canvasDisplayHeight || canvas.height / dpr;
+    const frameCountSafe = Math.max(1, bitmaps.length);
+    const normalized =
+      ((Math.round(frameCursor) % frameCountSafe) + frameCountSafe) % frameCountSafe;
+    const frame = bitmaps[normalized];
+    if (!frame) return;
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
+    let containScale = 1;
+    let containDx = 0;
+    let containDy = 0;
+    if (renderSpec) {
+      ctx.drawImage(
+        frame,
+        renderSpec.sx,
+        renderSpec.sy,
+        renderSpec.sw,
+        renderSpec.sh,
+        renderSpec.dx,
+        renderSpec.dy,
+        renderSpec.dw,
+        renderSpec.dh
+      );
+    } else {
+      containScale = Math.min(displayWidth / frame.width, displayHeight / frame.height);
+      const dw = frame.width * containScale;
+      const dh = frame.height * containScale;
+      containDx = (displayWidth - dw) / 2;
+      containDy = (displayHeight - dh) / 2;
+      ctx.drawImage(frame, containDx, containDy, dw, dh);
+    }
+      if (debugEnabled && debugBounds) {
+        let rectX = debugBounds.minX + centerOffset.x;
+        let rectY = debugBounds.minY + centerOffset.y;
+        let rectW = debugBounds.maxX - debugBounds.minX;
+        let rectH = debugBounds.maxY - debugBounds.minY;
+        if (renderSpec) {
+          const scaleX = renderSpec.dw / renderSpec.sw;
+          const scaleY = renderSpec.dh / renderSpec.sh;
+          rectX = renderSpec.dx + (debugBounds.minX - renderSpec.sx) * scaleX;
+          rectY = renderSpec.dy + (debugBounds.minY - renderSpec.sy) * scaleY;
+          rectW = (debugBounds.maxX - debugBounds.minX) * scaleX;
+          rectH = (debugBounds.maxY - debugBounds.minY) * scaleY;
+        } else {
+          rectX = containDx + debugBounds.minX * containScale;
+          rectY = containDy + debugBounds.minY * containScale;
+          rectW = (debugBounds.maxX - debugBounds.minX) * containScale;
+          rectH = (debugBounds.maxY - debugBounds.minY) * containScale;
+        }
+        const centerX = displayWidth / 2;
+        const centerY = displayHeight / 2;
+        const boundsCenterX = rectX + rectW / 2;
+        const boundsCenterY = rectY + rectH / 2;
+        ctx.save();
+        ctx.strokeStyle = "rgba(248, 250, 252, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 12, centerY);
+        ctx.lineTo(centerX + 12, centerY);
+        ctx.moveTo(centerX, centerY - 12);
+        ctx.lineTo(centerX, centerY + 12);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rectX, rectY, rectW, rectH);
+        ctx.fillStyle = "rgba(34, 197, 94, 0.9)";
+        ctx.beginPath();
+        ctx.arc(boundsCenterX, boundsCenterY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      updateDebugOverlay();
+    };
+    const ensureCanvas = (firstBitmap) => {
+      if (canvas || disposed) return;
+      if (allowAutoCenter) {
+        const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+        if (computedOffset) {
+          centerOffset = computedOffset;
+          interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+        }
+      }
+      canvas = document.createElement("canvas");
+      canvas.className = "dish-modal__media-canvas";
+      canvas.width = firstBitmap.width;
+      canvas.height = firstBitmap.height;
+      ctx = canvas.getContext("2d");
+      if (!ctx) {
+        cleanup();
+        return;
+      }
+      if (allowAutoCenter && contentBounds) {
+        renderSpec = computeRenderSpec();
+      }
+      const onPointerDown = (event) => {
+        pointerId = event.pointerId;
+        lastX = event.clientX;
+        canvas.setPointerCapture(pointerId);
+        canvas.classList.add("is-dragging");
+        event.preventDefault();
+      };
+      const onPointerMove = (event) => {
+        if (pointerId !== event.pointerId) return;
+        const deltaX = event.clientX - lastX;
+        lastX = event.clientX;
+        frameCursor += (deltaX / pixelsPerFrame) * detailRotateDirection;
+        render();
+        event.preventDefault();
+      };
+      const onPointerRelease = (event) => {
+        if (pointerId !== event.pointerId) return;
+        try {
+          canvas.releasePointerCapture(pointerId);
+        } catch {}
+        pointerId = null;
+        canvas.classList.remove("is-dragging");
+      };
+      canvas.addEventListener("pointerdown", onPointerDown);
+      canvas.addEventListener("pointermove", onPointerMove);
+      canvas.addEventListener("pointerup", onPointerRelease);
+      canvas.addEventListener("pointercancel", onPointerRelease);
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+      canvas.addEventListener("dragstart", (event) => event.preventDefault());
+
+      host.appendChild(canvas);
+      const syncCanvasToImage = () => {
+        if (!canvas || !ctx) return;
+        const imageRect = image.getBoundingClientRect();
+        const hostRect = host.getBoundingClientRect();
+        const width = imageRect.width;
+        const height = imageRect.height;
+        if (!width || !height) {
+          requestAnimationFrame(syncCanvasToImage);
+          return;
+        }
+        canvasDisplayWidth = width;
+        canvasDisplayHeight = height;
+        canvas.style.position = "absolute";
+        canvas.style.left = imageRect.left - hostRect.left + "px";
+        canvas.style.top = imageRect.top - hostRect.top + "px";
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.round(width * dpr));
+        canvas.height = Math.max(1, Math.round(height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      syncCanvasToImage();
+      requestAnimationFrame(syncCanvasToImage);
+      if (!resizeObserver && "ResizeObserver" in window) {
+        resizeObserver = new ResizeObserver(() => {
+          syncCanvasToImage();
+          render();
+        });
+        resizeObserver.observe(host);
+      }
+      hideImage();
+      host.classList.remove("is-loading-interactive");
+    };
+    const normalizeDecodedFrame = async (frame) => {
+      if (debugEnabled && !debugFrameSize) {
+        debugFrameSize = {
+          width: frame.codedWidth || frame.displayWidth || frame.visibleRect?.width || 0,
+          height: frame.codedHeight || frame.displayHeight || frame.visibleRect?.height || 0
+        };
+      }
+      const visibleRect = frame.visibleRect;
+      if (debugEnabled && !debugVisibleRect && visibleRect) {
+        debugVisibleRect = {
+          x: visibleRect.x,
+          y: visibleRect.y,
+          width: visibleRect.width,
+          height: visibleRect.height
+        };
+      }
+      const fullWidth = frame.codedWidth || frame.displayWidth || visibleRect?.width || 0;
+      const fullHeight = frame.codedHeight || frame.displayHeight || visibleRect?.height || 0;
+      if (!visibleRect || !fullWidth || !fullHeight) {
+        return createImageBitmap(frame);
+      }
+      const sameBounds =
+        Math.round(visibleRect.x) === 0 &&
+        Math.round(visibleRect.y) === 0 &&
+        Math.round(visibleRect.width) === Math.round(fullWidth) &&
+        Math.round(visibleRect.height) === Math.round(fullHeight);
+      if (sameBounds) {
+        return createImageBitmap(frame);
+      }
+      const offscreen = document.createElement("canvas");
+      offscreen.width = fullWidth;
+      offscreen.height = fullHeight;
+      const offCtx = offscreen.getContext("2d");
+      if (!offCtx) {
+        return createImageBitmap(frame);
+      }
+      offCtx.clearRect(0, 0, fullWidth, fullHeight);
+      offCtx.drawImage(
+        frame,
+        0,
+        0,
+        visibleRect.width,
+        visibleRect.height,
+        visibleRect.x,
+        visibleRect.y,
+        visibleRect.width,
+        visibleRect.height
+      );
+      return createImageBitmap(offscreen);
+    };
+    let decodedCount = 0;
+    for (const frameIndex of decodeIndices) {
+      const decoded = await decoder.decode({ frameIndex, completeFramesOnly: true });
+      const frame = decoded?.image;
+      if (!frame) continue;
+      const bitmap = await normalizeDecodedFrame(frame);
+      frame.close?.();
+      if (disposed || token !== modalMediaToken) {
+        bitmap.close?.();
+        cleanup();
+        return;
+      }
+      bitmaps.push(bitmap);
+      if (debugEnabled && !debugBounds) {
+        const info = readForegroundCenterFromBitmap(bitmap);
+        if (info) debugBounds = info.bounds;
+      }
+      if (
+        allowAutoCenter &&
+        (bitmaps.length === 1 || bitmaps.length === INTERACTIVE_CENTER_SAMPLE_TARGET)
+      ) {
+        const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+        if (computedOffset) {
+          const delta =
+            Math.abs(computedOffset.x - centerOffset.x) +
+            Math.abs(computedOffset.y - centerOffset.y);
+          if (delta > 1) {
+            centerOffset = computedOffset;
+            interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+          }
+        }
+        const computedBounds = readContentBoundsFromBitmaps(bitmaps);
+        if (computedBounds) {
+          contentBounds = computedBounds;
+          renderSpec = computeRenderSpec();
+          if (debugEnabled) {
+            debugBounds = computedBounds;
+          }
+        }
+      }
+      if (!canvas) {
+        ensureCanvas(bitmap);
+      }
+      render();
+      if (!interactiveReady && bitmaps.length >= 2) {
+        interactiveReady = true;
+        host.classList.add("is-interactive");
+      }
+      decodedCount += 1;
+      if (decodedCount % 6 === 0) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      }
+    }
+    if (!canvas) {
+      cleanup();
+      return;
+    }
+    if (allowAutoCenter) {
+      const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+      if (computedOffset) {
+        centerOffset = computedOffset;
+        interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+        render();
+      }
+      const computedBounds = readContentBoundsFromBitmaps(bitmaps);
+      if (computedBounds) {
+        contentBounds = computedBounds;
+        renderSpec = computeRenderSpec();
+        if (debugEnabled) {
+          debugBounds = computedBounds;
+        }
+        render();
+      }
+    }
+    if (!interactiveReady && bitmaps.length >= 2) {
+      interactiveReady = true;
+      host.classList.add("is-interactive");
+    }
+  } catch (error) {
+    const isAbort = error instanceof DOMException && error.name === "AbortError";
+    if (!isAbort) {
+      console.warn("Interactive GIF decode failed", error);
+    }
+    cleanup();
+  }
+};
 const getLoadingLabel = () =>
   (locale || "").toLowerCase().split("-")[0] === "es"
     ? "Cargando assets"
@@ -2310,12 +3152,18 @@ const bindCards = () => {
       const veganLabel = getTerm("vegan");
       const longDesc = textOf(dish.longDescription);
       const allergens = getAllergenValues(dish).join(", ");
+      const asset = getInteractiveDetailAsset(dish);
+      detailRotateSource = asset?.source || "";
+      detailRotateDirection = detailRotateSource
+        ? detailRotateDirectionBySource.get(detailRotateSource) || -1
+        : -1;
       modalContent.innerHTML = \`
         <div class="dish-modal__header">
           <p class="dish-modal__title">\${textOf(dish.name)}</p>
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
+          \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p><button class=\\\"dish-modal__media-toggle\\\" id=\\\"modal-rotate-toggle\\\" type=\\\"button\\\" title=\\\"" + getDetailRotateToggleHint() + "\\\" aria-label=\\\"" + getDetailRotateToggleHint() + "\\\"><span aria-hidden=\\\"true\\\">⇄</span></button>" : ""}
           <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
         <div class="dish-modal__content">
@@ -2329,6 +3177,18 @@ const bindCards = () => {
         </div>
       \`;
       modal.classList.add("open");
+      if (asset && supportsInteractiveMedia()) {
+        void setupInteractiveModalMedia(asset);
+      }
+      const toggleButton = modal.querySelector("#modal-rotate-toggle");
+      if (toggleButton) {
+        toggleButton.classList.toggle("is-reversed", detailRotateDirection === -1);
+        toggleButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleDetailRotateDirection();
+          toggleButton.classList.toggle("is-reversed", detailRotateDirection === -1);
+        });
+      }
       modal.querySelector("#modal-close")?.addEventListener("click", closeModal);
     });
   });
@@ -2435,6 +3295,8 @@ const bindSectionFocus = () => {
 };
 
 const closeModal = () => {
+  teardownInteractiveModalMedia();
+  detailRotateSource = "";
   modal.classList.remove("open");
 };
 
@@ -2450,6 +3312,7 @@ modal?.addEventListener("dragstart", (event) => {
 
 render();
 void preloadStartupAssets();
+void prewarmInteractiveDetailAssets();
 `;
   };
 
@@ -2781,6 +3644,14 @@ Windows:
   const JUKEBOX_WHEEL_DELTA_CAP = 140;
   const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
   const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
+  const INTERACTIVE_GIF_MAX_FRAMES = 72;
+  const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
+  const DEBUG_INTERACTIVE_CENTER =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("debugRotate");
+  const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
+  const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
+  const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
 
   const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
 
@@ -2906,6 +3777,852 @@ Windows:
     item.media.responsive?.small ||
     item.media.hero360 ||
     "";
+
+  type InteractiveDetailAsset = {
+    source: string;
+    mime: "image/gif" | "image/webp";
+  };
+
+  const decodeMaybe = (value: string) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
+  const getInteractiveAssetMime = (source?: string | null): InteractiveDetailAsset["mime"] | null => {
+    if (!source) return null;
+    const candidates = [decodeMaybe(source.trim()).toLowerCase()];
+    try {
+      const url = new URL(source, window.location.href);
+      const encodedPath = url.searchParams.get("path");
+      if (encodedPath) {
+        candidates.push(decodeMaybe(encodedPath).toLowerCase());
+      }
+    } catch {
+      // Ignore malformed URLs; raw candidate already included.
+    }
+    for (const candidate of candidates) {
+      if (/\.gif(?:$|[?#&])/i.test(candidate)) return "image/gif";
+      if (/\.webp(?:$|[?#&])/i.test(candidate)) return "image/webp";
+    }
+    return null;
+  };
+
+  const getInteractiveDetailAsset = (item: MenuItem | null): InteractiveDetailAsset | null => {
+    if (!item) return null;
+    const candidates = [
+      item.media.hero360,
+      item.media.responsive?.large,
+      item.media.responsive?.medium,
+      item.media.responsive?.small
+    ];
+    for (const candidate of candidates) {
+      const source = (candidate || "").trim();
+      if (!source) continue;
+      const mime = getInteractiveAssetMime(source);
+      if (mime) {
+        return { source, mime };
+      }
+    }
+    return null;
+  };
+
+  const supportsInteractiveMedia = () =>
+    typeof window !== "undefined" && "ImageDecoder" in window;
+
+  const getDetailRotateHint = (lang: string) => {
+    const base = normalizeLocaleCode(lang);
+    if (deviceMode === "mobile") {
+      return base === "es"
+        ? "Desliza horizontal sobre la imagen para girar"
+        : "Swipe horizontally on image to rotate";
+    }
+    return base === "es"
+      ? "Arrastra horizontal con el mouse para girar"
+      : "Drag horizontally with the mouse to rotate";
+  };
+
+  const getDetailRotateToggleHint = (lang: string) => {
+    const base = normalizeLocaleCode(lang);
+    return base === "es" ? "Invertir giro" : "Reverse rotation";
+  };
+
+  const toggleDetailRotateDirection = () => {
+    detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
+    if (detailRotateSource) {
+      detailRotateDirectionBySource.set(detailRotateSource, detailRotateDirection);
+    }
+  };
+
+  const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
+
+  const readForegroundCenterFromBitmap = (bitmap: ImageBitmap) => {
+    const maxSize = 140;
+    const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const offscreen = document.createElement("canvas");
+    offscreen.width = width;
+    offscreen.height = height;
+    const ctx = offscreen.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    const { data } = ctx.getImageData(0, 0, width, height);
+    const alphaThreshold = 16;
+
+    const readAlphaBounds = () => {
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = (y * width + x) * 4;
+          if (data[idx + 3] <= alphaThreshold) continue;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < 0 || maxY < 0) return null;
+      return { minX, minY, maxX, maxY };
+    };
+
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let r2 = 0;
+    let g2 = 0;
+    let b2 = 0;
+    let samples = 0;
+    const sampleEdge = (x: number, y: number) => {
+      const idx = (y * width + x) * 4;
+      if (data[idx + 3] <= alphaThreshold) return;
+      const rv = data[idx];
+      const gv = data[idx + 1];
+      const bv = data[idx + 2];
+      r += rv;
+      g += gv;
+      b += bv;
+      r2 += rv * rv;
+      g2 += gv * gv;
+      b2 += bv * bv;
+      samples += 1;
+    };
+    for (let x = 0; x < width; x += 1) {
+      sampleEdge(x, 0);
+      if (height > 1) sampleEdge(x, height - 1);
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      sampleEdge(0, y);
+      if (width > 1) sampleEdge(width - 1, y);
+    }
+    if (samples === 0) {
+      const bounds = readAlphaBounds();
+      if (!bounds) return null;
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      const invScale = scale > 0 ? 1 / scale : 1;
+      return {
+        center: { x: centerX * invScale, y: centerY * invScale },
+        bounds: {
+          minX: bounds.minX * invScale,
+          minY: bounds.minY * invScale,
+          maxX: bounds.maxX * invScale,
+          maxY: bounds.maxY * invScale
+        }
+      };
+    }
+    const meanR = r / samples;
+    const meanG = g / samples;
+    const meanB = b / samples;
+    const varR = Math.max(0, r2 / samples - meanR * meanR);
+    const varG = Math.max(0, g2 / samples - meanG * meanG);
+    const varB = Math.max(0, b2 / samples - meanB * meanB);
+    const colorStd = Math.sqrt(varR + varG + varB);
+    const threshold = Math.max(12, Math.min(60, colorStd * 2.6 + 10));
+    const thresholdSq = threshold * threshold;
+
+    const isBackground = (idx: number) => {
+      if (data[idx + 3] <= alphaThreshold) return true;
+      const dr = data[idx] - meanR;
+      const dg = data[idx + 1] - meanG;
+      const db = data[idx + 2] - meanB;
+      return dr * dr + dg * dg + db * db <= thresholdSq;
+    };
+
+  const pixelTotal = width * height;
+  const visited = new Uint8Array(pixelTotal);
+    const queue: number[] = [];
+    const pushIfBackground = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return;
+      const idx = y * width + x;
+      if (visited[idx]) return;
+      if (!isBackground(idx * 4)) return;
+      visited[idx] = 1;
+      queue.push(idx);
+    };
+
+    for (let x = 0; x < width; x += 1) {
+      pushIfBackground(x, 0);
+      if (height > 1) pushIfBackground(x, height - 1);
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      pushIfBackground(0, y);
+      if (width > 1) pushIfBackground(width - 1, y);
+    }
+
+    while (queue.length) {
+      const idx = queue.pop() ?? 0;
+      const x = idx % width;
+      const y = Math.floor(idx / width);
+      pushIfBackground(x + 1, y);
+      pushIfBackground(x - 1, y);
+      pushIfBackground(x, y + 1);
+      pushIfBackground(x, y - 1);
+    }
+
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    const rowCounts = new Uint32Array(height);
+    const colCounts = new Uint32Array(width);
+    let foregroundTotal = 0;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = y * width + x;
+        if (visited[idx]) continue;
+        const dataIdx = idx * 4;
+        if (data[dataIdx + 3] <= alphaThreshold) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        rowCounts[y] += 1;
+        colCounts[x] += 1;
+        foregroundTotal += 1;
+      }
+    }
+    if (maxX < 0 || maxY < 0) {
+      const bounds = readAlphaBounds();
+      if (!bounds) return null;
+      minX = bounds.minX;
+      minY = bounds.minY;
+      maxX = bounds.maxX;
+      maxY = bounds.maxY;
+    } else if (foregroundTotal > 0) {
+      const trimCount = Math.max(1, Math.round(foregroundTotal * 0.01));
+      const findMinIndex = (counts: Uint32Array) => {
+        let acc = 0;
+        for (let i = 0; i < counts.length; i += 1) {
+          acc += counts[i];
+          if (acc >= trimCount) return i;
+        }
+        return 0;
+      };
+      const findMaxIndex = (counts: Uint32Array) => {
+        let acc = 0;
+        for (let i = counts.length - 1; i >= 0; i -= 1) {
+          acc += counts[i];
+          if (acc >= trimCount) return i;
+        }
+        return counts.length - 1;
+      };
+      const trimmedMinY = findMinIndex(rowCounts);
+      const trimmedMaxY = findMaxIndex(rowCounts);
+      const trimmedMinX = findMinIndex(colCounts);
+      const trimmedMaxX = findMaxIndex(colCounts);
+      const baseW = maxX - minX;
+      const baseH = maxY - minY;
+      const trimmedW = trimmedMaxX - trimmedMinX;
+      const trimmedH = trimmedMaxY - trimmedMinY;
+      if (trimmedW > baseW * 0.4 && trimmedH > baseH * 0.4) {
+        minX = Math.min(Math.max(trimmedMinX, 0), width - 1);
+        maxX = Math.min(Math.max(trimmedMaxX, minX), width - 1);
+        minY = Math.min(Math.max(trimmedMinY, 0), height - 1);
+        maxY = Math.min(Math.max(trimmedMaxY, minY), height - 1);
+      }
+    }
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const invScale = scale > 0 ? 1 / scale : 1;
+    return {
+      center: { x: centerX * invScale, y: centerY * invScale },
+      bounds: {
+        minX: minX * invScale,
+        minY: minY * invScale,
+        maxX: maxX * invScale,
+        maxY: maxY * invScale
+      }
+    };
+  };
+
+  const readCenterOffsetFromBitmaps = (bitmaps: ImageBitmap[]) => {
+    if (!bitmaps.length) return null;
+    const sampleTarget = Math.min(INTERACTIVE_CENTER_SAMPLE_TARGET, bitmaps.length);
+    const step = Math.max(1, Math.floor(bitmaps.length / sampleTarget));
+    const centers: { x: number; y: number }[] = [];
+    for (let index = 0; index < bitmaps.length && centers.length < sampleTarget; index += step) {
+      const info = readForegroundCenterFromBitmap(bitmaps[index]);
+      if (info) centers.push(info.center);
+    }
+    if (!centers.length) return null;
+    const xs = centers.map((center) => center.x).sort((a, b) => a - b);
+    const ys = centers.map((center) => center.y).sort((a, b) => a - b);
+    const medianX = xs[Math.floor(xs.length / 2)];
+    const medianY = ys[Math.floor(ys.length / 2)];
+    const width = bitmaps[0].width;
+    const height = bitmaps[0].height;
+    return {
+      x: Math.round(width / 2 - medianX),
+      y: Math.round(height / 2 - medianY)
+    };
+  };
+
+  const readContentBoundsFromBitmaps = (bitmaps: ImageBitmap[]) => {
+    if (!bitmaps.length) return null;
+    const sampleTarget = Math.min(INTERACTIVE_CENTER_SAMPLE_TARGET, bitmaps.length);
+    const step = Math.max(1, Math.floor(bitmaps.length / sampleTarget));
+    const boundsList: { minX: number; minY: number; maxX: number; maxY: number }[] = [];
+    for (let index = 0; index < bitmaps.length && boundsList.length < sampleTarget; index += step) {
+      const info = readForegroundCenterFromBitmap(bitmaps[index]);
+      if (info) boundsList.push(info.bounds);
+    }
+    if (!boundsList.length) return null;
+    const median = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    const minX = median(boundsList.map((b) => b.minX));
+    const minY = median(boundsList.map((b) => b.minY));
+    const maxX = median(boundsList.map((b) => b.maxX));
+    const maxY = median(boundsList.map((b) => b.maxY));
+    return { minX, minY, maxX, maxY };
+  };
+
+  const getInteractiveAssetBytes = async (source: string) => {
+    const cached = interactiveDetailBytesCache.get(source);
+    if (cached) return cached;
+    const pending = interactiveDetailBytesPending.get(source);
+    if (pending) return pending;
+    const task = (async () => {
+      try {
+        const response = await fetch(source, { cache: "force-cache" });
+        if (!response.ok) return null;
+        const bytes = await response.arrayBuffer();
+        interactiveDetailBytesCache.set(source, bytes);
+        return bytes;
+      } catch {
+        return null;
+      } finally {
+        interactiveDetailBytesPending.delete(source);
+      }
+    })();
+    interactiveDetailBytesPending.set(source, task);
+    return task;
+  };
+
+  const prewarmInteractiveDetailAssets = async (data: MenuProject) => {
+    if (!supportsInteractiveMedia()) return;
+    const sources = new Set<string>();
+    data.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const asset = getInteractiveDetailAsset(item);
+        if (asset) {
+          sources.add(asset.source);
+        }
+      });
+    });
+    await Promise.allSettled(
+      Array.from(sources)
+        .slice(0, 12)
+        .map((source) => getInteractiveAssetBytes(source))
+    );
+  };
+
+  const teardownInteractiveDetailMedia = () => {
+    modalMediaToken += 1;
+    if (modalMediaCleanup) {
+      modalMediaCleanup();
+      modalMediaCleanup = null;
+    }
+  };
+
+  const setupInteractiveDetailMedia = async (asset: InteractiveDetailAsset | null) => {
+    teardownInteractiveDetailMedia();
+    if (!asset || !modalMediaHost || !modalMediaImage) return;
+    const Decoder = (window as Window & { ImageDecoder?: new (init: unknown) => any }).ImageDecoder;
+    if (!Decoder) return;
+
+    const token = ++modalMediaToken;
+    const host = modalMediaHost;
+    const image = modalMediaImage;
+    const debugEnabled = DEBUG_INTERACTIVE_CENTER;
+    let debugEl: HTMLDivElement | null = null;
+    let debugBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    let debugVisibleRect: { x: number; y: number; width: number; height: number } | null = null;
+    let debugFrameSize: { width: number; height: number } | null = null;
+    const abortController = new AbortController();
+    let disposed = false;
+    let decoder: any = null;
+    const bitmaps: ImageBitmap[] = [];
+    let canvas: HTMLCanvasElement | null = null;
+    let ctx: CanvasRenderingContext2D | null = null;
+    let canvasDisplayWidth = 0;
+    let canvasDisplayHeight = 0;
+    let resizeObserver: ResizeObserver | null = null;
+    let pointerId: number | null = null;
+    let lastX = 0;
+    let frameCursor = 0;
+    let interactiveReady = false;
+    let imageHidden = false;
+    const allowAutoCenter = !INTERACTIVE_KEEP_ORIGINAL_PLACEMENT;
+    let centerOffset = allowAutoCenter
+      ? interactiveDetailCenterOffsetCache.get(asset.source) ?? { x: 0, y: 0 }
+      : { x: 0, y: 0 };
+    let contentBounds: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+    let renderSpec: {
+      sx: number;
+      sy: number;
+      sw: number;
+      sh: number;
+      dx: number;
+      dy: number;
+      dw: number;
+      dh: number;
+    } | null = null;
+
+    host.classList.add("is-loading-interactive");
+    if (debugEnabled) {
+      debugEl = document.createElement("div");
+      debugEl.className = "dish-modal__media-debug";
+      host.appendChild(debugEl);
+    }
+    const hideImage = () => {
+      if (imageHidden) return;
+      imageHidden = true;
+      image.classList.add("is-hidden");
+    };
+    const updateDebugOverlay = () => {
+      if (!debugEnabled || !debugEl) return;
+      const frameLabel = canvas ? `${canvas.width}x${canvas.height}` : "-";
+      const offsetLabel = `${Math.round(centerOffset.x)}, ${Math.round(centerOffset.y)}`;
+      const boundsLabel = debugBounds
+        ? `${Math.round(debugBounds.minX)},${Math.round(debugBounds.minY)} ${Math.round(
+            debugBounds.maxX - debugBounds.minX
+          )}x${Math.round(debugBounds.maxY - debugBounds.minY)}`
+        : "-";
+      const visibleLabel = debugVisibleRect
+        ? `${Math.round(debugVisibleRect.x)},${Math.round(debugVisibleRect.y)} ${Math.round(
+            debugVisibleRect.width
+          )}x${Math.round(debugVisibleRect.height)}`
+        : "-";
+      const frameSizeLabel = debugFrameSize
+        ? `${Math.round(debugFrameSize.width)}x${Math.round(debugFrameSize.height)}`
+        : "-";
+      debugEl.textContent = `offset: ${offsetLabel}\nframe: ${frameLabel}\nsource: ${frameSizeLabel}\nvisible: ${visibleLabel}\nbounds: ${boundsLabel}`;
+    };
+
+    const cleanup = () => {
+      if (disposed) return;
+      disposed = true;
+      abortController.abort();
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      if (canvas) {
+        canvas.remove();
+      }
+      if (debugEl) {
+        debugEl.remove();
+        debugEl = null;
+      }
+      if (imageHidden) {
+        image.classList.remove("is-hidden");
+      }
+      host.classList.remove("is-loading-interactive");
+      host.classList.remove("is-interactive");
+      bitmaps.forEach((bitmap) => bitmap.close());
+      bitmaps.length = 0;
+      try {
+        decoder?.close?.();
+      } catch {
+        // Ignore decoder close errors.
+      }
+    };
+
+    modalMediaCleanup = cleanup;
+
+    try {
+      const bytes = await getInteractiveAssetBytes(asset.source);
+      if (!bytes) {
+        cleanup();
+        return;
+      }
+      if (disposed || token !== modalMediaToken) {
+        cleanup();
+        return;
+      }
+
+      decoder = new Decoder({ data: bytes, type: asset.mime });
+      await decoder.tracks.ready;
+      const frameCount = Number(decoder.tracks?.selectedTrack?.frameCount ?? 0);
+      if (frameCount < 2) {
+        cleanup();
+        return;
+      }
+      const frameStep = Math.max(1, Math.ceil(frameCount / INTERACTIVE_GIF_MAX_FRAMES));
+      const decodeIndices: number[] = [];
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += frameStep) {
+        decodeIndices.push(frameIndex);
+      }
+      if (decodeIndices[decodeIndices.length - 1] !== frameCount - 1) {
+        decodeIndices.push(frameCount - 1);
+      }
+
+    const pixelsPerFrame = window.matchMedia("(pointer: coarse)").matches ? 7 : 4;
+    const computeRenderSpec = () => {
+      if (!canvas || !contentBounds) return null;
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvasDisplayWidth || canvas.width / dpr;
+      const height = canvasDisplayHeight || canvas.height / dpr;
+      const boundsW = Math.max(1, contentBounds.maxX - contentBounds.minX);
+      const boundsH = Math.max(1, contentBounds.maxY - contentBounds.minY);
+      const padding = Math.max(boundsW, boundsH) * 0.08;
+      let sx = contentBounds.minX - padding;
+      let sy = contentBounds.minY - padding;
+      let sw = boundsW + padding * 2;
+      let sh = boundsH + padding * 2;
+
+      sx = Math.max(0, Math.min(sx, width - 1));
+      sy = Math.max(0, Math.min(sy, height - 1));
+      sw = Math.max(1, Math.min(sw, width));
+      sh = Math.max(1, Math.min(sh, height));
+      if (sx + sw > width) {
+        sx = Math.max(0, width - sw);
+      }
+      if (sy + sh > height) {
+        sy = Math.max(0, height - sh);
+      }
+
+      const scale = Math.min(width / sw, height / sh);
+      const dw = sw * scale;
+      const dh = sh * scale;
+      const dx = (width - dw) / 2;
+      const dy = (height - dh) / 2;
+      return { sx, sy, sw, sh, dx, dy, dw, dh };
+    };
+    const render = () => {
+      if (!canvas || !ctx || disposed) return;
+      const dpr = window.devicePixelRatio || 1;
+      const displayWidth = canvasDisplayWidth || canvas.width / dpr;
+      const displayHeight = canvasDisplayHeight || canvas.height / dpr;
+      const frameCountSafe = Math.max(1, bitmaps.length);
+      const normalized =
+        ((Math.round(frameCursor) % frameCountSafe) + frameCountSafe) % frameCountSafe;
+      const frame = bitmaps[normalized];
+      if (!frame) return;
+      ctx.clearRect(0, 0, displayWidth, displayHeight);
+      let containScale = 1;
+      let containDx = 0;
+      let containDy = 0;
+      if (renderSpec) {
+        ctx.drawImage(
+          frame,
+          renderSpec.sx,
+          renderSpec.sy,
+          renderSpec.sw,
+          renderSpec.sh,
+          renderSpec.dx,
+          renderSpec.dy,
+          renderSpec.dw,
+          renderSpec.dh
+        );
+      } else {
+        containScale = Math.min(displayWidth / frame.width, displayHeight / frame.height);
+        const dw = frame.width * containScale;
+        const dh = frame.height * containScale;
+        containDx = (displayWidth - dw) / 2;
+        containDy = (displayHeight - dh) / 2;
+        ctx.drawImage(frame, containDx, containDy, dw, dh);
+      }
+      if (debugEnabled && debugBounds) {
+        let rectX = debugBounds.minX + centerOffset.x;
+        let rectY = debugBounds.minY + centerOffset.y;
+        let rectW = debugBounds.maxX - debugBounds.minX;
+        let rectH = debugBounds.maxY - debugBounds.minY;
+        if (renderSpec) {
+          const scaleX = renderSpec.dw / renderSpec.sw;
+          const scaleY = renderSpec.dh / renderSpec.sh;
+          rectX = renderSpec.dx + (debugBounds.minX - renderSpec.sx) * scaleX;
+          rectY = renderSpec.dy + (debugBounds.minY - renderSpec.sy) * scaleY;
+          rectW = (debugBounds.maxX - debugBounds.minX) * scaleX;
+          rectH = (debugBounds.maxY - debugBounds.minY) * scaleY;
+        } else {
+          rectX = containDx + debugBounds.minX * containScale;
+          rectY = containDy + debugBounds.minY * containScale;
+          rectW = (debugBounds.maxX - debugBounds.minX) * containScale;
+          rectH = (debugBounds.maxY - debugBounds.minY) * containScale;
+        }
+        const centerX = displayWidth / 2;
+        const centerY = displayHeight / 2;
+        const boundsCenterX = rectX + rectW / 2;
+        const boundsCenterY = rectY + rectH / 2;
+        ctx.save();
+        ctx.strokeStyle = "rgba(248, 250, 252, 0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 12, centerY);
+        ctx.lineTo(centerX + 12, centerY);
+        ctx.moveTo(centerX, centerY - 12);
+        ctx.lineTo(centerX, centerY + 12);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(251, 191, 36, 0.85)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rectX, rectY, rectW, rectH);
+        ctx.fillStyle = "rgba(34, 197, 94, 0.9)";
+        ctx.beginPath();
+        ctx.arc(boundsCenterX, boundsCenterY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      updateDebugOverlay();
+    };
+
+      const ensureCanvas = (firstBitmap: ImageBitmap) => {
+        if (canvas || disposed) return;
+        if (allowAutoCenter) {
+          const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+          if (computedOffset) {
+            centerOffset = computedOffset;
+            interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+          }
+        }
+        canvas = document.createElement("canvas");
+        canvas.className = "dish-modal__media-canvas";
+        canvas.width = firstBitmap.width;
+        canvas.height = firstBitmap.height;
+        ctx = canvas.getContext("2d");
+        if (!ctx) {
+          cleanup();
+          return;
+        }
+        if (allowAutoCenter && contentBounds) {
+          renderSpec = computeRenderSpec();
+        }
+        const onPointerDown = (event: PointerEvent) => {
+          pointerId = event.pointerId;
+          lastX = event.clientX;
+          canvas?.setPointerCapture(pointerId);
+          canvas?.classList.add("is-dragging");
+          event.preventDefault();
+        };
+        const onPointerMove = (event: PointerEvent) => {
+          if (pointerId !== event.pointerId) return;
+          const deltaX = event.clientX - lastX;
+          lastX = event.clientX;
+          frameCursor += (deltaX / pixelsPerFrame) * detailRotateDirection;
+          render();
+          event.preventDefault();
+        };
+        const onPointerRelease = (event: PointerEvent) => {
+          if (pointerId !== event.pointerId) return;
+          try {
+            canvas?.releasePointerCapture(pointerId);
+          } catch {
+            // Ignore pointer capture release errors.
+          }
+          pointerId = null;
+          canvas?.classList.remove("is-dragging");
+        };
+
+        canvas.addEventListener("pointerdown", onPointerDown);
+        canvas.addEventListener("pointermove", onPointerMove);
+        canvas.addEventListener("pointerup", onPointerRelease);
+        canvas.addEventListener("pointercancel", onPointerRelease);
+        canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+        canvas.addEventListener("dragstart", (event) => event.preventDefault());
+
+        host.appendChild(canvas);
+        const syncCanvasToImage = () => {
+          if (!canvas || !ctx) return;
+          const imageRect = image.getBoundingClientRect();
+          const hostRect = host.getBoundingClientRect();
+          const width = imageRect.width;
+          const height = imageRect.height;
+          if (!width || !height) {
+            requestAnimationFrame(syncCanvasToImage);
+            return;
+          }
+          canvasDisplayWidth = width;
+          canvasDisplayHeight = height;
+          canvas.style.position = "absolute";
+          canvas.style.left = imageRect.left - hostRect.left + "px";
+          canvas.style.top = imageRect.top - hostRect.top + "px";
+          canvas.style.width = width + "px";
+          canvas.style.height = height + "px";
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.max(1, Math.round(width * dpr));
+          canvas.height = Math.max(1, Math.round(height * dpr));
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        };
+        syncCanvasToImage();
+        requestAnimationFrame(syncCanvasToImage);
+        if (!resizeObserver && "ResizeObserver" in window) {
+          resizeObserver = new ResizeObserver(() => {
+            syncCanvasToImage();
+            render();
+          });
+          resizeObserver.observe(host);
+        }
+        hideImage();
+        host.classList.remove("is-loading-interactive");
+      };
+
+      let decodedCount = 0;
+    const normalizeDecodedFrame = async (frame: VideoFrame) => {
+      if (debugEnabled && !debugFrameSize) {
+        debugFrameSize = {
+          width: frame.codedWidth || frame.displayWidth || frame.visibleRect?.width || 0,
+          height: frame.codedHeight || frame.displayHeight || frame.visibleRect?.height || 0
+        };
+      }
+      const visibleRect = frame.visibleRect;
+      if (debugEnabled && !debugVisibleRect && visibleRect) {
+        debugVisibleRect = {
+          x: visibleRect.x,
+          y: visibleRect.y,
+          width: visibleRect.width,
+          height: visibleRect.height
+        };
+      }
+      const fullWidth = frame.codedWidth || frame.displayWidth || visibleRect?.width || 0;
+      const fullHeight = frame.codedHeight || frame.displayHeight || visibleRect?.height || 0;
+        if (!visibleRect || !fullWidth || !fullHeight) {
+          return createImageBitmap(frame);
+        }
+        const sameBounds =
+          Math.round(visibleRect.x) === 0 &&
+          Math.round(visibleRect.y) === 0 &&
+          Math.round(visibleRect.width) === Math.round(fullWidth) &&
+          Math.round(visibleRect.height) === Math.round(fullHeight);
+        if (sameBounds) {
+          return createImageBitmap(frame);
+        }
+        const offscreen = document.createElement("canvas");
+        offscreen.width = fullWidth;
+        offscreen.height = fullHeight;
+        const offCtx = offscreen.getContext("2d");
+        if (!offCtx) {
+          return createImageBitmap(frame);
+        }
+        offCtx.clearRect(0, 0, fullWidth, fullHeight);
+        offCtx.drawImage(
+          frame,
+          0,
+          0,
+          visibleRect.width,
+          visibleRect.height,
+          visibleRect.x,
+          visibleRect.y,
+          visibleRect.width,
+          visibleRect.height
+        );
+        return createImageBitmap(offscreen);
+      };
+
+      for (const frameIndex of decodeIndices) {
+        const decoded = await decoder.decode({ frameIndex, completeFramesOnly: true });
+        const frame = decoded?.image;
+        if (!frame) continue;
+      const bitmap = await normalizeDecodedFrame(frame);
+      frame.close?.();
+      if (disposed || token !== modalMediaToken) {
+        bitmap.close();
+        cleanup();
+        return;
+      }
+      bitmaps.push(bitmap);
+      if (debugEnabled && !debugBounds) {
+        const info = readForegroundCenterFromBitmap(bitmap);
+        if (info) debugBounds = info.bounds;
+      }
+        if (
+          allowAutoCenter &&
+          (bitmaps.length === 1 || bitmaps.length === INTERACTIVE_CENTER_SAMPLE_TARGET)
+        ) {
+          const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+          if (computedOffset) {
+            const delta =
+              Math.abs(computedOffset.x - centerOffset.x) +
+              Math.abs(computedOffset.y - centerOffset.y);
+            if (delta > 1) {
+              centerOffset = computedOffset;
+              interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+            }
+          }
+          const computedBounds = readContentBoundsFromBitmaps(bitmaps);
+          if (computedBounds) {
+            contentBounds = computedBounds;
+            renderSpec = computeRenderSpec();
+            if (debugEnabled) {
+              debugBounds = computedBounds;
+            }
+          }
+        }
+        if (!canvas) {
+          ensureCanvas(bitmap);
+        }
+        render();
+        if (!interactiveReady && bitmaps.length >= 2) {
+          interactiveReady = true;
+          host.classList.add("is-interactive");
+        }
+        decodedCount += 1;
+        if (decodedCount % 6 === 0) {
+          await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        }
+      }
+
+      if (!canvas) {
+        cleanup();
+        return;
+      }
+      if (allowAutoCenter) {
+        const computedOffset = readCenterOffsetFromBitmaps(bitmaps);
+        if (computedOffset) {
+          centerOffset = computedOffset;
+          interactiveDetailCenterOffsetCache.set(asset.source, centerOffset);
+          render();
+        }
+        const computedBounds = readContentBoundsFromBitmaps(bitmaps);
+        if (computedBounds) {
+          contentBounds = computedBounds;
+          renderSpec = computeRenderSpec();
+          if (debugEnabled) {
+            debugBounds = computedBounds;
+          }
+          render();
+        }
+      }
+      if (!interactiveReady && bitmaps.length >= 2) {
+        interactiveReady = true;
+        host.classList.add("is-interactive");
+      }
+    } catch (error) {
+      const isAbort =
+        error instanceof DOMException && (error.name === "AbortError" || error.name === "NotAllowedError");
+      if (!isAbort) {
+        console.warn("Interactive GIF decode failed", error);
+      }
+      cleanup();
+    }
+  };
 
   const preloadImageAsset = (src: string) =>
     new Promise<void>((resolve) => {
@@ -4318,9 +6035,20 @@ Windows:
 
   const openDish = (categoryId: string, itemId: string) => {
     activeItem = { category: categoryId, itemId };
+    void tick().then(() => {
+      const dish = resolveActiveDish();
+      const asset = getInteractiveDetailAsset(dish);
+      detailRotateSource = asset?.source || "";
+      detailRotateDirection = detailRotateSource
+        ? detailRotateDirectionBySource.get(detailRotateSource) ?? -1
+        : -1;
+      void setupInteractiveDetailMedia(asset);
+    });
   };
 
   const closeDish = () => {
+    teardownInteractiveDetailMedia();
+    detailRotateSource = "";
     activeItem = null;
   };
 
@@ -5775,14 +7503,28 @@ Windows:
 {#if activeItem}
   {@const dish = resolveActiveDish()}
   {#if dish}
+    {@const interactiveAsset = getInteractiveDetailAsset(dish)}
     <div class="dish-modal" on:click={closeDish}>
       <div class="dish-modal__card" on:click|stopPropagation>
         <div class="dish-modal__header">
           <p class="dish-modal__title">{textOf(dish.name)}</p>
           <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
         </div>
-        <div class="dish-modal__media">
+        <div class="dish-modal__media" bind:this={modalMediaHost}>
+          {#if interactiveAsset && supportsInteractiveMedia()}
+            <p class="dish-modal__media-note">{getDetailRotateHint(locale)}</p>
+            <button
+              class={`dish-modal__media-toggle ${detailRotateDirection === -1 ? "is-reversed" : ""}`}
+              type="button"
+              title={getDetailRotateToggleHint(locale)}
+              aria-label={getDetailRotateToggleHint(locale)}
+              on:click|stopPropagation={toggleDetailRotateDirection}
+            >
+              <span aria-hidden="true">⇄</span>
+            </button>
+          {/if}
           <img
+            bind:this={modalMediaImage}
             src={getDetailImageSource(dish)}
             srcset={buildResponsiveSrcSetFromMedia(dish)}
             sizes="(max-width: 720px) 90vw, 440px"
