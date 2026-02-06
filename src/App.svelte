@@ -48,8 +48,18 @@
   const detailRotateDirectionBySource = new Map<string, 1 | -1>();
   let interactivePrewarmSignature = "";
   let carouselActive: Record<string, number> = {};
-  let carouselRaf: Record<string, number | null> = {};
-  let carouselSnapTimeout: Record<string, number | null> = {};
+  let focusRowSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
+  let focusRowTouchState: Record<
+    string,
+    | {
+        touchId: number;
+        startX: number;
+        startY: number;
+        lastX: number;
+        axis: "pending" | "vertical" | "horizontal";
+      }
+    | null
+  > = {};
   let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
   let jukeboxTouchState: Record<
     string,
@@ -948,7 +958,7 @@
     previewStartupToken += 1;
     teardownInteractiveDetailMedia();
     clearBackgroundRotation();
-    clearJukeboxWheelState();
+    clearCarouselWheelState();
     if (sectionFocusRaf) {
       cancelAnimationFrame(sectionFocusRaf);
       sectionFocusRaf = null;
@@ -1103,23 +1113,124 @@
     return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
   };
 
-  const getLoadingLabel = (lang = locale) =>
-    normalizeLocaleCode(lang) === "es" ? "Cargando assets" : "Loading assets";
+  const instructionCopy = {
+    en: {
+      loadingLabel: "Loading assets",
+      tapHint: "Tap or click a dish for details",
+      assetDisclaimer:
+        "Assets belong to their owners. Do not copy or reuse this content without permission.",
+      jukeboxHint: "Scroll vertically to spin the disc. Horizontal to switch sections.",
+      focusRowsHint: "Scroll vertically for sections. Horizontally for dishes.",
+      rotateHintTouch: "Swipe horizontally on the image to rotate",
+      rotateHintMouse: "Drag horizontally with the mouse to rotate",
+      rotateToggle: "Reverse rotation"
+    },
+    es: {
+      loadingLabel: "Cargando assets",
+      tapHint: "Toca o haz clic en un platillo para ver detalles",
+      assetDisclaimer:
+        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
+      jukeboxHint: "Desliza vertical para girar el disco. Horizontal para cambiar sección.",
+      focusRowsHint: "Desliza vertical para secciones. Horizontal para platillos.",
+      rotateHintTouch: "Desliza horizontal sobre la imagen para girar",
+      rotateHintMouse: "Arrastra horizontal con el mouse para girar",
+      rotateToggle: "Invertir giro"
+    },
+    fr: {
+      loadingLabel: "Chargement des assets",
+      tapHint: "Touchez ou cliquez sur un plat pour voir les détails",
+      assetDisclaimer:
+        "Les assets appartiennent à leurs propriétaires. Ne copiez ni ne réutilisez ce contenu sans autorisation.",
+      jukeboxHint:
+        "Faites défiler verticalement pour faire tourner le disque. Horizontalement pour changer de section.",
+      focusRowsHint: "Faites défiler verticalement pour les sections. Horizontalement pour les plats.",
+      rotateHintTouch: "Balayez horizontalement l'image pour faire tourner",
+      rotateHintMouse: "Faites glisser horizontalement avec la souris pour faire tourner",
+      rotateToggle: "Inverser la rotation"
+    },
+    pt: {
+      loadingLabel: "Carregando assets",
+      tapHint: "Toque ou clique em um prato para ver detalhes",
+      assetDisclaimer:
+        "Os assets pertencem aos seus proprietários. Não copie nem reutilize este conteúdo sem autorização.",
+      jukeboxHint: "Deslize verticalmente para girar o disco. Horizontalmente para mudar de seção.",
+      focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para pratos.",
+      rotateHintTouch: "Deslize horizontalmente na imagem para girar",
+      rotateHintMouse: "Arraste horizontalmente com o mouse para girar",
+      rotateToggle: "Inverter rotação"
+    },
+    it: {
+      loadingLabel: "Caricamento assets",
+      tapHint: "Tocca o fai clic su un piatto per vedere i dettagli",
+      assetDisclaimer:
+        "Gli assets appartengono ai rispettivi proprietari. Non copiare o riutilizzare questo contenuto senza autorizzazione.",
+      jukeboxHint: "Scorri verticalmente per far girare il disco. Orizzontalmente per cambiare sezione.",
+      focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per i piatti.",
+      rotateHintTouch: "Scorri orizzontalmente sull'immagine per ruotare",
+      rotateHintMouse: "Trascina orizzontalmente con il mouse per ruotare",
+      rotateToggle: "Inverti rotazione"
+    },
+    de: {
+      loadingLabel: "Assets werden geladen",
+      tapHint: "Tippe oder klicke auf ein Gericht, um Details zu sehen",
+      assetDisclaimer:
+        "Assets gehören ihren Eigentümern. Bitte nicht ohne Genehmigung kopieren oder wiederverwenden.",
+      jukeboxHint: "Vertikal scrollen, um die Scheibe zu drehen. Horizontal, um die Sektion zu wechseln.",
+      focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Gerichte.",
+      rotateHintTouch: "Wische horizontal über das Bild, um zu drehen",
+      rotateHintMouse: "Ziehe horizontal mit der Maus, um zu drehen",
+      rotateToggle: "Drehrichtung umkehren"
+    },
+    ja: {
+      loadingLabel: "アセットを読み込み中",
+      tapHint: "料理をタップまたはクリックして詳細を見る",
+      assetDisclaimer:
+        "アセットは各所有者に帰属します。許可なく複製・再利用しないでください。",
+      jukeboxHint: "縦スクロールでディスクを回転。横スクロールでセクション切替。",
+      focusRowsHint: "縦スクロールでセクション。横スクロールで料理。",
+      rotateHintTouch: "画像上で横にスワイプして回転",
+      rotateHintMouse: "画像上で横にドラッグして回転",
+      rotateToggle: "回転方向を反転"
+    },
+    ko: {
+      loadingLabel: "에셋 로딩 중",
+      tapHint: "요리를 탭하거나 클릭해 상세 정보를 확인하세요",
+      assetDisclaimer:
+        "에셋은 각 소유자에게 귀속됩니다. 허가 없이 복사하거나 재사용하지 마세요.",
+      jukeboxHint: "세로 스크롤로 디스크를 회전. 가로 스크롤로 섹션 전환.",
+      focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 요리.",
+      rotateHintTouch: "이미지에서 가로로 스와이프해 회전",
+      rotateHintMouse: "마우스로 가로로 드래그해 회전",
+      rotateToggle: "회전 방향 반전"
+    },
+    zh: {
+      loadingLabel: "正在加载素材",
+      tapHint: "点按或点击菜品查看详情",
+      assetDisclaimer: "素材归其所有者所有。未经许可请勿复制或再利用。",
+      jukeboxHint: "纵向滚动旋转转盘，横向滚动切换分类。",
+      focusRowsHint: "纵向滚动浏览分类，横向滚动浏览菜品。",
+      rotateHintTouch: "在图片上横向滑动以旋转",
+      rotateHintMouse: "用鼠标横向拖动以旋转",
+      rotateToggle: "反向旋转"
+    }
+  } as const;
 
-  const getDishTapHint = (lang = locale) =>
-    normalizeLocaleCode(lang) === "es"
-      ? "Toca o haz clic en un platillo para ver detalles"
-      : "Tap or click a dish for details";
+  type InstructionKey = keyof (typeof instructionCopy)["en"];
 
-  const getAssetOwnershipDisclaimer = (lang = locale) =>
-    normalizeLocaleCode(lang) === "es"
-      ? "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización."
-      : "Assets belong to their owners. Do not copy or reuse this content without permission.";
+  const getInstructionCopy = (key: InstructionKey, lang = locale) => {
+    const localeKey = normalizeLocaleCode(lang) as keyof typeof instructionCopy;
+    return (instructionCopy[localeKey] ?? instructionCopy.en)[key] ?? instructionCopy.en[key];
+  };
 
-  const getJukeboxScrollHint = (lang = locale) =>
-    normalizeLocaleCode(lang) === "es"
-      ? "Desliza vertical para girar el disco. Horizontal para cambiar sección."
-      : "Scroll vertically to spin the disc. Horizontal to switch sections.";
+  const getLoadingLabel = (lang = locale) => getInstructionCopy("loadingLabel", lang);
+
+  const getDishTapHint = (lang = locale) => getInstructionCopy("tapHint", lang);
+
+  const getAssetOwnershipDisclaimer = (lang = locale) => getInstructionCopy("assetDisclaimer", lang);
+
+  const getJukeboxScrollHint = (lang = locale) => getInstructionCopy("jukeboxHint", lang);
+
+  const getFocusRowsScrollHint = (lang = locale) => getInstructionCopy("focusRowsHint", lang);
 
   const isProtectedAssetProjectSlug = (slug: string) => READ_ONLY_ASSET_PROJECTS.has(slug);
 
@@ -1571,7 +1682,11 @@ const DATA = ${payload};
 const currencySymbols = {
   MXN: "$", USD: "$", EUR: "€", GBP: "£", JPY: "¥", COP: "$", ARS: "$"
 };
-const LOOP_COPIES = 5;
+const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 260;
+const FOCUS_ROWS_WHEEL_SETTLE_MS = 200;
+const FOCUS_ROWS_WHEEL_DELTA_CAP = 140;
+const FOCUS_ROWS_TOUCH_DELTA_SCALE = 2.2;
+const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
 let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
 const fontFamily = DATA.meta.fontFamily || "Fraunces";
 const fontSource = DATA.meta.fontSource || "";
@@ -1616,6 +1731,7 @@ let detailRotateDirection = -1;
 let detailRotateSource = "";
 const detailRotateDirectionBySource = new Map();
 const jukeboxWheelState = new Map();
+const focusRowWheelState = new Map();
 
 const textOf = (entry) => entry?.[locale] ?? entry?.[DATA.meta.defaultLocale] ?? "";
 const menuTerms = {
@@ -1692,35 +1808,15 @@ const ensureFont = () => {
   }
 };
 
-const getLoopCopies = (count) => (count > 1 ? LOOP_COPIES : 1);
-const getLoopStart = (count) => count * Math.floor(getLoopCopies(count) / 2);
-const getLoopedItems = (items) => {
-  if (items.length <= 1) {
-    return items.map((item, index) => ({
-      item,
-      loopIndex: index,
-      sourceIndex: index,
-      key: item.id + "-0"
-    }));
-  }
-  const copies = getLoopCopies(items.length);
-  const looped = [];
-  for (let copy = 0; copy < copies; copy += 1) {
-    items.forEach((item, index) => {
-      looped.push({
-        item,
-        loopIndex: copy * items.length + index,
-        sourceIndex: index,
-        key: item.id + "-" + copy
-      });
-    });
-  }
-  return looped;
-};
+const getFocusRowItems = (items) =>
+  items.map((item, index) => ({
+    item,
+    sourceIndex: index,
+    key: item.id + "-focus"
+  }));
 const getJukeboxItems = (items) =>
   items.map((item, index) => ({
     item,
-    loopIndex: index,
     sourceIndex: index,
     key: item.id + "-jukebox"
   }));
@@ -1732,7 +1828,7 @@ const getCircularOffset = (activeIndex, targetIndex, count) => {
   while (offset < -half) offset += count;
   return offset;
 };
-const wrapJukeboxIndex = (value, count) => {
+const wrapCarouselIndex = (value, count) => {
   if (count <= 0) return 0;
   return ((value % count) + count) % count;
 };
@@ -1740,6 +1836,11 @@ const normalizeJukeboxWheelDelta = (event) => {
   const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
   const scaled = event.deltaY * modeScale;
   return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
+};
+const normalizeFocusRowWheelDelta = (event) => {
+  const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
+  const scaled = event.deltaX * modeScale;
+  return Math.max(-FOCUS_ROWS_WHEEL_DELTA_CAP, Math.min(FOCUS_ROWS_WHEEL_DELTA_CAP, scaled));
 };
 
 const responsiveWidths = { small: 480, medium: 960, large: 1440 };
@@ -1814,20 +1915,11 @@ const getInteractiveDetailAsset = (item) => {
 };
 const supportsInteractiveMedia = () => "ImageDecoder" in window;
 const getDetailRotateHint = () => {
-  const lang = (locale || "").toLowerCase().split("-")[0];
   const isTouch = window.matchMedia("(pointer: coarse)").matches;
-  if (isTouch) {
-    return lang === "es"
-      ? "Desliza horizontal sobre la imagen para girar"
-      : "Swipe horizontally on image to rotate";
-  }
-  return lang === "es"
-    ? "Arrastra horizontal con el mouse para girar"
-    : "Drag horizontally with the mouse to rotate";
+  return getInstructionCopy(isTouch ? "rotateHintTouch" : "rotateHintMouse");
 };
 const getDetailRotateToggleHint = () => {
-  const lang = (locale || "").toLowerCase().split("-")[0];
-  return lang === "es" ? "Invertir giro" : "Reverse rotation";
+  return getInstructionCopy("rotateToggle");
 };
 const toggleDetailRotateDirection = () => {
   detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
@@ -2582,22 +2674,121 @@ const setupInteractiveModalMedia = async (asset) => {
     cleanup();
   }
 };
-const getLoadingLabel = () =>
-  (locale || "").toLowerCase().split("-")[0] === "es"
-    ? "Cargando assets"
-    : "Loading assets";
-const getTapHint = () =>
-  (locale || "").toLowerCase().split("-")[0] === "es"
-    ? "Toca o haz clic en un platillo para ver detalles"
-    : "Tap or click a dish for details";
-const getAssetDisclaimer = () =>
-  (locale || "").toLowerCase().split("-")[0] === "es"
-    ? "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización."
-    : "Assets belong to their owners. Do not copy or reuse this content without permission.";
-const getJukeboxHint = () =>
-  (locale || "").toLowerCase().split("-")[0] === "es"
-    ? "Desliza vertical para girar el disco. Horizontal para cambiar sección."
-    : "Scroll vertically to spin the disc. Horizontal to switch sections.";
+const instructionCopy = {
+  en: {
+    loadingLabel: "Loading assets",
+    tapHint: "Tap or click a dish for details",
+    assetDisclaimer:
+      "Assets belong to their owners. Do not copy or reuse this content without permission.",
+    jukeboxHint: "Scroll vertically to spin the disc. Horizontal to switch sections.",
+    focusRowsHint: "Scroll vertically for sections. Horizontally for dishes.",
+    rotateHintTouch: "Swipe horizontally on the image to rotate",
+    rotateHintMouse: "Drag horizontally with the mouse to rotate",
+    rotateToggle: "Reverse rotation"
+  },
+  es: {
+    loadingLabel: "Cargando assets",
+    tapHint: "Toca o haz clic en un platillo para ver detalles",
+    assetDisclaimer:
+      "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
+    jukeboxHint: "Desliza vertical para girar el disco. Horizontal para cambiar sección.",
+    focusRowsHint: "Desliza vertical para secciones. Horizontal para platillos.",
+    rotateHintTouch: "Desliza horizontal sobre la imagen para girar",
+    rotateHintMouse: "Arrastra horizontal con el mouse para girar",
+    rotateToggle: "Invertir giro"
+  },
+  fr: {
+    loadingLabel: "Chargement des assets",
+    tapHint: "Touchez ou cliquez sur un plat pour voir les détails",
+    assetDisclaimer:
+      "Les assets appartiennent à leurs propriétaires. Ne copiez ni ne réutilisez ce contenu sans autorisation.",
+    jukeboxHint:
+      "Faites défiler verticalement pour faire tourner le disque. Horizontalement pour changer de section.",
+    focusRowsHint: "Faites défiler verticalement pour les sections. Horizontalement pour les plats.",
+    rotateHintTouch: "Balayez horizontalement l'image pour faire tourner",
+    rotateHintMouse: "Faites glisser horizontalement avec la souris pour faire tourner",
+    rotateToggle: "Inverser la rotation"
+  },
+  pt: {
+    loadingLabel: "Carregando assets",
+    tapHint: "Toque ou clique em um prato para ver detalhes",
+    assetDisclaimer:
+      "Os assets pertencem aos seus proprietários. Não copie nem reutilize este conteúdo sem autorização.",
+    jukeboxHint: "Deslize verticalmente para girar o disco. Horizontalmente para mudar de seção.",
+    focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para pratos.",
+    rotateHintTouch: "Deslize horizontalmente na imagem para girar",
+    rotateHintMouse: "Arraste horizontalmente com o mouse para girar",
+    rotateToggle: "Inverter rotação"
+  },
+  it: {
+    loadingLabel: "Caricamento assets",
+    tapHint: "Tocca o fai clic su un piatto per vedere i dettagli",
+    assetDisclaimer:
+      "Gli assets appartengono ai rispettivi proprietari. Non copiare o riutilizzare questo contenuto senza autorizzazione.",
+    jukeboxHint: "Scorri verticalmente per far girare il disco. Orizzontalmente per cambiare sezione.",
+    focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per i piatti.",
+    rotateHintTouch: "Scorri orizzontalmente sull'immagine per ruotare",
+    rotateHintMouse: "Trascina orizzontalmente con il mouse per ruotare",
+    rotateToggle: "Inverti rotazione"
+  },
+  de: {
+    loadingLabel: "Assets werden geladen",
+    tapHint: "Tippe oder klicke auf ein Gericht, um Details zu sehen",
+    assetDisclaimer:
+      "Assets gehören ihren Eigentümern. Bitte nicht ohne Genehmigung kopieren oder wiederverwenden.",
+    jukeboxHint: "Vertikal scrollen, um die Scheibe zu drehen. Horizontal, um die Sektion zu wechseln.",
+    focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Gerichte.",
+    rotateHintTouch: "Wische horizontal über das Bild, um zu drehen",
+    rotateHintMouse: "Ziehe horizontal mit der Maus, um zu drehen",
+    rotateToggle: "Drehrichtung umkehren"
+  },
+  ja: {
+    loadingLabel: "アセットを読み込み中",
+    tapHint: "料理をタップまたはクリックして詳細を見る",
+    assetDisclaimer:
+      "アセットは各所有者に帰属します。許可なく複製・再利用しないでください。",
+    jukeboxHint: "縦スクロールでディスクを回転。横スクロールでセクション切替。",
+    focusRowsHint: "縦スクロールでセクション。横スクロールで料理。",
+    rotateHintTouch: "画像上で横にスワイプして回転",
+    rotateHintMouse: "画像上で横にドラッグして回転",
+    rotateToggle: "回転方向を反転"
+  },
+  ko: {
+    loadingLabel: "에셋 로딩 중",
+    tapHint: "요리를 탭하거나 클릭해 상세 정보를 확인하세요",
+    assetDisclaimer:
+      "에셋은 각 소유자에게 귀속됩니다. 허가 없이 복사하거나 재사용하지 마세요.",
+    jukeboxHint: "세로 스크롤로 디스크를 회전. 가로 스크롤로 섹션 전환.",
+    focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 요리.",
+    rotateHintTouch: "이미지에서 가로로 스와이프해 회전",
+    rotateHintMouse: "마우스로 가로로 드래그해 회전",
+    rotateToggle: "회전 방향 반전"
+  },
+  zh: {
+    loadingLabel: "正在加载素材",
+    tapHint: "点按或点击菜品查看详情",
+    assetDisclaimer: "素材归其所有者所有。未经许可请勿复制或再利用。",
+    jukeboxHint: "纵向滚动旋转转盘，横向滚动切换分类。",
+    focusRowsHint: "纵向滚动浏览分类，横向滚动浏览菜品。",
+    rotateHintTouch: "在图片上横向滑动以旋转",
+    rotateHintMouse: "用鼠标横向拖动以旋转",
+    rotateToggle: "反向旋转"
+  }
+};
+
+const normalizeLocale = (value) => (value || "").toLowerCase().split("-")[0];
+
+const getInstructionCopy = (key) => {
+  const localeKey = normalizeLocale(locale);
+  const pack = instructionCopy[localeKey] || instructionCopy.en;
+  return pack[key] || instructionCopy.en[key];
+};
+
+const getLoadingLabel = () => getInstructionCopy("loadingLabel");
+const getTapHint = () => getInstructionCopy("tapHint");
+const getAssetDisclaimer = () => getInstructionCopy("assetDisclaimer");
+const getJukeboxHint = () => getInstructionCopy("jukeboxHint");
+const getFocusRowsHint = () => getInstructionCopy("focusRowsHint");
 const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
 const collectStartupSources = () => {
   const urls = new Set();
@@ -2668,9 +2859,9 @@ const preloadStartupAssets = async () => {
 };
 
 const buildCarousel = (category) => {
-  const looped = isJukeboxTemplate()
+  const entries = isJukeboxTemplate()
     ? getJukeboxItems(category.items)
-    : getLoopedItems(category.items);
+    : getFocusRowItems(category.items);
   return \`
     <div class="menu-section__head">
       <p class="menu-section__title">\${textOf(category.name)}</p>
@@ -2687,10 +2878,10 @@ const buildCarousel = (category) => {
         "</div>"
       : ""}
     <div class="menu-carousel \${category.items.length <= 1 ? "single" : ""}" data-category-id="\${category.id}">
-      \${looped
+      \${entries
         .map(
           (entry) => \`
-            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-loop="\${entry.loopIndex}" data-source="\${entry.sourceIndex}">
+            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
                 <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
@@ -2758,6 +2949,11 @@ const render = () => {
           '<button class="section-nav__btn next" type="button" data-section-dir="1" aria-label="Next section"><span aria-hidden="true">›</span></button>' +
           "</div>"
         : ""}
+      \${!isJukeboxTemplate()
+        ? '<div class="focus-rows-hint" aria-hidden="true"><span class="focus-rows-hint__label">' +
+          getFocusRowsHint() +
+          "</span></div>"
+        : ""}
       <div class="menu-scroll">
         \${DATA.categories
           .map(
@@ -2821,19 +3017,11 @@ const render = () => {
   syncStartupUi();
 };
 
-const centerCarousel = (container, index, behavior = "auto") => {
-  const cards = Array.from(container.querySelectorAll(".carousel-card"));
-  const target = cards[index];
-  if (!target) return;
-  if (container.clientWidth === 0) return;
-  const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
-  container.scrollTo({ left: targetLeft, behavior });
-};
-
 const applyFocusState = (container, activeIndex, itemCount = 0) => {
   const cards = Array.from(container.querySelectorAll(".carousel-card"));
+  const count = itemCount || cards.length || 1;
+  const hideAt = Math.max(1.6, count / 2 - 0.25);
   if (isJukeboxTemplate()) {
-    const count = itemCount || cards.length || 1;
     cards.forEach((card, index) => {
       const sourceIndex = Number(card.dataset.source || index);
       const offset = getCircularOffset(activeIndex, sourceIndex, count);
@@ -2857,46 +3045,40 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
       card.style.setProperty("--focus-shift", focusShift.toFixed(1) + "px");
       card.style.setProperty("--ring-depth", String(depth));
       card.classList.toggle("active", Math.abs(offset) < 0.5);
+      card.classList.toggle("near", Math.abs(offset) >= 0.5 && Math.abs(offset) < 1.25);
+      card.classList.toggle("far", Math.abs(offset) >= 1.25);
+      card.classList.toggle("is-hidden", distance >= hideAt);
     });
     return;
   }
-  cards.forEach((card, index) => {
-    const distance = Math.abs(activeIndex - index);
-    const opacity = Math.max(0.18, 1 - distance * 0.2);
-    const scale = Math.max(0.62, 1 - distance * 0.14);
-    const blur = Math.min(8, distance * 2.5);
-    card.style.opacity = opacity.toString();
-    card.style.transform = \`scale(\${distance === 0 ? 1 : scale})\`;
-    card.style.filter = distance === 0 ? "none" : \`blur(\${blur}px)\`;
-    card.style.zIndex = String(Math.max(1, 100 - distance));
-    card.classList.toggle("active", distance === 0);
-  });
-};
 
-const getClosestIndex = (container) => {
-  const cards = Array.from(container.querySelectorAll(".carousel-card"));
-  const center = container.scrollLeft + container.clientWidth / 2;
-  let closestIndex = 0;
-  let closestDistance = Number.POSITIVE_INFINITY;
   cards.forEach((card, index) => {
-    const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-    const distance = Math.abs(center - cardCenter);
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closestIndex = index;
+    const sourceIndex = Number(card.dataset.source || index);
+    const offset = getCircularOffset(activeIndex, sourceIndex, count);
+    const distance = Math.abs(offset);
+    const stepX = 220;
+    const maxDistance = 2.6;
+    const x = offset * stepX;
+    const y = Math.min(18, distance * 6);
+    const scale = distance < 0.5 ? 1 : Math.max(0.68, 1 - distance * 0.14);
+    let opacity =
+      distance < 0.5 ? 1 : distance <= maxDistance ? Math.max(0, 1 - distance * 0.34) : 0;
+    if (distance >= hideAt) {
+      opacity = 0;
     }
+    const blur = Math.min(8, distance * 2.4);
+    const depth = Math.max(1, 120 - Math.round(distance * 18));
+    card.style.setProperty("--row-x", x.toFixed(1) + "px");
+    card.style.setProperty("--row-y", y.toFixed(1) + "px");
+    card.style.setProperty("--row-scale", scale.toFixed(3));
+    card.style.setProperty("--row-opacity", opacity.toFixed(3));
+    card.style.setProperty("--row-blur", blur.toFixed(2) + "px");
+    card.style.setProperty("--row-depth", String(depth));
+    card.classList.toggle("active", distance < 0.5);
+    card.classList.toggle("near", distance >= 0.5 && distance < 1.5);
+    card.classList.toggle("far", distance >= 1.5 && distance < 2.5);
+    card.classList.toggle("is-hidden", distance >= hideAt);
   });
-  return closestIndex;
-};
-
-const remapLoopIndexIfEdge = (container, closestIndex, count) => {
-  if (count <= 1) return closestIndex;
-  const total = container.querySelectorAll(".carousel-card").length;
-  const edgeBand = count;
-  const nearEdge = closestIndex < edgeBand || closestIndex >= total - edgeBand;
-  if (!nearEdge) return closestIndex;
-  const normalized = ((closestIndex % count) + count) % count;
-  return getLoopStart(count) + normalized;
 };
 
 const shiftCarousel = (categoryId, direction) => {
@@ -2907,20 +3089,10 @@ const shiftCarousel = (categoryId, direction) => {
   const category = DATA.categories.find((item) => item.id === categoryId);
   const count = category?.items.length || 0;
   if (count === 0) return;
-  if (isJukeboxTemplate()) {
-    const current = Math.round(Number(container.dataset.activeIndex || "0") || 0);
-    const next = wrapJukeboxIndex(current + direction, count);
-    container.dataset.activeIndex = String(next);
-    applyFocusState(container, next, count);
-    return;
-  }
-  const total = container.querySelectorAll(".carousel-card").length;
-  if (total === 0) return;
-  const current = getClosestIndex(container);
-  const nextIndex = (current + direction + total) % total;
-  const finalIndex = remapLoopIndexIfEdge(container, nextIndex, count);
-  centerCarousel(container, finalIndex, "smooth");
-  applyFocusState(container, finalIndex);
+  const current = Math.round(Number(container.dataset.activeIndex || "0") || 0);
+  const next = wrapCarouselIndex(current + direction, count);
+  container.dataset.activeIndex = String(next);
+  applyFocusState(container, next, count);
 };
 
 const bindCarouselNav = () => {
@@ -3008,7 +3180,7 @@ const bindCarousels = () => {
         if (state.settle) window.clearTimeout(state.settle);
         state.settle = window.setTimeout(() => {
           const activeIndex = Number(container.dataset.activeIndex || "0") || 0;
-          const normalized = wrapJukeboxIndex(Math.round(activeIndex), count);
+          const normalized = wrapCarouselIndex(Math.round(activeIndex), count);
           container.dataset.activeIndex = String(normalized);
           applyFocusState(container, normalized, count);
           state.settle = 0;
@@ -3017,7 +3189,7 @@ const bindCarousels = () => {
       const applyDelta = (delta) => {
         if (!delta) return;
         const current = Number(container.dataset.activeIndex || "0") || 0;
-        const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+        const next = wrapCarouselIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
         container.dataset.activeIndex = String(next);
         applyFocusState(container, next, count);
         queueSnap();
@@ -3088,54 +3260,92 @@ const bindCarousels = () => {
       });
       return;
     }
-    const start = getLoopStart(count);
-
-    const alignTo = (index, behavior = "auto") => {
-      centerCarousel(container, index, behavior);
-      const closest = getClosestIndex(container);
-      applyFocusState(container, closest);
+    const start = 0;
+    container.dataset.activeIndex = String(start);
+    applyFocusState(container, start, count);
+    const state = focusRowWheelState.get(id) || { settle: 0, touch: null };
+    focusRowWheelState.set(id, state);
+    const queueSnap = () => {
+      if (state.settle) window.clearTimeout(state.settle);
+      state.settle = window.setTimeout(() => {
+        const activeIndex = Number(container.dataset.activeIndex || "0") || 0;
+        const normalized = wrapCarouselIndex(Math.round(activeIndex), count);
+        container.dataset.activeIndex = String(normalized);
+        applyFocusState(container, normalized, count);
+        state.settle = 0;
+      }, FOCUS_ROWS_WHEEL_SETTLE_MS);
     };
-
-    requestAnimationFrame(() => {
-      alignTo(start, "auto");
-    });
-    window.setTimeout(() => {
-      alignTo(start, "auto");
-    }, 180);
-    window.setTimeout(() => {
-      const closestIndex = getClosestIndex(container);
-      const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
-      alignTo(finalIndex, "auto");
-    }, 360);
-
-    let timeout;
-    const onScroll = () => {
-      if (timeout) window.clearTimeout(timeout);
-      const closestIndex = getClosestIndex(container);
-      applyFocusState(container, closestIndex);
-      timeout = window.setTimeout(() => {
-        const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
-        const behavior = finalIndex === closestIndex ? "smooth" : "auto";
-        alignTo(finalIndex, behavior);
-      }, 140);
+    const applyDelta = (delta) => {
+      if (!delta) return;
+      const current = Number(container.dataset.activeIndex || "0") || 0;
+      const next = wrapCarouselIndex(current + delta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
+      container.dataset.activeIndex = String(next);
+      applyFocusState(container, next, count);
+      queueSnap();
     };
-    container.addEventListener("scroll", onScroll);
-
-    let resizeTimeout;
-    const onResize = () => {
-      if (resizeTimeout) window.clearTimeout(resizeTimeout);
-      resizeTimeout = window.setTimeout(() => {
-        const closestIndex = getClosestIndex(container);
-        const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
-        alignTo(finalIndex, "auto");
-      }, 120);
+    const onWheel = (event) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      const delta = normalizeFocusRowWheelDelta(event);
+      if (!delta) return;
+      applyDelta(delta);
     };
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
+    const onTouchStart = (event) => {
+      const touch = event.changedTouches?.[0];
+      if (!touch) return;
+      state.touch = {
+        id: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        axis: "pending"
+      };
+    };
+    const onTouchMove = (event) => {
+      if (!state.touch) return;
+      const touch = Array.from(event.touches || []).find(
+        (entry) => entry.identifier === state.touch.id
+      );
+      if (!touch) return;
+      const totalDx = touch.clientX - state.touch.startX;
+      const totalDy = touch.clientY - state.touch.startY;
+      if (
+        state.touch.axis === "pending" &&
+        Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= FOCUS_ROWS_TOUCH_INTENT_THRESHOLD
+      ) {
+        state.touch.axis = Math.abs(totalDx) >= Math.abs(totalDy) ? "horizontal" : "vertical";
+      }
+      if (state.touch.axis !== "horizontal") return;
+      event.preventDefault();
+      const deltaX = touch.clientX - state.touch.lastX;
+      state.touch.lastX = touch.clientX;
+      if (Math.abs(deltaX) < 0.2) return;
+      applyDelta(-deltaX * FOCUS_ROWS_TOUCH_DELTA_SCALE);
+    };
+    const clearTouch = (event) => {
+      if (!state.touch) return;
+      const ended = Array.from(event.changedTouches || []).some(
+        (entry) => entry.identifier === state.touch.id
+      );
+      if (!ended) return;
+      state.touch = null;
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", clearTouch, { passive: true });
+    container.addEventListener("touchcancel", clearTouch, { passive: true });
     carouselCleanup.push(() => {
-      container.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
+      container.removeEventListener("wheel", onWheel);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", clearTouch);
+      container.removeEventListener("touchcancel", clearTouch);
+      if (state.settle) {
+        window.clearTimeout(state.settle);
+      }
+      state.touch = null;
+      focusRowWheelState.delete(id);
     });
   });
 };
@@ -3638,7 +3848,11 @@ Windows:
     t("wizardStepPreview")
   ];
 
-  const LOOP_COPIES = 5;
+  const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 260;
+  const FOCUS_ROWS_WHEEL_SETTLE_MS = 200;
+  const FOCUS_ROWS_WHEEL_DELTA_CAP = 140;
+  const FOCUS_ROWS_TOUCH_DELTA_SCALE = 2.2;
+  const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
   const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
   const JUKEBOX_WHEEL_SETTLE_MS = 240;
   const JUKEBOX_WHEEL_DELTA_CAP = 140;
@@ -3653,41 +3867,16 @@ Windows:
   const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
   const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
 
-  const getLoopCopies = (count: number) => (count > 1 ? LOOP_COPIES : 1);
-
-  const getLoopStart = (count: number) => count * Math.floor(getLoopCopies(count) / 2);
-
-  const getLoopedItems = (items: MenuItem[]) => {
-    if (items.length === 0) return [];
-    if (items.length === 1) {
-      return [
-        {
-          item: items[0],
-          loopIndex: 0,
-          sourceIndex: 0,
-          key: `${items[0].id}-0`
-        }
-      ];
-    }
-    const copies = getLoopCopies(items.length);
-    const looped: { item: MenuItem; loopIndex: number; sourceIndex: number; key: string }[] = [];
-    for (let copy = 0; copy < copies; copy += 1) {
-      items.forEach((item, index) => {
-        looped.push({
-          item,
-          loopIndex: copy * items.length + index,
-          sourceIndex: index,
-          key: `${item.id}-${copy}`
-        });
-      });
-    }
-    return looped;
-  };
+  const getFocusRowRenderItems = (items: MenuItem[]) =>
+    items.map((item, index) => ({
+      item,
+      sourceIndex: index,
+      key: `${item.id}-focus`
+    }));
 
   const getJukeboxRenderItems = (items: MenuItem[]) =>
     items.map((item, index) => ({
       item,
-      loopIndex: index,
       sourceIndex: index,
       key: `${item.id}-jukebox`
     }));
@@ -3701,9 +3890,32 @@ Windows:
     return offset;
   };
 
-  const wrapJukeboxIndex = (value: number, count: number) => {
+  const wrapCarouselIndex = (value: number, count: number) => {
     if (count <= 0) return 0;
     return ((value % count) + count) % count;
+  };
+
+  const getFocusRowCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
+    const offset = getCircularOffset(activeIndex, sourceIndex, count);
+    const distance = Math.abs(offset);
+    const stepX = 220;
+    const maxDistance = 2.6;
+    const hideAt = Math.max(1.6, count / 2 - 0.25);
+    const x = offset * stepX;
+    const y = Math.min(18, distance * 6);
+    const scale = distance < 0.5 ? 1 : Math.max(0.68, 1 - distance * 0.14);
+    let opacity =
+      distance < 0.5 ? 1 : distance <= maxDistance ? Math.max(0, 1 - distance * 0.34) : 0;
+    if (distance >= hideAt) {
+      opacity = 0;
+    }
+    const blur = Math.min(8, distance * 2.4);
+    const depth = Math.max(1, 120 - Math.round(distance * 18));
+    return `--row-x:${x.toFixed(1)}px;--row-y:${y.toFixed(1)}px;--row-scale:${scale.toFixed(
+      3
+    )};--row-opacity:${opacity.toFixed(3)};--row-blur:${blur.toFixed(
+      2
+    )}px;--row-depth:${depth};`;
   };
 
   const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
@@ -3734,14 +3946,21 @@ Windows:
     return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
   };
 
-  const clearJukeboxWheelState = () => {
+  const clearCarouselWheelState = () => {
     Object.values(jukeboxWheelSnapTimeout).forEach((timer) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+    Object.values(focusRowSnapTimeout).forEach((timer) => {
       if (timer) {
         clearTimeout(timer);
       }
     });
     jukeboxWheelSnapTimeout = {};
     jukeboxTouchState = {};
+    focusRowSnapTimeout = {};
+    focusRowTouchState = {};
   };
 
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
@@ -3833,21 +4052,11 @@ Windows:
     typeof window !== "undefined" && "ImageDecoder" in window;
 
   const getDetailRotateHint = (lang: string) => {
-    const base = normalizeLocaleCode(lang);
-    if (deviceMode === "mobile") {
-      return base === "es"
-        ? "Desliza horizontal sobre la imagen para girar"
-        : "Swipe horizontally on image to rotate";
-    }
-    return base === "es"
-      ? "Arrastra horizontal con el mouse para girar"
-      : "Drag horizontally with the mouse to rotate";
+    const key = deviceMode === "mobile" ? "rotateHintTouch" : "rotateHintMouse";
+    return getInstructionCopy(key, lang);
   };
 
-  const getDetailRotateToggleHint = (lang: string) => {
-    const base = normalizeLocaleCode(lang);
-    return base === "es" ? "Invertir giro" : "Reverse rotation";
-  };
+  const getDetailRotateToggleHint = (lang: string) => getInstructionCopy("rotateToggle", lang);
 
   const toggleDetailRotateDirection = () => {
     detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
@@ -4907,46 +5116,6 @@ Windows:
     }
   };
 
-  const centerCarousel = (container: HTMLElement, index: number, behavior: ScrollBehavior) => {
-    const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
-    const target = cards[index];
-    if (!target) return;
-    if (container.clientWidth === 0) return;
-    const targetLeft = target.offsetLeft + target.offsetWidth / 2 - container.clientWidth / 2;
-    container.scrollTo({ left: targetLeft, behavior });
-  };
-
-  const getClosestCarouselIndex = (container: HTMLElement) => {
-    const cards = Array.from(container.querySelectorAll<HTMLElement>(".carousel-card"));
-    if (cards.length === 0) return 0;
-    const center = container.scrollLeft + container.clientWidth / 2;
-    let closestIndex = 0;
-    let closestDistance = Number.POSITIVE_INFINITY;
-    cards.forEach((card, index) => {
-      const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-      const distance = Math.abs(center - cardCenter);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = index;
-      }
-    });
-    return closestIndex;
-  };
-
-  const remapLoopIndexIfEdge = (
-    container: HTMLElement,
-    closestIndex: number,
-    count: number
-  ) => {
-    if (count <= 1) return closestIndex;
-    const total = container.querySelectorAll(".carousel-card").length;
-    const edgeBand = count;
-    const nearEdge = closestIndex < edgeBand || closestIndex >= total - edgeBand;
-    if (!nearEdge) return closestIndex;
-    const normalized = ((closestIndex % count) + count) % count;
-    return getLoopStart(count) + normalized;
-  };
-
   const getClosestSectionIndex = (container: HTMLElement) => {
     const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
     if (sections.length === 0) return -1;
@@ -5031,31 +5200,20 @@ Windows:
 
   const syncCarousels = async () => {
     await tick();
-    if (isJukeboxTemplate) {
+    const menuScroll = document.querySelector<HTMLElement>(".menu-scroll");
+    if (menuScroll) {
+      applySectionFocus(menuScroll);
+    }
+    if (isJukeboxTemplate || !activeProject) {
       return;
     }
-    const containers = Array.from(
-      document.querySelectorAll<HTMLElement>(".menu-carousel")
-    );
-    containers.forEach((container) => {
-      const id = container.dataset.categoryId;
-      if (!id) return;
-      const index = carouselActive[id] ?? 0;
-      centerCarousel(container, index, "auto");
+    const next = { ...carouselActive };
+    activeProject.categories.forEach((category) => {
+      const count = category.items.length;
+      const current = next[category.id] ?? 0;
+      next[category.id] = count > 0 ? wrapCarouselIndex(Math.round(current), count) : 0;
     });
-    requestAnimationFrame(() => {
-      const next = { ...carouselActive };
-      containers.forEach((container) => {
-        const id = container.dataset.categoryId;
-        if (!id) return;
-        next[id] = getClosestCarouselIndex(container);
-      });
-      carouselActive = next;
-      const menuScroll = document.querySelector<HTMLElement>(".menu-scroll");
-      if (menuScroll) {
-        applySectionFocus(menuScroll);
-      }
-    });
+    carouselActive = next;
   };
 
   const getClosestHorizontalSectionIndex = (container: HTMLElement) => {
@@ -5099,11 +5257,10 @@ Windows:
   };
 
   const initCarouselIndices = (value: MenuProject) => {
-    clearJukeboxWheelState();
+    clearCarouselWheelState();
     const next: Record<string, number> = {};
-    const isJukebox = value.meta.template === "jukebox";
     value.categories.forEach((category) => {
-      next[category.id] = isJukebox ? 0 : getLoopStart(category.items.length);
+      next[category.id] = 0;
     });
     carouselActive = next;
     void syncCarousels();
@@ -5893,53 +6050,40 @@ Windows:
   };
 
   const shiftCarousel = (categoryId: string, direction: number) => {
-    if (isJukeboxTemplate) {
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      if (count <= 1) return;
-      const current = Math.round(carouselActive[categoryId] ?? 0);
-      const next = wrapJukeboxIndex(current + direction, count);
-      carouselActive = { ...carouselActive, [categoryId]: next };
-      return;
-    }
-    const container = document.querySelector<HTMLElement>(
-      `.menu-carousel[data-category-id="${categoryId}"]`
-    );
-    if (!container) return;
-    const total = container.querySelectorAll(".carousel-card").length;
-    if (total === 0) return;
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
-    const current = carouselActive[categoryId] ?? getClosestCarouselIndex(container);
-    const nextIndex = (current + direction + total) % total;
-    const finalIndex = remapLoopIndexIfEdge(container, nextIndex, count);
-    centerCarousel(container, finalIndex, "smooth");
-    carouselActive = { ...carouselActive, [categoryId]: finalIndex };
+    if (count <= 1) return;
+    const current = Math.round(carouselActive[categoryId] ?? 0);
+    const next = wrapCarouselIndex(current + direction, count);
+    carouselActive = { ...carouselActive, [categoryId]: next };
   };
 
-  const handleCarouselScroll = (categoryId: string, event: Event) => {
-    if (isJukeboxTemplate) return;
-    const container = event.currentTarget as HTMLElement;
-    if (carouselRaf[categoryId]) {
-      cancelAnimationFrame(carouselRaf[categoryId] ?? 0);
-    }
-    carouselRaf[categoryId] = requestAnimationFrame(() => {
-      const closestIndex = getClosestCarouselIndex(container);
-      carouselActive = { ...carouselActive, [categoryId]: closestIndex };
-    });
+  const normalizeFocusRowWheelDelta = (event: WheelEvent) => {
+    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
+    const scaled = event.deltaX * modeScale;
+    return Math.max(-FOCUS_ROWS_WHEEL_DELTA_CAP, Math.min(FOCUS_ROWS_WHEEL_DELTA_CAP, scaled));
+  };
 
-    if (carouselSnapTimeout[categoryId]) {
-      window.clearTimeout(carouselSnapTimeout[categoryId] ?? 0);
+  const queueFocusRowSnap = (categoryId: string, count: number) => {
+    if (count <= 1) return;
+    if (focusRowSnapTimeout[categoryId]) {
+      clearTimeout(focusRowSnapTimeout[categoryId] ?? undefined);
     }
-    carouselSnapTimeout[categoryId] = window.setTimeout(() => {
-      const closestIndex = getClosestCarouselIndex(container);
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      const finalIndex = remapLoopIndexIfEdge(container, closestIndex, count);
-      const behavior: ScrollBehavior = finalIndex === closestIndex ? "smooth" : "auto";
-      centerCarousel(container, finalIndex, behavior);
-      carouselActive = { ...carouselActive, [categoryId]: finalIndex };
-    }, 160);
+    const settleTimer = window.setTimeout(() => {
+      const current = carouselActive[categoryId] ?? 0;
+      const normalized = wrapCarouselIndex(Math.round(current), count);
+      carouselActive = { ...carouselActive, [categoryId]: normalized };
+      focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: null };
+    }, FOCUS_ROWS_WHEEL_SETTLE_MS);
+    focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: settleTimer };
+  };
+
+  const applyFocusRowDelta = (categoryId: string, count: number, delta: number) => {
+    if (!delta || count <= 1) return;
+    const current = carouselActive[categoryId] ?? 0;
+    const next = wrapCarouselIndex(current + delta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
+    carouselActive = { ...carouselActive, [categoryId]: next };
+    queueFocusRowSnap(categoryId, count);
   };
 
   const queueJukeboxSnap = (categoryId: string, count: number) => {
@@ -5949,7 +6093,7 @@ Windows:
     }
     const settleTimer = window.setTimeout(() => {
       const current = carouselActive[categoryId] ?? 0;
-      const normalized = wrapJukeboxIndex(Math.round(current), count);
+      const normalized = wrapCarouselIndex(Math.round(current), count);
       carouselActive = { ...carouselActive, [categoryId]: normalized };
       jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
     }, JUKEBOX_WHEEL_SETTLE_MS);
@@ -5959,42 +6103,93 @@ Windows:
   const applyJukeboxDelta = (categoryId: string, count: number, delta: number) => {
     if (!delta || count <= 1) return;
     const current = carouselActive[categoryId] ?? 0;
-    const next = wrapJukeboxIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+    const next = wrapCarouselIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
     carouselActive = { ...carouselActive, [categoryId]: next };
     queueJukeboxSnap(categoryId, count);
   };
 
-  const handleJukeboxWheel = (categoryId: string, event: WheelEvent) => {
-    if (!isJukeboxTemplate) return;
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  const handleCarouselWheel = (categoryId: string, event: WheelEvent) => {
+    if (isJukeboxTemplate) {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const category = activeProject?.categories.find((item) => item.id === categoryId);
+      const count = category?.items.length ?? 0;
+      if (count <= 1) return;
+      const delta = normalizeJukeboxWheelDelta(event);
+      if (!delta) return;
+      applyJukeboxDelta(categoryId, count, delta);
+      return;
+    }
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
     event.preventDefault();
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
     if (count <= 1) return;
-    const delta = normalizeJukeboxWheelDelta(event);
+    const delta = normalizeFocusRowWheelDelta(event);
     if (!delta) return;
-    applyJukeboxDelta(categoryId, count, delta);
+    applyFocusRowDelta(categoryId, count, delta);
   };
 
-  const handleJukeboxTouchStart = (categoryId: string, event: TouchEvent) => {
-    if (!isJukeboxTemplate) return;
+  const handleCarouselTouchStart = (categoryId: string, event: TouchEvent) => {
     const touch = event.changedTouches[0];
     if (!touch) return;
-    jukeboxTouchState = {
-      ...jukeboxTouchState,
+    if (isJukeboxTemplate) {
+      jukeboxTouchState = {
+        ...jukeboxTouchState,
+        [categoryId]: {
+          touchId: touch.identifier,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          lastY: touch.clientY,
+          axis: "pending"
+        }
+      };
+      return;
+    }
+    focusRowTouchState = {
+      ...focusRowTouchState,
       [categoryId]: {
         touchId: touch.identifier,
         startX: touch.clientX,
         startY: touch.clientY,
-        lastY: touch.clientY,
+        lastX: touch.clientX,
         axis: "pending"
       }
     };
   };
 
-  const handleJukeboxTouchMove = (categoryId: string, event: TouchEvent) => {
-    if (!isJukeboxTemplate) return;
-    const state = jukeboxTouchState[categoryId];
+  const handleCarouselTouchMove = (categoryId: string, event: TouchEvent) => {
+    if (isJukeboxTemplate) {
+      const state = jukeboxTouchState[categoryId];
+      if (!state) return;
+      const category = activeProject?.categories.find((item) => item.id === categoryId);
+      const count = category?.items.length ?? 0;
+      if (count <= 1) return;
+      const trackedTouch = Array.from(event.touches).find(
+        (touch) => touch.identifier === state.touchId
+      );
+      if (!trackedTouch) return;
+
+      const totalDx = trackedTouch.clientX - state.startX;
+      const totalDy = trackedTouch.clientY - state.startY;
+      if (
+        state.axis === "pending" &&
+        Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
+      ) {
+        state.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
+      }
+
+      if (state.axis !== "vertical") return;
+
+      event.preventDefault();
+      const deltaY = trackedTouch.clientY - state.lastY;
+      state.lastY = trackedTouch.clientY;
+      if (Math.abs(deltaY) < 0.2) return;
+      applyJukeboxDelta(categoryId, count, -deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
+      return;
+    }
+
+    const state = focusRowTouchState[categoryId];
     if (!state) return;
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
@@ -6008,29 +6203,38 @@ Windows:
     const totalDy = trackedTouch.clientY - state.startY;
     if (
       state.axis === "pending" &&
-      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
+      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= FOCUS_ROWS_TOUCH_INTENT_THRESHOLD
     ) {
-      state.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
+      state.axis = Math.abs(totalDx) >= Math.abs(totalDy) ? "horizontal" : "vertical";
     }
 
-    if (state.axis !== "vertical") return;
+    if (state.axis !== "horizontal") return;
 
     event.preventDefault();
-    const deltaY = trackedTouch.clientY - state.lastY;
-    state.lastY = trackedTouch.clientY;
-    if (Math.abs(deltaY) < 0.2) return;
-    applyJukeboxDelta(categoryId, count, -deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
+    const deltaX = trackedTouch.clientX - state.lastX;
+    state.lastX = trackedTouch.clientX;
+    if (Math.abs(deltaX) < 0.2) return;
+    applyFocusRowDelta(categoryId, count, -deltaX * FOCUS_ROWS_TOUCH_DELTA_SCALE);
   };
 
-  const handleJukeboxTouchEnd = (categoryId: string, event: TouchEvent) => {
-    if (!isJukeboxTemplate) return;
-    const state = jukeboxTouchState[categoryId];
+  const handleCarouselTouchEnd = (categoryId: string, event: TouchEvent) => {
+    if (isJukeboxTemplate) {
+      const state = jukeboxTouchState[categoryId];
+      if (!state) return;
+      const ended = Array.from(event.changedTouches).some(
+        (touch) => touch.identifier === state.touchId
+      );
+      if (!ended) return;
+      jukeboxTouchState = { ...jukeboxTouchState, [categoryId]: null };
+      return;
+    }
+    const state = focusRowTouchState[categoryId];
     if (!state) return;
     const ended = Array.from(event.changedTouches).some(
       (touch) => touch.identifier === state.touchId
     );
     if (!ended) return;
-    jukeboxTouchState = { ...jukeboxTouchState, [categoryId]: null };
+    focusRowTouchState = { ...focusRowTouchState, [categoryId]: null };
   };
 
   const openDish = (categoryId: string, itemId: string) => {
@@ -7353,6 +7557,14 @@ Windows:
                 </div>
               </header>
 
+              {#if !isJukeboxTemplate}
+                <div class="focus-rows-hint" aria-hidden="true">
+                  <span class="focus-rows-hint__label">
+                    {getFocusRowsScrollHint(locale)}
+                  </span>
+                </div>
+              {/if}
+
               {#if isJukeboxTemplate && activeProject.categories.length > 1}
                 <div class="section-nav">
                   <button
@@ -7377,12 +7589,11 @@ Windows:
 
               <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
                 {#each activeProject.categories as category}
-                  {@const loopedItems = isJukeboxTemplate
+                  {@const renderItems = isJukeboxTemplate
                     ? getJukeboxRenderItems(category.items)
-                    : getLoopedItems(category.items)}
-                  {@const activeIndex =
-                    carouselActive[category.id] ??
-                    (isJukeboxTemplate ? 0 : getLoopStart(category.items.length))}
+                    : getFocusRowRenderItems(category.items)}
+                  {@const activeIndex = carouselActive[category.id] ?? 0}
+                  {@const hideThreshold = Math.max(1.6, category.items.length / 2 - 0.25)}
                   <section class="menu-section">
                     <div class="menu-section__head">
                       <p class="menu-section__title">{textOf(category.name)}</p>
@@ -7410,33 +7621,33 @@ Windows:
                     {/if}
                     <div
                       class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
-                      on:scroll={(event) => handleCarouselScroll(category.id, event)}
-                      on:wheel={(event) => handleJukeboxWheel(category.id, event)}
-                      on:touchstart={(event) => handleJukeboxTouchStart(category.id, event)}
+                      on:wheel={(event) => handleCarouselWheel(category.id, event)}
+                      on:touchstart={(event) => handleCarouselTouchStart(category.id, event)}
                       on:touchmove|nonpassive={(event) =>
-                        handleJukeboxTouchMove(category.id, event)}
-                      on:touchend={(event) => handleJukeboxTouchEnd(category.id, event)}
-                      on:touchcancel={(event) => handleJukeboxTouchEnd(category.id, event)}
+                        handleCarouselTouchMove(category.id, event)}
+                      on:touchend={(event) => handleCarouselTouchEnd(category.id, event)}
+                      on:touchcancel={(event) => handleCarouselTouchEnd(category.id, event)}
                       data-category-id={category.id}
                     >
-                      {#each loopedItems as entry (entry.key)}
-                        {@const distance = isJukeboxTemplate
-                          ? Math.abs(
-                              getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
-                            )
-                          : Math.abs(activeIndex - entry.loopIndex)}
-                        {@const fade = Math.max(0, 1 - distance * 0.2)}
+                      {#each renderItems as entry (entry.key)}
+                        {@const distance = Math.abs(
+                          getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
+                        )}
                         {@const stateClass = isJukeboxTemplate
-                          ? distance < 0.5
-                            ? "active"
-                            : distance < 1.25
-                              ? "near"
-                              : "far"
-                          : distance === 0
-                            ? "active"
-                            : distance === 1
-                              ? "near"
-                              : "far"}
+                          ? distance >= hideThreshold
+                            ? "is-hidden"
+                            : distance < 0.5
+                              ? "active"
+                              : distance < 1.25
+                                ? "near"
+                                : "far"
+                          : distance >= hideThreshold
+                            ? "is-hidden"
+                            : distance < 0.5
+                              ? "active"
+                              : distance < 1.5
+                                ? "near"
+                                : "far"}
                         <button
                           class={`carousel-card ${stateClass}`}
                           type="button"
@@ -7447,7 +7658,11 @@ Windows:
                                   entry.sourceIndex,
                                   category.items.length
                                 )
-                              : `--fade:${fade}`
+                              : getFocusRowCardStyle(
+                                  activeIndex,
+                                  entry.sourceIndex,
+                                  category.items.length
+                                )
                           }
                           on:click={() => openDish(category.id, entry.item.id)}
                         >
