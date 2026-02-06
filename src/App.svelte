@@ -1629,6 +1629,8 @@
 
   const EXPORT_SHARED_STYLE_START = "/* EXPORT_SHARED_STYLES_START */";
   const EXPORT_SHARED_STYLE_END = "/* EXPORT_SHARED_STYLES_END */";
+  const FAVICON_ICO_BASE64 =
+    "AAABAAIAEBAAAAAAIACGAgAAJgAAACAgAAAAACAAGwEAAKwCAACJUE5HDQoaCgAAAA1JSERSAAAAEAAAABAIBgAAAB/z/2EAAAJNSURBVHicpZM9aFRBFIW/O++92eRtyA9BYwr/sNAIsVJUDFgHxRQqmDbYiJtWUBBiBBXbpE4nCqIQFHshoJIyEMUmEhuDiu66+9x982auxZoYAyLiaYZ7OXPuHeYcsemgsgVxDEUBrmjXSfyrtxVmcyHSPrOaUnjY3kfY3kcofLu3mbMxbEPJgHOQJDB90daODBk3vMcUAEvvQrz4OiS3HrjudU4IP4fadFBF2usZ4Ont0uedO8Rfmc27X7wOFuD4kMnvVmzt/QeNTl9t9Yefz1QFKaWDqkAaE+5Plb48fO475+ZdioDtFIyBZkNBYWIsyc6fjL6PT7X6sgIjgIkjyDOlcjZp7B0QPzfv0lJZKHcLeROadaWzLHR0CXPzLt07IL5yNmnkmRJHYJyHcoqODJt8cjbvMbEQR9CoKqPHIm5eKhECBA9RIkzO5D0jwyYvp6jzEDsPvT2iB3eJX3wTbGThe6aMnoh5fLuDjn7h0G5hfLqFj2DxbbAHd4kvd4l+rCKGLTACoYCRYUNHv5CvKaeOxqSpEDwIv/+jSSJo1FWWVzU6csDkRQ5pl3DnnmP+SUHTwJnrTarflAg4vF/y5VWNGnWVJFoXyJCFpWBnKrbqnRKAZgHnbzTZdy7j2SuPSaBwykzFVheWgm1ktAUKDzYVZh+58sqaRhNjSdasK64FQeFTTSFAq65MjCXZyppGs49c2aZC4f9ipJdv1AIcG5L87uU/GGk9TJutfO1C8m9W3hwm1baxTEnY1ksA+PgVE1qKTWWDs3Hnf+P8AxXTLWCAumbQAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA4klEQVR4nO1WQQ7DIAxLp2qH8YK+qe/tm/oCzttpE9ri4KQg1mk+tRXYBkya6Xpb7jIQl5HifwMiInNkUt7Srn1Pa168XBMbQiSKwJqhDLyLI3J2nMtAScquyjPHNPAkipwtOx/egqPi5VwrP6oBb+AYIE6zDhxZPcsxvBB9hNBz9nlLr+e05tpYlTe8A6W49s4iZACJRUwMz8A5DaDA1YJIGWCqlyZmiVs3K9QPMKIszCNoUZJrHKqBFiWY5YQ7wGbBAlNVv7sh0Qgt0i4tGSKvoWlTyprp2pb3wjn/BT9l4AFrDIU9CgVSeAAAAABJRU5ErkJggg==";
 
   const getSharedExportStyles = () => {
     const start = appCssRaw.indexOf(EXPORT_SHARED_STYLE_START);
@@ -3536,6 +3538,7 @@ void prewarmInteractiveDetailAssets();
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>Menu Export</title>
+    <link rel="icon" href="favicon.ico" />
     <link rel="stylesheet" href="styles.css?v=${version}" />
   </head>
   <body>
@@ -3789,6 +3792,7 @@ Windows:
       entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
       entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
       entries.push({ name: "index.html", data: encoder.encode(buildExportHtml(exportVersion)) });
+      entries.push({ name: "favicon.ico", data: fromBase64(FAVICON_ICO_BASE64) });
       entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
       entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
       entries.push({ name: "README.txt", data: encoder.encode(readme) });
@@ -5425,6 +5429,15 @@ Windows:
       binary += String.fromCharCode(...chunk);
     }
     return btoa(binary);
+  };
+
+  const fromBase64 = (value: string) => {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   };
 
   const getMimeType = (name: string) => {
