@@ -6,6 +6,17 @@
 </svelte:head>
 
 <script lang="ts">
+  import {
+    buildProjectAssetPairs,
+    buildProjectZipEntries,
+    collectProjectAssetPaths
+  } from "./application/export/projectZip";
+  import { buildStaticShellEntries } from "./application/export/staticShell";
+  import {
+    findMenuJsonEntry,
+    getZipAssetEntries,
+    getZipFolderName
+  } from "./application/projects/importZip";
   import { onDestroy, onMount, tick } from "svelte";
   import {
     getAllergenLabel as getLocalizedAllergenLabel,
@@ -1005,7 +1016,15 @@
         openError = error instanceof Error ? error.message : t("errOpenProject");
       }
     }
-    const zipEntries = await buildProjectZipEntries(draft.meta.slug || nextSlug);
+    const zipEntries = await buildProjectZipEntries({
+      project: draft,
+      slug: draft.meta.slug || nextSlug,
+      normalizePath,
+      readAssetBytes,
+      onMissingAsset: (sourcePath, error) => {
+        console.warn("Missing asset", sourcePath, error);
+      }
+    });
     if (zipEntries.length === 0) return;
     const blob = createZipBlob(zipEntries);
     const url = URL.createObjectURL(blob);
@@ -2917,47 +2936,6 @@ void prewarmInteractiveDetailAssets();
 `;
   };
 
-  const buildExportHtml = (version: string) => `
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>Menu Export</title>
-    <link rel="icon" href="favicon.ico" />
-    <link rel="stylesheet" href="styles.css?v=${version}" />
-  </head>
-  <body>
-    <div id="app"></div>
-    <div id="dish-modal" class="dish-modal">
-      <div id="dish-modal-content" class="dish-modal__card"></div>
-    </div>
-    <script src="app.js?v=${version}"></scr${"ipt"}>
-  </body>
-</html>
-`;
-
-  const collectAssetPaths = (data: MenuProject) => {
-    const assets = new Set<string>();
-    if (data.meta.fontSource) {
-      assets.add(data.meta.fontSource);
-    }
-    data.backgrounds.forEach((bg) => {
-      if (bg.src) assets.add(bg.src);
-    });
-    data.categories.forEach((category) => {
-      category.items.forEach((item) => {
-        if (item.media.hero360) assets.add(item.media.hero360);
-      });
-    });
-    return Array.from(assets)
-      .map((path) => normalizePath(path))
-      .filter((path) => path && !path.startsWith("http"));
-  };
-
   const readAssetBytes = async (
     slug: string,
     sourcePath: string
@@ -2986,76 +2964,6 @@ void prewarmInteractiveDetailAssets();
     return null;
   };
 
-  const buildProjectZipEntries = async (slug: string) => {
-    if (!draft) return [];
-    const encoder = new TextEncoder();
-    const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
-    const assets = collectAssetPaths(draft);
-    const assetPairs = assets.map((assetPath) => {
-      const normalized = normalizePath(assetPath);
-      const prefix = `projects/${slug}/assets/`;
-      let relativePath = normalized;
-      if (normalized.startsWith(prefix)) {
-        relativePath = normalized.slice(prefix.length);
-      } else if (normalized.includes("assets/")) {
-        relativePath = normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length);
-      } else {
-        relativePath = normalized.split("/").filter(Boolean).pop() ?? "asset";
-      }
-      return {
-        sourcePath: normalized,
-        relativePath,
-        zipPath: `${slug}/assets/${relativePath}`
-      };
-    });
-
-    if (exportProject.meta.fontSource) {
-      const normalized = normalizePath(exportProject.meta.fontSource);
-      const pair = assetPairs.find((item) => item.sourcePath === normalized);
-      if (pair) {
-        exportProject.meta.fontSource = `assets/${pair.relativePath}`;
-      }
-    }
-
-    exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
-      const normalized = normalizePath(bg.src || "");
-      const pair = assetPairs.find((item) => item.sourcePath === normalized);
-      return { ...bg, src: pair ? `assets/${pair.relativePath}` : bg.src };
-    });
-    exportProject.categories = exportProject.categories.map((category) => ({
-      ...category,
-      items: category.items.map((item) => {
-        const hero = normalizePath(item.media.hero360 || "");
-        const pair = assetPairs.find((p) => p.sourcePath === hero);
-        const media = {
-          ...item.media,
-          hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
-        };
-        delete (media as { responsive?: unknown }).responsive;
-        return {
-          ...item,
-          media
-        };
-      })
-    }));
-
-    const entries: { name: string; data: Uint8Array }[] = [];
-    const menuData = JSON.stringify(exportProject, null, 2);
-    entries.push({ name: `${slug}/menu.json`, data: encoder.encode(menuData) });
-
-    for (const pair of assetPairs) {
-      try {
-        const data = await readAssetBytes(slug, pair.sourcePath);
-        if (!data) continue;
-        entries.push({ name: pair.zipPath, data });
-      } catch (error) {
-        console.warn("Missing asset", pair.sourcePath, error);
-      }
-    }
-
-    return entries;
-  };
-
   const exportStaticSite = async () => {
     if (!draft) return;
     exportError = "";
@@ -3063,21 +2971,8 @@ void prewarmInteractiveDetailAssets();
     try {
       const slug = getProjectSlug();
       const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
-      const assets = collectAssetPaths(draft);
-      const assetPairs = assets.map((assetPath) => {
-        const normalized = normalizePath(assetPath);
-        const prefix = `projects/${slug}/assets/`;
-        let exportPath = normalized;
-        if (normalized.startsWith(prefix)) {
-          exportPath = `assets/${normalized.slice(prefix.length)}`;
-        } else if (normalized.includes("assets/")) {
-          exportPath = `assets/${normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)}`;
-        } else if (!normalized.startsWith("assets/")) {
-          const fileName = normalized.split("/").filter(Boolean).pop() ?? "asset";
-          exportPath = `assets/${fileName}`;
-        }
-        return { sourcePath: normalized, exportPath };
-      });
+      const assets = collectProjectAssetPaths(draft, normalizePath);
+      const assetPairs = buildProjectAssetPairs(slug, assets, normalizePath);
       const entries: { name: string; data: Uint8Array }[] = [];
       const heroSources = new Set<string>();
       draft.categories.forEach((category) => {
@@ -3091,12 +2986,13 @@ void prewarmInteractiveDetailAssets();
 
       for (const pair of assetPairs) {
         try {
+          const exportPath = `assets/${pair.relativePath}`;
           const data = await readAssetBytes(slug, pair.sourcePath);
           if (!data) continue;
-          const mime = getMimeType(pair.exportPath).toLowerCase();
+          const mime = getMimeType(exportPath).toLowerCase();
           const shouldResize = heroSources.has(pair.sourcePath) && isResponsiveImageMime(mime);
           if (shouldResize) {
-            const responsive = await createResponsiveImageVariants(pair.exportPath, data, mime);
+            const responsive = await createResponsiveImageVariants(exportPath, data, mime);
             if (responsive) {
               responsive.entries.forEach((entry) => entries.push(entry));
               sourceToExportPath.set(pair.sourcePath, responsive.paths.large);
@@ -3104,8 +3000,8 @@ void prewarmInteractiveDetailAssets();
               continue;
             }
           }
-          entries.push({ name: pair.exportPath, data });
-          sourceToExportPath.set(pair.sourcePath, pair.exportPath);
+          entries.push({ name: exportPath, data });
+          sourceToExportPath.set(pair.sourcePath, exportPath);
         } catch (error) {
           console.warn("Missing asset", pair.sourcePath, error);
         }
@@ -3150,34 +3046,14 @@ void prewarmInteractiveDetailAssets();
       const encoder = new TextEncoder();
       const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
-      const serveCommand = `#!/bin/bash
-set -e
-cd "$(dirname "$0")"
-python3 -m http.server 4173 --bind 127.0.0.1
-`;
-      const serveBat = `@echo off
-cd /d %~dp0
-python -m http.server 4173 --bind 127.0.0.1
-`;
-      const readme = `Open this exported site with a local server (recommended).
-
-macOS / Linux:
-1. Run chmod +x serve.command
-2. Run ./serve.command
-3. Open http://127.0.0.1:4173
-
-Windows:
-1. Run serve.bat
-2. Open http://127.0.0.1:4173
-`;
-      entries.push({ name: "menu.json", data: encoder.encode(menuData) });
-      entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
-      entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
-      entries.push({ name: "index.html", data: encoder.encode(buildExportHtml(exportVersion)) });
-      entries.push({ name: "favicon.ico", data: fromBase64(FAVICON_ICO_BASE64) });
-      entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
-      entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
-      entries.push({ name: "README.txt", data: encoder.encode(readme) });
+      const shellEntries = buildStaticShellEntries({
+        menuJson: menuData,
+        stylesCss: buildExportStyles(),
+        appJs: buildExportScript(exportProject),
+        exportVersion,
+        faviconIco: fromBase64(FAVICON_ICO_BASE64)
+      });
+      entries.push(...shellEntries);
 
       const blob = createZipBlob(entries);
       const url = URL.createObjectURL(blob);
@@ -4342,29 +4218,23 @@ Windows:
           openError = message.includes("compression") ? t("errZipCompression") : message;
           return;
         }
-        const menuEntry = entries.find((entry) => entry.name.endsWith("menu.json"));
+        const menuEntry = findMenuJsonEntry(entries);
         if (!menuEntry) {
           openError = t("errZipMissing");
           return;
         }
         const menuText = new TextDecoder().decode(menuEntry.data);
         const data = normalizeProject(JSON.parse(menuText) as MenuProject);
-        const prefix = menuEntry.name.replace(/menu\.json$/i, "");
-        const folder = prefix.replace(/\/$/, "");
-        const folderName = folder.split("/").filter(Boolean).pop() ?? "";
+        const folderName = getZipFolderName(menuEntry.name);
         const slug =
           slugifyName(data.meta.slug || folderName || data.meta.name || "menu") || "menu";
         data.meta.slug = slug;
         applyImportedPaths(data, slug);
         if (assetMode === "bridge") {
-          const assetsPrefix = prefix ? `${prefix}assets/` : "assets/";
-          const assetEntries = entries.filter((entry) => entry.name.startsWith(assetsPrefix));
-          for (const entry of assetEntries) {
-            const relative = entry.name.slice(assetsPrefix.length);
-            if (!relative) continue;
-            const parts = relative.split("/").filter(Boolean);
-            const name = parts.pop() ?? "";
-            const targetPath = parts.join("/");
+          const assetEntries = getZipAssetEntries(entries, menuEntry.name);
+          for (const assetEntry of assetEntries) {
+            const { name, targetPath, entry } = assetEntry;
+            if (!name) continue;
             const mime = getMimeType(name);
             const dataUrl = `data:${mime};base64,${toBase64(entry.data)}`;
             await bridgeRequest(
