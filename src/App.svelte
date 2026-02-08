@@ -36,6 +36,21 @@
     wrapCarouselIndex
   } from "./core/templates/previewInteraction";
   import { templateOptions } from "./core/templates/templateOptions";
+  import { createBridgeAssetClient } from "./infrastructure/bridge/client";
+  import {
+    normalizeAssetPath,
+    planEntryMove,
+    planEntryRename,
+    resolveBridgeAssetLookup
+  } from "./infrastructure/bridge/pathing";
+  import {
+    copyDirectoryHandleTo,
+    copyFileHandleTo,
+    getDirectoryHandleByPath as getDirectoryHandleByFsPath,
+    getFileHandleByPath as getFileHandleByFsPath,
+    listFilesystemEntries,
+    writeFileToDirectory
+  } from "./infrastructure/filesystem/client";
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
@@ -195,6 +210,7 @@
     TEMPLATE_DEMO_PROJECT_SLUG,
     "demo"
   ]);
+  const bridgeClient = createBridgeAssetClient(fetch);
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -502,8 +518,7 @@
       window.addEventListener("orientationchange", handleViewportChange);
 
       try {
-        const response = await fetch("/api/assets/ping");
-        bridgeAvailable = response.ok;
+        bridgeAvailable = await bridgeClient.ping();
       } catch {
         bridgeAvailable = false;
       }
@@ -2949,7 +2964,7 @@ void prewarmInteractiveDetailAssets();
   ): Promise<Uint8Array | null> => {
     if (assetMode === "filesystem" && rootHandle) {
       try {
-        const fileHandle = await getFileHandleByPath(sourcePath);
+        const fileHandle = await getFileHandleByFsPath(rootHandle, sourcePath);
         const file = await fileHandle.getFile();
         const buffer = await file.arrayBuffer();
         return new Uint8Array(buffer);
@@ -2959,14 +2974,7 @@ void prewarmInteractiveDetailAssets();
     }
     if (assetMode === "bridge") {
       const lookup = resolveBridgeAssetLookup(sourcePath, slug);
-      const response = await fetch(
-        `/api/assets/file?project=${encodeURIComponent(lookup.slug)}&path=${encodeURIComponent(
-          lookup.path
-        )}`
-      );
-      if (!response.ok) return null;
-      const buffer = await response.arrayBuffer();
-      return new Uint8Array(buffer);
+      return await bridgeClient.readFileBytes(lookup.slug, lookup.path);
     }
     const publicPath = normalizeAssetSrc(sourcePath);
     if (publicPath.startsWith("/projects/")) {
@@ -4571,40 +4579,11 @@ Windows:
 
   const refreshRootEntries = async () => {
     if (!rootHandle) return;
-    const entries: {
-      id: string;
-      name: string;
-      path: string;
-      kind: "file" | "directory";
-      handle: FileSystemHandle | null;
-      parent: FileSystemDirectoryHandle | null;
-      source: "filesystem" | "bridge";
-    }[] = [];
-    const walk = async (dir: FileSystemDirectoryHandle, prefix = "") => {
-      for await (const [name, handle] of dir.entries()) {
-        const path = `${prefix}${name}`;
-        entries.push({
-          id: path,
-          name,
-          path,
-          kind: handle.kind,
-          handle,
-          parent: dir,
-          source: "filesystem"
-        });
-        if (handle.kind === "directory") {
-          await walk(handle as FileSystemDirectoryHandle, `${path}/`);
-        }
-      }
-    };
-    await walk(rootHandle);
-    entries.sort((a, b) => {
-      if (a.kind !== b.kind) {
-        return a.kind === "directory" ? -1 : 1;
-      }
-      return a.path.localeCompare(b.path);
-    });
-    fsEntries = entries;
+    const entries = await listFilesystemEntries(rootHandle);
+    fsEntries = entries.map((entry) => ({
+      ...entry,
+      source: "filesystem" as const
+    }));
     rootFiles = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
   };
 
@@ -4632,15 +4611,7 @@ Windows:
     const slug = getProjectSlug();
     bridgeProjectSlug = slug;
     try {
-      const response = await fetch(`/api/assets/list?project=${encodeURIComponent(slug)}`);
-      if (!response.ok) {
-        fsError = t("errOpenFolder");
-        return;
-      }
-      const data = (await response.json()) as {
-        entries?: { path: string; kind: "file" | "directory" }[];
-      };
-      const entries = (data.entries ?? []).map((entry) => {
+      const entries = (await bridgeClient.list(slug)).map((entry) => {
         const name = entry.path.split("/").filter(Boolean).pop() ?? entry.path;
         return {
           id: entry.path,
@@ -4669,33 +4640,10 @@ Windows:
     overrideSlug?: string
   ) => {
     const slug = overrideSlug ?? getProjectSlug();
-    const response = await fetch(`/api/assets/${endpoint}?project=${encodeURIComponent(slug)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload ? JSON.stringify(payload) : undefined
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "Bridge error");
-    }
+    await bridgeClient.request(endpoint, slug, payload);
   };
 
-  const normalizePath = (value: string) => value.replace(/^\/+/, "").trim();
-
-  const resolveBridgeAssetLookup = (sourcePath: string, fallbackSlug: string) => {
-    const normalized = normalizePath(sourcePath);
-    const match = normalized.match(/^projects\/([^/]+)\/assets\/(.+)$/);
-    if (match) {
-      return { slug: match[1], path: match[2] };
-    }
-    if (normalized.includes("assets/")) {
-      return {
-        slug: fallbackSlug,
-        path: normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)
-      };
-    }
-    return { slug: fallbackSlug, path: normalized };
-  };
+  const normalizePath = normalizeAssetPath;
 
   const toBase64 = (data: Uint8Array) => {
     let binary = "";
@@ -4830,39 +4778,13 @@ Windows:
     return `@font-face { font-family: "${family}"; src: url("${source}")${formatLine}; font-display: swap; }`;
   };
 
-  const getDirectoryHandleByPath = async (
-    path: string,
-    create = false
-  ): Promise<FileSystemDirectoryHandle> => {
-    if (!rootHandle) {
-      throw new Error(t("errNoFolder"));
-    }
-    const parts = normalizePath(path).split("/").filter(Boolean);
-    let current = rootHandle;
-    for (const part of parts) {
-      current = await current.getDirectoryHandle(part, { create });
-    }
-    return current;
-  };
-
-  const getFileHandleByPath = async (path: string): Promise<FileSystemFileHandle> => {
-    const normalized = normalizePath(path);
-    const parts = normalized.split("/").filter(Boolean);
-    const fileName = parts.pop();
-    if (!fileName) {
-      throw new Error("Missing file name");
-    }
-    const dir = await getDirectoryHandleByPath(parts.join("/"), false);
-    return await dir.getFileHandle(fileName);
-  };
-
   const createFolder = async () => {
     if (!ensureAssetProjectWritable()) return;
     const name = window.prompt(t("promptNewFolder"));
     if (!name) return;
     if (assetMode === "filesystem") {
       if (!rootHandle) return;
-      await getDirectoryHandleByPath(name, true);
+      await getDirectoryHandleByFsPath(rootHandle, name, true);
       await refreshRootEntries();
       return;
     }
@@ -4876,44 +4798,6 @@ Windows:
     }
   };
 
-  const writeFileTo = async (
-    file: File,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const newHandle = await destination.getFileHandle(name, { create: true });
-    const writable = await newHandle.createWritable();
-    await writable.write(await file.arrayBuffer());
-    await writable.close();
-  };
-
-  const copyFileTo = async (
-    source: FileSystemFileHandle,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const file = await source.getFile();
-    const newHandle = await destination.getFileHandle(name, { create: true });
-    const writable = await newHandle.createWritable();
-    await writable.write(await file.arrayBuffer());
-    await writable.close();
-  };
-
-  const copyDirectoryTo = async (
-    source: FileSystemDirectoryHandle,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const newDir = await destination.getDirectoryHandle(name, { create: true });
-    for await (const [entryName, handle] of source.entries()) {
-      if (handle.kind === "file") {
-        await copyFileTo(handle as FileSystemFileHandle, newDir, entryName);
-      } else {
-        await copyDirectoryTo(handle as FileSystemDirectoryHandle, newDir, entryName);
-      }
-    }
-  };
-
   const renameEntry = async (entry: (typeof fsEntries)[number]) => {
     if (!ensureAssetProjectWritable()) return;
     const newName = window.prompt(t("promptRename"), entry.name);
@@ -4921,19 +4805,17 @@ Windows:
     if (assetMode === "filesystem") {
       if (!rootHandle || !entry.parent || !entry.handle) return;
       if (entry.kind === "file") {
-        await copyFileTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
+        await copyFileHandleTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
         await entry.parent.removeEntry(entry.name);
       } else {
-        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, entry.parent, newName);
+        await copyDirectoryHandleTo(entry.handle as FileSystemDirectoryHandle, entry.parent, newName);
         await entry.parent.removeEntry(entry.name, { recursive: true });
       }
       await refreshRootEntries();
       return;
     }
     if (assetMode === "bridge") {
-      const parts = entry.path.split("/").filter(Boolean);
-      parts.pop();
-      const newPath = [...parts, newName].join("/");
+      const newPath = planEntryRename(entry.path, newName);
       try {
         await bridgeRequest("move", { from: entry.path, to: newPath });
         await refreshBridgeEntries();
@@ -4947,57 +4829,30 @@ Windows:
     entry: (typeof fsEntries)[number],
     targetPath: string
   ) => {
+    const plan = planEntryMove(entry.kind, entry.name, targetPath);
     if (assetMode === "filesystem") {
       if (!rootHandle || !entry.parent || !entry.handle) return;
-      const raw = normalizePath(targetPath);
-      const endsWithSlash = targetPath.trim().endsWith("/");
-      const parts = raw.split("/").filter(Boolean);
       if (entry.kind === "file") {
-        let fileName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          fileName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
-        await copyFileTo(entry.handle as FileSystemFileHandle, destination, fileName);
+        const destination = await getDirectoryHandleByFsPath(rootHandle, plan.destinationDirPath, true);
+        await copyFileHandleTo(
+          entry.handle as FileSystemFileHandle,
+          destination,
+          plan.destinationName
+        );
         await entry.parent.removeEntry(entry.name);
       } else {
-        let folderName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          folderName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
-        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, destination, folderName);
+        const destination = await getDirectoryHandleByFsPath(rootHandle, plan.destinationDirPath, true);
+        await copyDirectoryHandleTo(
+          entry.handle as FileSystemDirectoryHandle,
+          destination,
+          plan.destinationName
+        );
         await entry.parent.removeEntry(entry.name, { recursive: true });
       }
       return;
     }
     if (assetMode === "bridge") {
-      const raw = normalizePath(targetPath);
-      const endsWithSlash = targetPath.trim().endsWith("/");
-      const parts = raw.split("/").filter(Boolean);
-      let destinationPath = raw;
-      if (entry.kind === "file") {
-        let fileName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          fileName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        destinationPath = [...folderParts, fileName].join("/");
-      } else {
-        let folderName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          folderName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        destinationPath = [...folderParts, folderName].join("/");
-      }
-      await bridgeRequest("move", { from: entry.path, to: destinationPath });
+      await bridgeRequest("move", { from: entry.path, to: plan.destinationPath });
     }
   };
 
@@ -5080,9 +4935,9 @@ Windows:
         fsError = t("errNoFolder");
         return;
       }
-      const destination = await getDirectoryHandleByPath(target, true);
+      const destination = await getDirectoryHandleByFsPath(rootHandle, target, true);
       for (const file of uploads) {
-        await writeFileTo(file, destination, file.name);
+        await writeFileToDirectory(file, destination, file.name);
       }
       await refreshRootEntries();
       return;
