@@ -7,10 +7,44 @@
 
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
+  import { commonAllergenCatalog, menuTerms } from "./core/menu/catalogs";
+  import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
+  import {
+    FOCUS_ROWS_TOUCH_DELTA_SCALE,
+    FOCUS_ROWS_TOUCH_INTENT_THRESHOLD,
+    FOCUS_ROWS_WHEEL_SETTLE_MS,
+    FOCUS_ROWS_WHEEL_STEP_THRESHOLD,
+    INTERACTIVE_GIF_MAX_FRAMES,
+    INTERACTIVE_KEEP_ORIGINAL_PLACEMENT,
+    JUKEBOX_TOUCH_DELTA_SCALE,
+    JUKEBOX_TOUCH_INTENT_THRESHOLD,
+    JUKEBOX_WHEEL_SETTLE_MS,
+    JUKEBOX_WHEEL_STEP_THRESHOLD,
+    getCircularOffset,
+    getFocusRowCardStyle,
+    getFocusRowRenderItems,
+    getJukeboxCardStyle,
+    getJukeboxRenderItems,
+    normalizeFocusRowWheelDelta,
+    normalizeJukeboxWheelDelta,
+    wrapCarouselIndex
+  } from "./core/templates/previewInteraction";
+  import { templateOptions } from "./core/templates/templateOptions";
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
   import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "./lib/types";
+  import {
+    instructionCopy as instructionCopyConfig,
+    type InstructionKey
+  } from "./ui/config/instructionCopy";
+  import {
+    builtInFontSources,
+    currencyOptions,
+    fontOptions,
+    languageOptions
+  } from "./ui/config/staticOptions";
+  import { uiCopy as uiCopyConfig, type UiKey } from "./ui/config/uiCopy";
   import appCssRaw from "./app.css?raw";
 
   let project: MenuProject | null = null;
@@ -161,485 +195,13 @@
     large: string;
   };
 
-  const languageOptions = [
-    { code: "es", label: "Español" },
-    { code: "en", label: "English" },
-    { code: "fr", label: "Français" },
-    { code: "pt", label: "Português" },
-    { code: "it", label: "Italiano" },
-    { code: "de", label: "Deutsch" },
-    { code: "ja", label: "日本語" },
-    { code: "ko", label: "한국어" },
-    { code: "zh", label: "中文" }
-  ];
+  const uiCopy = uiCopyConfig;
 
-  const currencyOptions = [
-    { code: "MXN", label: "Peso MXN", symbol: "$" },
-    { code: "USD", label: "US Dollar", symbol: "$" },
-    { code: "EUR", label: "Euro", symbol: "€" },
-    { code: "GBP", label: "Pound", symbol: "£" },
-    { code: "JPY", label: "Yen", symbol: "¥" },
-    { code: "COP", label: "Peso COP", symbol: "$" },
-    { code: "ARS", label: "Peso ARS", symbol: "$" }
-  ];
-
-  const fontOptions = [
-    { value: "Fraunces", label: "Fraunces" },
-    { value: "Cinzel", label: "Cinzel" },
-    { value: "Cormorant Garamond", label: "Cormorant Garamond" },
-    { value: "Playfair Display", label: "Playfair Display" },
-    { value: "Poppins", label: "Poppins" }
-  ];
-
-  const builtInFontSources: Record<string, string> = {
-    Fraunces: "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;700&display=swap",
-    Cinzel: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap",
-    "Cormorant Garamond":
-      "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;700&display=swap",
-    "Playfair Display":
-      "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap",
-    Poppins: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap"
-  };
-
-  const menuTerms = {
-    es: { allergens: "Alérgenos", vegan: "Vegano" },
-    en: { allergens: "Allergens", vegan: "Vegan" },
-    fr: { allergens: "Allergènes", vegan: "Végétalien" },
-    pt: { allergens: "Alergênicos", vegan: "Vegano" },
-    it: { allergens: "Allergeni", vegan: "Vegano" },
-    de: { allergens: "Allergene", vegan: "Vegan" },
-    ja: { allergens: "アレルゲン", vegan: "ヴィーガン" },
-    ko: { allergens: "알레르겐", vegan: "비건" },
-    zh: { allergens: "过敏原", vegan: "纯素" }
-  } as const;
-
-  const commonAllergenCatalog = [
-    {
-      id: "gluten",
-      label: {
-        es: "Gluten",
-        en: "Gluten",
-        fr: "Gluten",
-        pt: "Glúten",
-        it: "Glutine",
-        de: "Gluten",
-        ja: "グルテン",
-        ko: "글루텐",
-        zh: "麸质"
-      }
-    },
-    {
-      id: "dairy",
-      label: {
-        es: "Lácteos",
-        en: "Dairy",
-        fr: "Produits laitiers",
-        pt: "Laticínios",
-        it: "Latticini",
-        de: "Milchprodukte",
-        ja: "乳製品",
-        ko: "유제품",
-        zh: "乳制品"
-      }
-    },
-    {
-      id: "egg",
-      label: {
-        es: "Huevo",
-        en: "Egg",
-        fr: "Oeuf",
-        pt: "Ovo",
-        it: "Uovo",
-        de: "Ei",
-        ja: "卵",
-        ko: "달걀",
-        zh: "鸡蛋"
-      }
-    },
-    {
-      id: "nuts",
-      label: {
-        es: "Frutos secos",
-        en: "Nuts",
-        fr: "Fruits à coque",
-        pt: "Nozes",
-        it: "Frutta a guscio",
-        de: "Schalenfrüchte",
-        ja: "木の実",
-        ko: "견과류",
-        zh: "坚果"
-      }
-    },
-    {
-      id: "peanut",
-      label: {
-        es: "Cacahuate",
-        en: "Peanut",
-        fr: "Arachide",
-        pt: "Amendoim",
-        it: "Arachide",
-        de: "Erdnuss",
-        ja: "ピーナッツ",
-        ko: "땅콩",
-        zh: "花生"
-      }
-    },
-    {
-      id: "soy",
-      label: {
-        es: "Soya",
-        en: "Soy",
-        fr: "Soja",
-        pt: "Soja",
-        it: "Soia",
-        de: "Soja",
-        ja: "大豆",
-        ko: "대두",
-        zh: "大豆"
-      }
-    },
-    {
-      id: "fish",
-      label: {
-        es: "Pescado",
-        en: "Fish",
-        fr: "Poisson",
-        pt: "Peixe",
-        it: "Pesce",
-        de: "Fisch",
-        ja: "魚",
-        ko: "생선",
-        zh: "鱼类"
-      }
-    },
-    {
-      id: "shellfish",
-      label: {
-        es: "Mariscos",
-        en: "Shellfish",
-        fr: "Crustacés",
-        pt: "Mariscos",
-        it: "Crostacei",
-        de: "Schalentiere",
-        ja: "甲殻類",
-        ko: "갑각류",
-        zh: "甲壳类"
-      }
-    },
-    {
-      id: "sesame",
-      label: {
-        es: "Ajonjolí",
-        en: "Sesame",
-        fr: "Sésame",
-        pt: "Gergelim",
-        it: "Sesamo",
-        de: "Sesam",
-        ja: "ごま",
-        ko: "참깨",
-        zh: "芝麻"
-      }
-    }
-  ] satisfies { id: string; label: Record<string, string> }[];
-
-  const uiCopy = {
-    es: {
-      appTitle: "Menú Interactivo",
-      studioTitle: "Menú Interactivo",
-      studioSubtitle: "Centro de control del proyecto.",
-      landingTitle: "Menu Maker",
-      landingBy: "By keneth4",
-      landingCreate: "Crear proyecto",
-      landingOpen: "Abrir proyecto",
-      landingWizard: "Iniciar wizard",
-      tabProject: "Proyecto",
-      tabAssets: "Assets",
-      tabEdit: "Edición",
-      tabWizard: "Wizard",
-      newProject: "Nuevo proyecto",
-      open: "Abrir proyecto",
-      save: "Guardar proyecto",
-      export: "Exportar sitio",
-      toggleView: "Cambiar vista",
-      toggleLang: "Cambiar idioma UI",
-      openEditor: "Abrir editor",
-      closeEditor: "Cerrar editor",
-      loadingProject: "Cargando proyecto...",
-      uploadAssets: "Subir assets",
-      uploadHint: "Arrastra archivos o usa el botón para subir.",
-      uploadTo: "Subir a",
-      promptMoveTo: "Mover a (ruta dentro de la carpeta raíz)",
-      step: "Paso",
-      wizardProgress: "Progreso",
-      wizardNext: "Siguiente",
-      wizardBack: "Anterior",
-      wizardComplete: "Completo",
-      wizardMissingBackground: "Agrega al menos un fondo con src.",
-      wizardRequireRootBackground:
-        "Sube y selecciona al menos un fondo propio para dejar de usar el demo.",
-      wizardDemoPreviewHint:
-        "Vista demo activa: sube tus assets y selecciona al menos un fondo para usar tu carpeta raíz.",
-      wizardMissingCategories: "Crea al menos una sección con nombre.",
-      wizardMissingDishes: "Agrega al menos un platillo con nombre y precio.",
-      exporting: "Exportando...",
-      exportReady: "Exportación lista.",
-      exportFailed: "No se pudo exportar.",
-      tipRotate: "Consejo: gira el dispositivo a horizontal para ver el layout completo.",
-      selectFolder: "Seleccionar carpeta",
-      newFolder: "Nueva carpeta",
-      rootTitle: "Assets del proyecto",
-      rootNone: "Sin ubicación",
-      dragDrop: "Arrastra archivos aquí o usa el botón de subir.",
-      selectAll: "Seleccionar todo",
-      clear: "Limpiar",
-      move: "Mover",
-      delete: "Eliminar",
-      rename: "Renombrar",
-      pickRootHint: "Sube assets para verlos aquí.",
-      rootEmpty: "Sin archivos en este proyecto.",
-      filesCount: "archivos",
-      projectName: "Nombre del proyecto",
-      template: "Template",
-      languages: "Idiomas disponibles",
-      defaultLang: "Idioma default",
-      font: "Tipografía",
-      fontCustom: "Fuente personalizada",
-      fontCustomName: "Nombre de fuente",
-      fontCustomSrc: "Archivo de fuente",
-      restaurantName: "Nombre del restaurante",
-      menuTitle: "Título del menú",
-      menuTitleFallback: "Menú",
-      restaurantFallback: "Restaurante",
-      blankMenu: "Selecciona una plantilla para comenzar.",
-      currency: "Moneda",
-      currencyPos: "Posición del símbolo",
-      currencyLeft: "Izquierda (€150)",
-      currencyRight: "Derecha (150€)",
-      editLang: "Idioma de edición",
-      editIdentity: "Identidad",
-      editSections: "Secciones",
-      editDishes: "Platillos",
-      editHierarchyHint: "Jerarquía: Sección > Platillo",
-      sectionHint: "Renombra y organiza las secciones del menú.",
-      dishHint: "Edita platillos dentro de la sección seleccionada.",
-      section: "Sección",
-      sectionName: "Nombre de sección",
-      deleteSection: "Eliminar sección",
-      dish: "Platillo",
-      dishData: "Datos del platillo",
-      name: "Nombre",
-      description: "Descripción",
-      longDescription: "Historia / descripción larga",
-      allergensLabel: "Alérgenos",
-      commonAllergens: "Alérgenos comunes",
-      customAllergens: "Alérgenos personalizados",
-      customAllergensHint: "Escribe separados por coma y tradúcelos en cada idioma.",
-      veganLabel: "Vegano",
-      price: "Precio",
-      asset360: "Asset 360",
-      addSection: "Agregar sección",
-      addDish: "Agregar platillo",
-      prevDish: "Platillo anterior",
-      nextDish: "Platillo siguiente",
-      wizardPick: "Elige una estructura base para comenzar.",
-      wizardTip: "Tip: si ya tienes categorías, el template solo cambia el estilo.",
-      wizardIdentity: "Define identidad y fondos.",
-      wizardCategories: "Crea categorías principales.",
-      wizardDishes: "Agrega platillos y sus GIFs 360.",
-      wizardPreview: "Revisa el preview final.",
-      wizardAssetsHint: "Sube assets en la pestaña Assets para seleccionarlos aquí.",
-      wizardStepStructure: "Estructura",
-      wizardStepIdentity: "Identidad",
-      wizardStepCategories: "Categorías",
-      wizardStepDishes: "Platillos",
-      wizardStepPreview: "Preview",
-      wizardAddBg: "+ Fondo",
-      wizardLabel: "Label",
-      wizardSrc: "Src",
-      wizardLanguage: "Idioma",
-      wizardCategory: "Categoría",
-      wizardAddCategory: "+ Categoría",
-      wizardAddDish: "+ Platillo",
-      wizardExportNote: "El exportador del sitio estático se agregará en este paso.",
-      backgroundLabel: "Fondo",
-      errOpenProject: "No se pudo abrir el archivo",
-      errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
-      errOpenFolder: "No se pudo abrir la carpeta.",
-      errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
-      errZipMissing: "El zip no contiene menu.json.",
-      errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
-      errZipNoBridge: "Para abrir zips necesitas el almacenamiento local activo.",
-      assetsRequired: "Carga los assets del proyecto para completar el preview.",
-      assetsReadOnly:
-        "Este proyecto demo es de solo lectura. No puedes modificar ni borrar sus assets.",
-      assetsOwnershipNotice:
-        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
-      promptNewFolder: "Nombre de la nueva carpeta",
-      promptRename: "Nuevo nombre",
-      promptSaveName: "Nombre del archivo del proyecto (zip)"
-    },
-    en: {
-      appTitle: "Interactive Menu",
-      studioTitle: "Interactive Menu",
-      studioSubtitle: "Project control center.",
-      landingTitle: "Menu Maker",
-      landingBy: "By keneth4",
-      landingCreate: "Create project",
-      landingOpen: "Open project",
-      landingWizard: "Run wizard",
-      tabProject: "Project",
-      tabAssets: "Assets",
-      tabEdit: "Edit",
-      tabWizard: "Wizard",
-      newProject: "New project",
-      open: "Open project",
-      save: "Save project",
-      export: "Export site",
-      toggleView: "Toggle view",
-      toggleLang: "Toggle UI language",
-      openEditor: "Open editor",
-      closeEditor: "Close editor",
-      loadingProject: "Loading project...",
-      uploadAssets: "Upload assets",
-      uploadHint: "Drag files here or use the upload button.",
-      uploadTo: "Upload to",
-      promptMoveTo: "Move to (path inside root folder)",
-      step: "Step",
-      wizardProgress: "Progress",
-      wizardNext: "Next",
-      wizardBack: "Back",
-      wizardComplete: "Complete",
-      wizardMissingBackground: "Add at least one background with src.",
-      wizardRequireRootBackground:
-        "Upload and select at least one of your own backgrounds to stop using demo assets.",
-      wizardDemoPreviewHint:
-        "Demo preview is active: upload your assets and pick at least one background from your root folder.",
-      wizardMissingCategories: "Create at least one section with a name.",
-      wizardMissingDishes: "Add at least one dish with name and price.",
-      exporting: "Exporting...",
-      exportReady: "Export ready.",
-      exportFailed: "Export failed.",
-      tipRotate: "Tip: rotate the device to landscape to see the full layout.",
-      selectFolder: "Select folder",
-      newFolder: "New folder",
-      rootTitle: "Project assets",
-      rootNone: "No location",
-      dragDrop: "Drag files here or use the upload button.",
-      selectAll: "Select all",
-      clear: "Clear",
-      move: "Move",
-      delete: "Delete",
-      rename: "Rename",
-      pickRootHint: "Upload assets to see them here.",
-      rootEmpty: "No files in this project yet.",
-      filesCount: "files",
-      projectName: "Project name",
-      template: "Template",
-      languages: "Available languages",
-      defaultLang: "Default language",
-      font: "Typography",
-      fontCustom: "Custom font",
-      fontCustomName: "Font name",
-      fontCustomSrc: "Font file",
-      restaurantName: "Restaurant name",
-      menuTitle: "Menu title",
-      menuTitleFallback: "Menu",
-      restaurantFallback: "Restaurant",
-      blankMenu: "Select a template to begin.",
-      currency: "Currency",
-      currencyPos: "Symbol position",
-      currencyLeft: "Left (€150)",
-      currencyRight: "Right (150€)",
-      editLang: "Editing language",
-      editIdentity: "Identity",
-      editSections: "Sections",
-      editDishes: "Dishes",
-      editHierarchyHint: "Hierarchy: Section > Dish",
-      sectionHint: "Rename and organize menu sections.",
-      dishHint: "Edit dishes inside the selected section.",
-      section: "Section",
-      sectionName: "Section name",
-      deleteSection: "Delete section",
-      dish: "Dish",
-      dishData: "Dish details",
-      name: "Name",
-      description: "Description",
-      longDescription: "History / long description",
-      allergensLabel: "Allergens",
-      commonAllergens: "Common Allergens",
-      customAllergens: "Custom Allergens",
-      customAllergensHint: "Use comma-separated names and translate them for each language.",
-      veganLabel: "Vegan",
-      price: "Price",
-      asset360: "360 asset",
-      addSection: "Add section",
-      addDish: "Add dish",
-      prevDish: "Previous dish",
-      nextDish: "Next dish",
-      wizardPick: "Choose a base structure to start.",
-      wizardTip: "Tip: if you already have categories, the template only changes layout.",
-      wizardIdentity: "Define identity and backgrounds.",
-      wizardCategories: "Create main categories.",
-      wizardDishes: "Add dishes and their 360 GIFs.",
-      wizardPreview: "Review the final preview.",
-      wizardAssetsHint: "Upload assets in the Assets tab to select them here.",
-      wizardStepStructure: "Structure",
-      wizardStepIdentity: "Identity",
-      wizardStepCategories: "Categories",
-      wizardStepDishes: "Dishes",
-      wizardStepPreview: "Preview",
-      wizardAddBg: "+ Background",
-      wizardLabel: "Label",
-      wizardSrc: "Src",
-      wizardLanguage: "Language",
-      wizardCategory: "Category",
-      wizardAddCategory: "+ Category",
-      wizardAddDish: "+ Dish",
-      wizardExportNote: "The static site exporter will be added in this step.",
-      backgroundLabel: "Background",
-      errOpenProject: "Unable to open the file",
-      errNoFolder: "Your browser doesn't support local folder access.",
-      errOpenFolder: "Unable to open the folder.",
-      errMoveFolder: "Your browser doesn't support moving files by folder.",
-      errZipMissing: "The zip file doesn't contain menu.json.",
-      errZipCompression: "The zip uses unsupported compression. Use a stored zip.",
-      errZipNoBridge: "Zip import requires local bridge storage.",
-      assetsRequired: "Upload the project assets to complete the preview.",
-      assetsReadOnly:
-        "This demo project is read-only. You cannot modify or delete its assets.",
-      assetsOwnershipNotice:
-        "Assets belong to their owners. Do not copy or reuse this content without permission.",
-      promptNewFolder: "New folder name",
-      promptRename: "New name",
-      promptSaveName: "Project file name (zip)"
-    }
-  };
-
-  type UiKey = keyof (typeof uiCopy)["es"];
   let t: (key: UiKey) => string = (key) => uiCopy.es[key];
   let selectedLabel: (count: number) => string = (count) => `${count} seleccionados`;
   $: t = (key) => uiCopy[uiLang]?.[key] ?? key;
   $: selectedLabel = (count) =>
     uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
-
-  type TemplateOption = {
-    id: string;
-    label: Record<string, string>;
-    categories: Record<string, string[]>;
-  };
-
-  const templateOptions: TemplateOption[] = [
-    {
-      id: "focus-rows",
-      label: { es: "Filas En Foco", en: "In Focus Rows" },
-      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-    },
-    {
-      id: "jukebox",
-      label: { es: "Jukebox", en: "Jukebox" },
-      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-    }
-  ];
 
   $: if (draft) {
     const validCategory = draft.categories.some((item) => item.id === selectedCategoryId);
@@ -1063,27 +625,6 @@
     return entry[locale] ?? entry[activeProject?.meta.defaultLocale ?? "es"] ?? fallback;
   };
 
-  const normalizeLocaleCode = (lang: string) => lang.toLowerCase().split("-")[0];
-
-  const getLocalizedValue = (
-    labels: Record<string, string> | undefined,
-    lang: string,
-    defaultLang = "en"
-  ) => {
-    if (!labels) return "";
-    const normalized = normalizeLocaleCode(lang);
-    const defaultNormalized = normalizeLocaleCode(defaultLang);
-    return (
-      labels[lang] ??
-      labels[normalized] ??
-      labels[defaultLang] ??
-      labels[defaultNormalized] ??
-      labels.en ??
-      Object.values(labels).find((value) => value.trim().length > 0) ??
-      ""
-    );
-  };
-
   const normalizeAssetSrc = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return "";
@@ -1113,109 +654,7 @@
     return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
   };
 
-  const instructionCopy = {
-    en: {
-      loadingLabel: "Loading assets",
-      tapHint: "Tap or click a dish for details",
-      assetDisclaimer:
-        "Assets belong to their owners. Do not copy or reuse this content without permission.",
-      jukeboxHint: "Scroll vertically to spin the disc. Horizontal to switch sections.",
-      focusRowsHint: "Scroll vertically for sections. Horizontally for dishes.",
-      rotateHintTouch: "Swipe horizontally on the image to rotate",
-      rotateHintMouse: "Drag horizontally with the mouse to rotate",
-      rotateToggle: "Reverse rotation"
-    },
-    es: {
-      loadingLabel: "Cargando assets",
-      tapHint: "Toca o haz clic en un platillo para ver detalles",
-      assetDisclaimer:
-        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
-      jukeboxHint: "Desliza vertical para girar el disco. Horizontal para cambiar sección.",
-      focusRowsHint: "Desliza vertical para secciones. Horizontal para platillos.",
-      rotateHintTouch: "Desliza horizontal sobre la imagen para girar",
-      rotateHintMouse: "Arrastra horizontal con el mouse para girar",
-      rotateToggle: "Invertir giro"
-    },
-    fr: {
-      loadingLabel: "Chargement des assets",
-      tapHint: "Touchez ou cliquez sur un plat pour voir les détails",
-      assetDisclaimer:
-        "Les assets appartiennent à leurs propriétaires. Ne copiez ni ne réutilisez ce contenu sans autorisation.",
-      jukeboxHint:
-        "Faites défiler verticalement pour faire tourner le disque. Horizontalement pour changer de section.",
-      focusRowsHint: "Faites défiler verticalement pour les sections. Horizontalement pour les plats.",
-      rotateHintTouch: "Balayez horizontalement l'image pour faire tourner",
-      rotateHintMouse: "Faites glisser horizontalement avec la souris pour faire tourner",
-      rotateToggle: "Inverser la rotation"
-    },
-    pt: {
-      loadingLabel: "Carregando assets",
-      tapHint: "Toque ou clique em um prato para ver detalhes",
-      assetDisclaimer:
-        "Os assets pertencem aos seus proprietários. Não copie nem reutilize este conteúdo sem autorização.",
-      jukeboxHint: "Deslize verticalmente para girar o disco. Horizontalmente para mudar de seção.",
-      focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para pratos.",
-      rotateHintTouch: "Deslize horizontalmente na imagem para girar",
-      rotateHintMouse: "Arraste horizontalmente com o mouse para girar",
-      rotateToggle: "Inverter rotação"
-    },
-    it: {
-      loadingLabel: "Caricamento assets",
-      tapHint: "Tocca o fai clic su un piatto per vedere i dettagli",
-      assetDisclaimer:
-        "Gli assets appartengono ai rispettivi proprietari. Non copiare o riutilizzare questo contenuto senza autorizzazione.",
-      jukeboxHint: "Scorri verticalmente per far girare il disco. Orizzontalmente per cambiare sezione.",
-      focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per i piatti.",
-      rotateHintTouch: "Scorri orizzontalmente sull'immagine per ruotare",
-      rotateHintMouse: "Trascina orizzontalmente con il mouse per ruotare",
-      rotateToggle: "Inverti rotazione"
-    },
-    de: {
-      loadingLabel: "Assets werden geladen",
-      tapHint: "Tippe oder klicke auf ein Gericht, um Details zu sehen",
-      assetDisclaimer:
-        "Assets gehören ihren Eigentümern. Bitte nicht ohne Genehmigung kopieren oder wiederverwenden.",
-      jukeboxHint: "Vertikal scrollen, um die Scheibe zu drehen. Horizontal, um die Sektion zu wechseln.",
-      focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Gerichte.",
-      rotateHintTouch: "Wische horizontal über das Bild, um zu drehen",
-      rotateHintMouse: "Ziehe horizontal mit der Maus, um zu drehen",
-      rotateToggle: "Drehrichtung umkehren"
-    },
-    ja: {
-      loadingLabel: "アセットを読み込み中",
-      tapHint: "料理をタップまたはクリックして詳細を見る",
-      assetDisclaimer:
-        "アセットは各所有者に帰属します。許可なく複製・再利用しないでください。",
-      jukeboxHint: "縦スクロールでディスクを回転。横スクロールでセクション切替。",
-      focusRowsHint: "縦スクロールでセクション。横スクロールで料理。",
-      rotateHintTouch: "画像上で横にスワイプして回転",
-      rotateHintMouse: "画像上で横にドラッグして回転",
-      rotateToggle: "回転方向を反転"
-    },
-    ko: {
-      loadingLabel: "에셋 로딩 중",
-      tapHint: "요리를 탭하거나 클릭해 상세 정보를 확인하세요",
-      assetDisclaimer:
-        "에셋은 각 소유자에게 귀속됩니다. 허가 없이 복사하거나 재사용하지 마세요.",
-      jukeboxHint: "세로 스크롤로 디스크를 회전. 가로 스크롤로 섹션 전환.",
-      focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 요리.",
-      rotateHintTouch: "이미지에서 가로로 스와이프해 회전",
-      rotateHintMouse: "마우스로 가로로 드래그해 회전",
-      rotateToggle: "회전 방향 반전"
-    },
-    zh: {
-      loadingLabel: "正在加载素材",
-      tapHint: "点按或点击菜品查看详情",
-      assetDisclaimer: "素材归其所有者所有。未经许可请勿复制或再利用。",
-      jukeboxHint: "纵向滚动旋转转盘，横向滚动切换分类。",
-      focusRowsHint: "纵向滚动浏览分类，横向滚动浏览菜品。",
-      rotateHintTouch: "在图片上横向滑动以旋转",
-      rotateHintMouse: "用鼠标横向拖动以旋转",
-      rotateToggle: "反向旋转"
-    }
-  } as const;
-
-  type InstructionKey = keyof (typeof instructionCopy)["en"];
+  const instructionCopy = instructionCopyConfig;
 
   const getInstructionCopy = (key: InstructionKey, lang = locale) => {
     const localeKey = normalizeLocaleCode(lang) as keyof typeof instructionCopy;
@@ -3852,104 +3291,6 @@ Windows:
     t("wizardStepPreview")
   ];
 
-  const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 260;
-  const FOCUS_ROWS_WHEEL_SETTLE_MS = 200;
-  const FOCUS_ROWS_WHEEL_DELTA_CAP = 140;
-  const FOCUS_ROWS_TOUCH_DELTA_SCALE = 2.2;
-  const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
-  const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
-  const JUKEBOX_WHEEL_SETTLE_MS = 240;
-  const JUKEBOX_WHEEL_DELTA_CAP = 140;
-  const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
-  const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
-  const INTERACTIVE_GIF_MAX_FRAMES = 72;
-  const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
-  const DEBUG_INTERACTIVE_CENTER =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("debugRotate");
-  const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
-  const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
-  const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
-
-  const getFocusRowRenderItems = (items: MenuItem[]) =>
-    items.map((item, index) => ({
-      item,
-      sourceIndex: index,
-      key: `${item.id}-focus`
-    }));
-
-  const getJukeboxRenderItems = (items: MenuItem[]) =>
-    items.map((item, index) => ({
-      item,
-      sourceIndex: index,
-      key: `${item.id}-jukebox`
-    }));
-
-  const getCircularOffset = (activeIndex: number, targetIndex: number, count: number) => {
-    if (count <= 1) return 0;
-    let offset = targetIndex - activeIndex;
-    const half = count / 2;
-    while (offset > half) offset -= count;
-    while (offset < -half) offset += count;
-    return offset;
-  };
-
-  const wrapCarouselIndex = (value: number, count: number) => {
-    if (count <= 0) return 0;
-    return ((value % count) + count) % count;
-  };
-
-  const getFocusRowCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
-    const offset = getCircularOffset(activeIndex, sourceIndex, count);
-    const distance = Math.abs(offset);
-    const stepX = 220;
-    const maxDistance = 2.6;
-    const hideAt = Math.max(1.6, count / 2 - 0.25);
-    const x = offset * stepX;
-    const y = Math.min(18, distance * 6);
-    const scale = distance < 0.5 ? 1 : Math.max(0.68, 1 - distance * 0.14);
-    let opacity =
-      distance < 0.5 ? 1 : distance <= maxDistance ? Math.max(0, 1 - distance * 0.34) : 0;
-    if (distance >= hideAt) {
-      opacity = 0;
-    }
-    const blur = Math.min(8, distance * 2.4);
-    const depth = Math.max(1, 120 - Math.round(distance * 18));
-    return `--row-x:${x.toFixed(1)}px;--row-y:${y.toFixed(1)}px;--row-scale:${scale.toFixed(
-      3
-    )};--row-opacity:${opacity.toFixed(3)};--row-blur:${blur.toFixed(
-      2
-    )}px;--row-depth:${depth};`;
-  };
-
-  const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
-    const offset = getCircularOffset(activeIndex, sourceIndex, count);
-    const distance = Math.abs(offset);
-    const wheelRadius = 420;
-    const stepY = 210;
-    const discBiasX = -72;
-    const rawY = offset * stepY;
-    const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
-    const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
-    const arcX = distance < 0.5 ? discBiasX : discBiasX - (wheelRadius - chord);
-    const focusShift = distance < 0.5 ? -arcX : 0;
-    const arcY = clampedY;
-    const scale = distance < 0.5 ? 1 : 0.88;
-    const opacity = distance < 0.5 ? 1 : distance <= 1.2 ? 0.82 : 0;
-    const depth = Math.max(1, 220 - Math.round(distance * 26));
-    return `--arc-x:${arcX.toFixed(1)}px;--arc-y:${arcY.toFixed(1)}px;--card-scale:${scale.toFixed(
-      3
-    )};--card-opacity:${opacity.toFixed(3)};--focus-shift:${focusShift.toFixed(
-      1
-    )}px;--ring-depth:${depth};`;
-  };
-
-  const normalizeJukeboxWheelDelta = (event: WheelEvent) => {
-    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
-    const scaled = event.deltaY * modeScale;
-    return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
-  };
-
   const clearCarouselWheelState = () => {
     Object.values(jukeboxWheelSnapTimeout).forEach((timer) => {
       if (timer) {
@@ -6069,12 +5410,6 @@ Windows:
     const current = Math.round(carouselActive[categoryId] ?? 0);
     const next = wrapCarouselIndex(current + direction, count);
     carouselActive = { ...carouselActive, [categoryId]: next };
-  };
-
-  const normalizeFocusRowWheelDelta = (event: WheelEvent) => {
-    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
-    const scaled = event.deltaX * modeScale;
-    return Math.max(-FOCUS_ROWS_WHEEL_DELTA_CAP, Math.min(FOCUS_ROWS_WHEEL_DELTA_CAP, scaled));
   };
 
   const queueFocusRowSnap = (categoryId: string, count: number) => {
