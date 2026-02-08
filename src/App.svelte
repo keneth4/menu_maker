@@ -76,6 +76,13 @@
     fontOptions,
     languageOptions
   } from "./ui/config/staticOptions";
+  import AssetsManager from "./ui/components/AssetsManager.svelte";
+  import DishModal from "./ui/components/DishModal.svelte";
+  import EditorShell from "./ui/components/EditorShell.svelte";
+  import EditPanel from "./ui/components/EditPanel.svelte";
+  import LandingView from "./ui/components/LandingView.svelte";
+  import PreviewCanvas from "./ui/components/PreviewCanvas.svelte";
+  import WizardPanel from "./ui/components/WizardPanel.svelte";
   import { uiCopy as uiCopyConfig, type UiKey } from "./ui/config/uiCopy";
   import appCssRaw from "./app.css?raw";
 
@@ -5453,62 +5460,14 @@ void prewarmInteractiveDetailAssets();
     on:change={handleProjectFile}
   />
   {#if showLanding}
-    <section class="landing-screen">
-      <div class="landing-lang">
-        <div class="lang-toggle" aria-label={t("toggleLang")}>
-          <button
-            class="lang-btn {uiLang === 'es' ? 'active' : ''}"
-            type="button"
-            on:click={() => (uiLang = 'es')}
-          >
-            ES
-          </button>
-          <button
-            class="lang-btn {uiLang === 'en' ? 'active' : ''}"
-            type="button"
-            on:click={() => (uiLang = 'en')}
-          >
-            EN
-          </button>
-        </div>
-      </div>
-      <header class="landing-header">
-        <h1>{t("landingTitle")}</h1>
-        <p>{t("landingBy")}</p>
-      </header>
-      <div class="landing-actions">
-        <button type="button" class="landing-action" on:click={startCreateProject}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-          </span>
-          <span>{t("landingCreate")}</span>
-        </button>
-        <button type="button" class="landing-action" on:click={startOpenProject}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
-              <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
-            </svg>
-          </span>
-          <span>{t("landingOpen")}</span>
-        </button>
-        <button type="button" class="landing-action" on:click={startWizard}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 20l10-10"></path>
-              <path d="M14 10l6-6"></path>
-              <path d="M18 4l2 2"></path>
-              <path d="M6 14l4 4"></path>
-              <path d="M16 6l2 2"></path>
-            </svg>
-          </span>
-          <span>{t("landingWizard")}</span>
-        </button>
-      </div>
-    </section>
+    <LandingView
+      {uiLang}
+      {t}
+      on:switchLang={(event) => (uiLang = event.detail)}
+      on:createProject={startCreateProject}
+      on:openProject={startOpenProject}
+      on:startWizard={startWizard}
+    />
   {:else if loadError}
     <div class="rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-sm text-red-100">
       {loadError}
@@ -5534,115 +5493,17 @@ void prewarmInteractiveDetailAssets();
         <div class="editor-backdrop" on:click={toggleEditor}></div>
       {/if}
 
-      <aside class="editor-panel {editorVisible ? 'open' : ''} {editorLocked ? 'locked' : ''}">
-        <div class="editor-panel__header">
-          <div>
-            <p class="editor-eyebrow">{t("studioTitle")}</p>
-            <p class="mt-1 text-xs text-slate-400">{t("studioSubtitle")}</p>
-          </div>
-          <div class="editor-actions">
-            <button
-              class="icon-btn"
-              type="button"
-              aria-label={t("toggleView")}
-              title={t("toggleView")}
-              on:click={togglePreviewMode}
-            >
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="2.5" y="4.5" width="13" height="9" rx="1.5"></rect>
-                <rect x="18" y="6" width="3.5" height="10" rx="1"></rect>
-                <path d="M6 18h6"></path>
-              </svg>
-            </button>
-            <div class="lang-toggle" aria-label={t("toggleLang")}>
-              <button
-                class="lang-btn {uiLang === 'es' ? 'active' : ''}"
-                type="button"
-                on:click={() => (uiLang = 'es')}
-              >
-                ES
-              </button>
-              <button
-                class="lang-btn {uiLang === 'en' ? 'active' : ''}"
-                type="button"
-                on:click={() => (uiLang = 'en')}
-              >
-                EN
-              </button>
-            </div>
-            {#if !editorLocked}
-              <button
-                class="editor-close"
-                type="button"
-                aria-label={t("closeEditor")}
-                on:click={toggleEditor}
-              >
-                ✕
-              </button>
-            {/if}
-          </div>
-        </div>
-
-        <div class="editor-tabs">
-          <button
-            class="editor-tab {editorTab === 'info' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('info')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
-                <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
-              </svg>
-            </span>
-            <span>{t("tabProject")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'assets' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('assets')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 6h16v12H4z"></path>
-                <path d="M8 10h8"></path>
-                <path d="M8 14h6"></path>
-              </svg>
-            </span>
-            <span>{t("tabAssets")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'edit' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('edit')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 20h6"></path>
-                <path d="M14 4l6 6"></path>
-                <path d="M5 19l4-1 9-9-3-3-9 9z"></path>
-              </svg>
-            </span>
-            <span>{t("tabEdit")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'wizard' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('wizard')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 20l10-10"></path>
-                <path d="M14 10l6-6"></path>
-                <path d="M18 4l2 2"></path>
-                <path d="M6 14l4 4"></path>
-              </svg>
-            </span>
-            <span>{t("tabWizard")}</span>
-          </button>
-        </div>
-
-        <div class="editor-content">
+      <EditorShell
+        {t}
+        {editorVisible}
+        {editorLocked}
+        {uiLang}
+        {editorTab}
+        setUiLang={(lang) => (uiLang = lang)}
+        {setEditorTab}
+        {togglePreviewMode}
+        {toggleEditor}
+      >
           {#if editorTab === "info"}
             <div class="editor-toolbar">
               <button
@@ -5817,907 +5678,138 @@ void prewarmInteractiveDetailAssets();
               </div>
             {/if}
           {:else if editorTab === "assets"}
-            <section class="asset-manager">
-              <div class="asset-manager__header">
-                <div>
-                  <p>{t("rootTitle")}</p>
-                  <span>{rootLabel}</span>
-                </div>
-                <div class="asset-actions">
-                  <button type="button" on:click={createFolder} disabled={assetProjectReadOnly}>
-                    {t("newFolder")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={assetProjectReadOnly}
-                    on:click={() => assetUploadInput?.click()}
-                  >
-                    {t("uploadAssets")}
-                  </button>
-                  <input
-                    class="sr-only"
-                    type="file"
-                    multiple
-                    disabled={assetProjectReadOnly}
-                    bind:this={assetUploadInput}
-                    on:change={handleAssetUpload}
-                  />
-                </div>
-              </div>
-              <div class="asset-drop">
-                <label class="editor-field">
-                  <span>{t("uploadTo")}</span>
-                  <select bind:value={uploadTargetPath} class="editor-select" disabled={assetProjectReadOnly}>
-                    {#each uploadFolderOptions as folder}
-                      <option value={folder.value}>{folder.label}</option>
-                    {/each}
-                  </select>
-                </label>
-                {#if needsAssets}
-                  <p class="text-xs text-amber-200">{t("assetsRequired")}</p>
-                {/if}
-                <p>{t("uploadHint")}</p>
-                <div
-                  class={`asset-drop__zone ${assetProjectReadOnly ? "disabled" : ""}`}
-                  on:dragover={handleAssetDragOver}
-                  on:drop={handleAssetDrop}
-                >
-                  {t("dragDrop")}
-                </div>
-              </div>
-              {#if assetProjectReadOnly}
-                <p class="text-xs text-amber-200">{t("assetsReadOnly")}</p>
-              {/if}
-              {#if fsError}
-                <p class="text-xs text-red-300">{fsError}</p>
-              {/if}
-              <div class="asset-bulk">
-                <button type="button" on:click={selectAllAssets} disabled={assetProjectReadOnly}>
-                  {t("selectAll")}
-                </button>
-                <button type="button" on:click={clearAssetSelection}>{t("clear")}</button>
-                <button type="button" on:click={bulkMove} disabled={assetProjectReadOnly}>
-                  {t("move")}
-                </button>
-                <button type="button" on:click={bulkDelete} disabled={assetProjectReadOnly}>
-                  {t("delete")}
-                </button>
-              </div>
-              <div class="asset-list">
-                {#if assetMode === "none"}
-                  <p class="text-xs text-slate-400">{t("pickRootHint")}</p>
-                {:else if fsEntries.length === 0}
-                  <p class="text-xs text-slate-400">{t("rootEmpty")}</p>
-                {:else}
-                  {#each treeRows as row}
-                    <div class="asset-item">
-                      <label class="asset-check">
-                        <input
-                          type="checkbox"
-                          disabled={assetProjectReadOnly}
-                          checked={selectedAssetIds.includes(row.entry.id)}
-                          on:change={() => toggleAssetSelection(row.entry.id)}
-                        />
-                      </label>
-                      <div>
-                        <div
-                          class="asset-name"
-                          style={`padding-left:${row.depth * 16}px`}
-                        >
-                          {#if row.entry.kind === "directory" && row.hasChildren}
-                            <button
-                              class="asset-toggle"
-                              type="button"
-                              on:click={() => toggleExpandPath(row.entry.path)}
-                            >
-                              {row.expanded ? "▾" : "▸"}
-                            </button>
-                          {:else}
-                            <span class="asset-toggle placeholder"></span>
-                          {/if}
-                          <span class="asset-icon">
-                            {row.entry.kind === "directory" ? "📁" : "📄"}
-                          </span>
-                          <span>{row.entry.name}</span>
-                        </div>
-                        <p class="asset-meta">{row.entry.path}</p>
-                      </div>
-                      <div class="asset-actions">
-                        <button
-                          type="button"
-                          class="asset-icon-btn"
-                          title={t("rename")}
-                          aria-label={t("rename")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => renameEntry(row.entry)}
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          class="asset-icon-btn"
-                          title={t("move")}
-                          aria-label={t("move")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => moveEntry(row.entry)}
-                        >
-                          ⇄
-                        </button>
-                        <button
-                          type="button"
-                          class="asset-icon-btn danger"
-                          title={t("delete")}
-                          aria-label={t("delete")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => deleteEntry(row.entry)}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
-            </section>
+            <AssetsManager
+              {t}
+              {rootLabel}
+              {assetProjectReadOnly}
+              bind:assetUploadInput
+              bind:uploadTargetPath
+              {uploadFolderOptions}
+              {needsAssets}
+              {fsError}
+              {assetMode}
+              {fsEntries}
+              {treeRows}
+              {selectedAssetIds}
+              {createFolder}
+              {handleAssetUpload}
+              {handleAssetDragOver}
+              {handleAssetDrop}
+              {selectAllAssets}
+              {clearAssetSelection}
+              {bulkMove}
+              {bulkDelete}
+              {toggleAssetSelection}
+              {toggleExpandPath}
+              {renameEntry}
+              {moveEntry}
+              {deleteEntry}
+            />
           {:else if editorTab === "edit"}
-            {#if deviceMode === "mobile" && previewMode === "full"}
-              <p class="mt-2 text-xs text-amber-200">
-                {t("tipRotate")}
-              </p>
-            {/if}
-
-            {#if draft}
-              <div class="edit-shell">
-                <div class="edit-subtabs">
-                  <button
-                    class="edit-subtab {editPanel === 'identity' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'identity')}
-                  >
-                    {t("editIdentity")}
-                  </button>
-                  <button
-                    class="edit-subtab {editPanel === 'section' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'section')}
-                  >
-                    {t("editSections")}
-                  </button>
-                  <button
-                    class="edit-subtab {editPanel === 'dish' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'dish')}
-                  >
-                    {t("editDishes")}
-                  </button>
-                  <button
-                    class="edit-lang-chip"
-                    type="button"
-                    aria-label={t("editLang")}
-                    title={t("editLang")}
-                    on:click={cycleEditLang}
-                  >
-                    <span aria-hidden="true">🌐</span>
-                    <span>{editLang.toUpperCase()}</span>
-                  </button>
-                </div>
-                <p class="edit-hierarchy">{t("editHierarchyHint")}</p>
-
-                {#if editPanel === "identity"}
-                  <div class="edit-block">
-                    <p class="edit-block__title">{t("restaurantName")}</p>
-                    <label class="editor-field">
-                      <span>{editLang.toUpperCase()}</span>
-                      <input
-                        type="text"
-                        class="editor-input"
-                        value={draft.meta.restaurantName?.[editLang] ?? ""}
-                        on:input={(event) => {
-                          const name = ensureRestaurantName();
-                          if (!name) return;
-                          handleLocalizedInput(name, editLang, event);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div class="edit-block">
-                    <p class="edit-block__title">{t("menuTitle")}</p>
-                    <label class="editor-field">
-                      <span>{editLang.toUpperCase()}</span>
-                      <input
-                        type="text"
-                        class="editor-input"
-                        value={draft.meta.title?.[editLang] ?? ""}
-                        on:input={(event) => {
-                          const title = ensureMetaTitle();
-                          if (!title) return;
-                          handleLocalizedInput(title, editLang, event);
-                        }}
-                      />
-                    </label>
-                  </div>
-                {:else}
-                  <div class="edit-row">
-                    <label class="editor-field">
-                      <span>{t("section")}</span>
-                      <select bind:value={selectedCategoryId} class="editor-select">
-                        {#each draft.categories as category}
-                          <option value={category.id}>
-                            {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale)}
-                          </option>
-                        {/each}
-                      </select>
-                    </label>
-                    <div class="edit-actions">
-                      <button
-                        class="editor-outline"
-                        type="button"
-                        aria-label={t("addSection")}
-                        title={t("addSection")}
-                        on:click={addSection}
-                      >
-                        <span class="btn-icon">＋</span>
-                      </button>
-                      <button class="editor-outline danger" type="button" on:click={deleteSection}>
-                        {t("deleteSection")}
-                      </button>
-                    </div>
-                  </div>
-
-                  {#if editPanel === "section" && selectedCategory}
-                    <p class="edit-hint">{t("sectionHint")}</p>
-                    <div class="edit-block">
-                      <p class="edit-block__title">{t("sectionName")}</p>
-                      <label class="editor-field">
-                        <span>{editLang.toUpperCase()}</span>
-                        <input
-                          type="text"
-                          class="editor-input"
-                          value={selectedCategory.name?.[editLang] ?? ""}
-                          on:input={(event) =>
-                            handleLocalizedInput(selectedCategory.name, editLang, event)}
-                        />
-                      </label>
-                    </div>
-                  {/if}
-
-                  {#if editPanel === "dish" && selectedCategory}
-                    <p class="edit-hint">{t("dishHint")}</p>
-                    <div class="edit-row">
-                      <label class="editor-field">
-                        <span>{t("dish")}</span>
-                        <select bind:value={selectedItemId} class="editor-select">
-                          {#each selectedCategory.items as item}
-                            <option value={item.id}>
-                              {getLocalizedValue(item.name, editLang, draft.meta.defaultLocale)}
-                            </option>
-                          {/each}
-                        </select>
-                      </label>
-                      <div class="edit-actions">
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("prevDish")}
-                          title={t("prevDish")}
-                          on:click={goPrevDish}
-                        >
-                          <span class="btn-icon">◀</span>
-                        </button>
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("nextDish")}
-                          title={t("nextDish")}
-                          on:click={goNextDish}
-                        >
-                          <span class="btn-icon">▶</span>
-                        </button>
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("addDish")}
-                          title={t("addDish")}
-                          on:click={addDish}
-                        >
-                          <span class="btn-icon">＋</span>
-                        </button>
-                        <button class="editor-outline danger" type="button" on:click={deleteDish}>
-                          {t("delete")}
-                        </button>
-                      </div>
-                    </div>
-
-                    {#if selectedItem}
-                      <div class="edit-block">
-                        <p class="edit-block__title">{t("dishData")}</p>
-                        <div class="edit-item">
-                          <div class="edit-item__media-row">
-                            <div class="edit-item__media">
-                              <img
-                                src={selectedItem.media.hero360 ?? ""}
-                                alt={textOf(selectedItem.name)}
-                              />
-                            </div>
-                            <label class="editor-field edit-item__source">
-                              <span>{t("asset360")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={selectedItem.media.hero360}
-                                list="asset-files"
-                              />
-                            </label>
-                          </div>
-                          <div class="edit-item__content">
-                            <label class="editor-field">
-                              <span>{t("name")} ({editLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={selectedItem.name?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLocalizedInput(selectedItem.name, editLang, event)}
-                              />
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("description")} ({editLang.toUpperCase()})</span>
-                              <textarea
-                                class="editor-input"
-                                rows="2"
-                                value={selectedItem.description?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleDescriptionInput(selectedItem, editLang, event)}
-                              ></textarea>
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("longDescription")} ({editLang.toUpperCase()})</span>
-                              <textarea
-                                class="editor-input"
-                                rows="3"
-                                value={selectedItem.longDescription?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLongDescriptionInput(selectedItem, editLang, event)}
-                              ></textarea>
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("price")}</span>
-                              <input
-                                type="number"
-                                class="editor-input"
-                                bind:value={selectedItem.price.amount}
-                              />
-                            </label>
-                            <div class="editor-field">
-                              <span>{t("commonAllergens")}</span>
-                              <div class="allergen-checklist">
-                                {#each commonAllergenCatalog as allergen}
-                                  <label class="allergen-option">
-                                    <input
-                                      type="checkbox"
-                                      checked={isCommonAllergenChecked(selectedItem, allergen.id)}
-                                      on:change={(event) =>
-                                        handleCommonAllergenToggle(selectedItem, allergen.id, event)}
-                                    />
-                                    <span>{getCommonAllergenLabel(allergen, editLang)}</span>
-                                  </label>
-                                {/each}
-                              </div>
-                            </div>
-                            <label class="editor-field">
-                              <span>{t("customAllergens")} ({editLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={getCustomAllergensInput(selectedItem, editLang)}
-                                on:input={(event) =>
-                                  handleCustomAllergensInput(selectedItem, editLang, event)}
-                              />
-                              <small class="editor-hint">{t("customAllergensHint")}</small>
-                            </label>
-                            <label class="editor-field editor-inline">
-                              <span>{t("veganLabel")}</span>
-                              <input
-                                type="checkbox"
-                                checked={selectedItem.vegan ?? false}
-                                on:change={(event) => handleVeganToggle(selectedItem, event)}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    {/if}
-                  {/if}
-                {/if}
-              </div>
-            {/if}
+            <EditPanel
+              {t}
+              {draft}
+              {deviceMode}
+              {previewMode}
+              bind:editPanel
+              {editLang}
+              bind:selectedCategoryId
+              bind:selectedItemId
+              {selectedCategory}
+              {selectedItem}
+              {commonAllergenCatalog}
+              {cycleEditLang}
+              {ensureRestaurantName}
+              {ensureMetaTitle}
+              {handleLocalizedInput}
+              {getLocalizedValue}
+              {addSection}
+              {deleteSection}
+              {goPrevDish}
+              {goNextDish}
+              {addDish}
+              {deleteDish}
+              {textOf}
+              {handleDescriptionInput}
+              {handleLongDescriptionInput}
+              {isCommonAllergenChecked}
+              {handleCommonAllergenToggle}
+              {getCommonAllergenLabel}
+              {getCustomAllergensInput}
+              {handleCustomAllergensInput}
+              {handleVeganToggle}
+            />
           {:else}
-            <section class="wizard">
-              <div class="wizard-header">
-                <p class="text-[0.6rem] uppercase tracking-[0.35em] text-slate-300">
-                  {t("tabWizard")}
-                </p>
-                <span class="text-xs text-slate-400">
-                  {t("step")} {wizardStep + 1} / {wizardSteps.length}
-                </span>
-              </div>
-              <div class="wizard-progress">
-                <span>{t("wizardProgress")} {Math.round(wizardProgress * 100)}%</span>
-                <div class="wizard-progress__bar">
-                  <span style={`width:${wizardProgress * 100}%`}></span>
-                </div>
-              </div>
-              <div class="wizard-steps">
-                {#each wizardSteps as step, index}
-                  <button
-                    class="wizard-step {index === wizardStep ? 'active' : ''} {isWizardStepValid(index) ? 'done' : ''}"
-                    type="button"
-                    on:click={() => goToStep(index)}
-                  >
-                    <span>{step}</span>
-                    <span class="wizard-step__status">
-                      {isWizardStepValid(index) ? "●" : "○"}
-                    </span>
-                  </button>
-                {/each}
-              </div>
-              <div class="wizard-body">
-                {#if wizardStep === 0}
-                  <p class="text-sm text-slate-200">{t("wizardPick")}</p>
-                  <div class="wizard-card-grid">
-                    {#each templateOptions as template}
-                      <button
-                        class="wizard-card {draft?.meta.template === template.id ? 'active' : ''}"
-                        type="button"
-                        on:click={() => applyTemplate(template.id, { source: "wizard" })}
-                      >
-                        <p class="wizard-card__title">
-                          {template.label[uiLang] ?? template.label.es ?? template.id}
-                        </p>
-                        <p class="wizard-card__meta">
-                          {(template.categories[uiLang] ?? template.categories.es ?? []).join(" • ")}
-                        </p>
-                      </button>
-                    {/each}
-                  </div>
-                  <p class="text-xs text-slate-400">
-                    {t("wizardTip")}
-                  </p>
-                  {#if wizardDemoPreview}
-                    <p class="text-xs text-amber-200">{t("wizardDemoPreviewHint")}</p>
-                  {/if}
-                {:else if wizardStep === 1}
-                  <p class="text-sm text-slate-200">{t("wizardIdentity")}</p>
-                  {#if wizardNeedsRootBackground}
-                    <p class="wizard-warning">{t("wizardRequireRootBackground")}</p>
-                  {:else if !wizardStatus.identity}
-                    <p class="wizard-warning">{t("wizardMissingBackground")}</p>
-                  {/if}
-                  {#if assetOptions.length === 0}
-                    <p class="text-xs text-slate-400">{t("wizardAssetsHint")}</p>
-                  {/if}
-                  <div class="wizard-block">
-                    <button class="editor-outline" type="button" on:click={addBackground}>
-                      {t("wizardAddBg")}
-                    </button>
-                    {#if draft}
-                      <div class="wizard-list">
-                        {#each draft.backgrounds as bg}
-                          <div class="wizard-item">
-                            <label class="editor-field">
-                              <span>{t("wizardLabel")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={bg.label}
-                              />
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("wizardSrc")}</span>
-                              {#if assetOptions.length}
-                                <select bind:value={bg.src} class="editor-select">
-                                  <option value=""></option>
-                                  {#each assetOptions as path}
-                                    <option value={path}>{path}</option>
-                                  {/each}
-                                </select>
-                              {:else}
-                                <input
-                                  type="text"
-                                  class="editor-input"
-                                  bind:value={bg.src}
-                                  list="asset-files"
-                                />
-                              {/if}
-                            </label>
-                            <button
-                              class="editor-outline danger"
-                              type="button"
-                              on:click={() => removeBackground(bg.id)}
-                            >
-                              {t("delete")}
-                            </button>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {:else if wizardStep === 2}
-                  <p class="text-sm text-slate-200">{t("wizardCategories")}</p>
-                  {#if !wizardStatus.categories}
-                    <p class="wizard-warning">{t("wizardMissingCategories")}</p>
-                  {/if}
-                  {#if draft}
-                    <div class="wizard-block">
-                      <label class="editor-field">
-                        <span>{t("wizardLanguage")}</span>
-                        <select bind:value={wizardLang} class="editor-select">
-                          {#each draft.meta.locales as lang}
-                            <option value={lang}>{lang.toUpperCase()}</option>
-                          {/each}
-                        </select>
-                      </label>
-                      <button class="editor-outline" type="button" on:click={addWizardCategory}>
-                        {t("wizardAddCategory")}
-                      </button>
-                      <div class="wizard-list">
-                        {#each draft.categories as category}
-                          <div class="wizard-item">
-                            <label class="editor-field">
-                              <span>{t("name")} ({wizardLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={category.name?.[wizardLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLocalizedInput(category.name, wizardLang, event)}
-                              />
-                            </label>
-                            <button
-                              class="editor-outline danger"
-                              type="button"
-                              on:click={() => removeWizardCategory(category.id)}
-                            >
-                              {t("delete")}
-                            </button>
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  {/if}
-                {:else if wizardStep === 3}
-                  <p class="text-sm text-slate-200">{t("wizardDishes")}</p>
-                  {#if !wizardStatus.dishes}
-                    <p class="wizard-warning">{t("wizardMissingDishes")}</p>
-                  {/if}
-                  {#if draft}
-                    <div class="wizard-block">
-                      <label class="editor-field">
-                        <span>{t("wizardLanguage")}</span>
-                        <select bind:value={wizardLang} class="editor-select">
-                          {#each draft.meta.locales as lang}
-                            <option value={lang}>{lang.toUpperCase()}</option>
-                          {/each}
-                        </select>
-                      </label>
-                      <label class="editor-field">
-                        <span>{t("wizardCategory")}</span>
-                        <select bind:value={wizardCategoryId} class="editor-select">
-                          {#each draft.categories as category}
-                            <option value={category.id}>
-                              {getLocalizedValue(category.name, wizardLang, draft.meta.defaultLocale)}
-                            </option>
-                          {/each}
-                        </select>
-                      </label>
-                      <div class="edit-actions">
-                        <button class="editor-outline" type="button" on:click={addWizardDish}>
-                          {t("wizardAddDish")}
-                        </button>
-                        <button class="editor-outline danger" type="button" on:click={removeWizardDish}>
-                          {t("delete")}
-                        </button>
-                      </div>
-                      {#if wizardCategory}
-                        <label class="editor-field">
-                          <span>{t("dish")}</span>
-                          <select bind:value={wizardItemId} class="editor-select">
-                            {#each wizardCategory.items as item}
-                              <option value={item.id}>
-                                {getLocalizedValue(item.name, wizardLang, draft.meta.defaultLocale)}
-                              </option>
-                            {/each}
-                          </select>
-                        </label>
-                      {/if}
-                      {#if wizardItem}
-                        <label class="editor-field">
-                          <span>{t("name")} ({wizardLang.toUpperCase()})</span>
-                          <input
-                            type="text"
-                            class="editor-input"
-                            value={wizardItem.name?.[wizardLang] ?? ""}
-                            on:input={(event) =>
-                              handleLocalizedInput(wizardItem.name, wizardLang, event)}
-                          />
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("description")} ({wizardLang.toUpperCase()})</span>
-                          <textarea
-                            class="editor-input"
-                            rows="2"
-                            value={wizardItem.description?.[wizardLang] ?? ""}
-                            on:input={(event) => handleDescriptionInput(wizardItem, wizardLang, event)}
-                          ></textarea>
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("price")}</span>
-                          <input
-                            type="number"
-                            class="editor-input"
-                            bind:value={wizardItem.price.amount}
-                          />
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("asset360")}</span>
-                          <input
-                            type="text"
-                            class="editor-input"
-                            bind:value={wizardItem.media.hero360}
-                            list="asset-files"
-                          />
-                        </label>
-                      {/if}
-                    </div>
-                  {/if}
-                {:else}
-                  <p class="text-sm text-slate-200">{t("wizardPreview")}</p>
-                  <p class="text-xs text-slate-400">
-                    {t("wizardExportNote")}
-                  </p>
-                {/if}
-              </div>
-              <div class="wizard-nav">
-                <button
-                  class="editor-outline"
-                  type="button"
-                  on:click={goPrevStep}
-                  disabled={wizardStep === 0}
-                >
-                  {t("wizardBack")}
-                </button>
-                {#if wizardStep < wizardSteps.length - 1}
-                  <button
-                    class="editor-cta"
-                    type="button"
-                    on:click={goNextStep}
-                    disabled={!isWizardStepValid(wizardStep)}
-                  >
-                    {t("wizardNext")}
-                  </button>
-                {:else}
-                  <button
-                    class="editor-cta"
-                    type="button"
-                    on:click={exportStaticSite}
-                    disabled={!wizardStatus.preview}
-                  >
-                    {t("export")}
-                  </button>
-                {/if}
-              </div>
-            </section>
+            <WizardPanel
+              {t}
+              {draft}
+              {uiLang}
+              {templateOptions}
+              {wizardStep}
+              {wizardSteps}
+              {wizardProgress}
+              {wizardStatus}
+              bind:wizardLang
+              bind:wizardCategoryId
+              bind:wizardItemId
+              {wizardCategory}
+              {wizardItem}
+              {wizardDemoPreview}
+              {wizardNeedsRootBackground}
+              {assetOptions}
+              {isWizardStepValid}
+              {goToStep}
+              {applyTemplate}
+              {addBackground}
+              {removeBackground}
+              {addWizardCategory}
+              {removeWizardCategory}
+              {addWizardDish}
+              {removeWizardDish}
+              {handleLocalizedInput}
+              {handleDescriptionInput}
+              {getLocalizedValue}
+              {goPrevStep}
+              {goNextStep}
+              {exportStaticSite}
+            />
           {/if}
-        </div>
-      </aside>
+      </EditorShell>
 
-      <section class="preview-panel {layoutMode}">
-        <section class="preview-shell {effectivePreview}">
-        <section
-          class={`menu-preview template-${activeProject.meta.template || "focus-rows"} ${
-            previewStartupLoading ? "is-loading" : ""
-          }`}
-          style={`--menu-font:${previewFontStack};`}
-        >
-            <div class={`menu-startup-loader ${previewStartupLoading ? "active" : ""}`}>
-              <div class="menu-startup-loader__card">
-                <p class="menu-startup-loader__label">{getLoadingLabel(locale)}</p>
-                <div class="menu-startup-loader__track">
-                  <span
-                    class="menu-startup-loader__fill"
-                    style={`width:${previewStartupProgress}%`}
-                  ></span>
-                </div>
-                <p class="menu-startup-loader__value">{previewStartupProgress}%</p>
-              </div>
-            </div>
-            {#if previewBackgrounds.length}
-              {#each previewBackgrounds as background, index (`${background.id}-${index}`)}
-                <div
-                  class={`menu-background ${index === activeBackgroundIndex ? "active" : ""}`}
-                  style={`background-image: url('${background.src}');`}
-                ></div>
-              {/each}
-            {/if}
-            <div class="menu-overlay"></div>
-
-            {#if isBlankMenu}
-              <div class="menu-blank">
-                <p>{t("blankMenu")}</p>
-              </div>
-            {:else}
-              <header class="menu-topbar">
-                <div class="menu-title-block">
-                  {#if textOf(activeProject.meta.restaurantName)}
-                    <p class="menu-eyebrow">{textOf(activeProject.meta.restaurantName)}</p>
-                  {/if}
-                  <h1 class="menu-title">
-                    {textOf(activeProject.meta.title, t("menuTitleFallback"))}
-                  </h1>
-                </div>
-                <div class="menu-lang">
-                  <select bind:value={locale} class="menu-select">
-                    {#each activeProject.meta.locales as lang}
-                      <option value={lang}>{lang.toUpperCase()}</option>
-                    {/each}
-                  </select>
-                </div>
-              </header>
-
-              {#if !isJukeboxTemplate}
-                <div class="focus-rows-hint" aria-hidden="true">
-                  <span class="focus-rows-hint__label">
-                    {getFocusRowsScrollHint(locale)}
-                  </span>
-                </div>
-              {/if}
-
-              {#if isJukeboxTemplate && activeProject.categories.length > 1}
-                <div class="section-nav">
-                  <button
-                    class="section-nav__btn prev"
-                    type="button"
-                    aria-label={t("prevDish")}
-                    on:click={() => shiftSection(-1)}
-                  >
-                    <span aria-hidden="true">‹</span>
-                  </button>
-                  <span class="section-nav__label">{getJukeboxScrollHint(locale)}</span>
-                  <button
-                    class="section-nav__btn next"
-                    type="button"
-                    aria-label={t("nextDish")}
-                    on:click={() => shiftSection(1)}
-                  >
-                    <span aria-hidden="true">›</span>
-                  </button>
-                </div>
-              {/if}
-
-              <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
-                {#each activeProject.categories as category}
-                  {@const renderItems = isJukeboxTemplate
-                    ? getJukeboxRenderItems(category.items)
-                    : getFocusRowRenderItems(category.items)}
-                  {@const activeIndex = carouselActive[category.id] ?? 0}
-                  {@const hideThreshold = Math.max(1.6, category.items.length / 2 - 0.25)}
-                  <section class="menu-section">
-                    <div class="menu-section__head">
-                      <p class="menu-section__title">{textOf(category.name)}</p>
-                      <span class="menu-section__count">{category.items.length} items</span>
-                    </div>
-                    {#if deviceMode === "desktop" && category.items.length > 1 && !isJukeboxTemplate}
-                      <div class="carousel-nav">
-                        <button
-                          class="carousel-nav__btn prev"
-                          type="button"
-                          aria-label={t("prevDish")}
-                          on:click={() => shiftCarousel(category.id, -1)}
-                        >
-                          <span aria-hidden="true">‹</span>
-                        </button>
-                        <button
-                          class="carousel-nav__btn next"
-                          type="button"
-                          aria-label={t("nextDish")}
-                          on:click={() => shiftCarousel(category.id, 1)}
-                        >
-                          <span aria-hidden="true">›</span>
-                        </button>
-                      </div>
-                    {/if}
-                    <div
-                      class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
-                      on:wheel={(event) => handleCarouselWheel(category.id, event)}
-                      on:touchstart={(event) => handleCarouselTouchStart(category.id, event)}
-                      on:touchmove|nonpassive={(event) =>
-                        handleCarouselTouchMove(category.id, event)}
-                      on:touchend={(event) => handleCarouselTouchEnd(category.id, event)}
-                      on:touchcancel={(event) => handleCarouselTouchEnd(category.id, event)}
-                      data-category-id={category.id}
-                    >
-                      {#each renderItems as entry (entry.key)}
-                        {@const distance = Math.abs(
-                          getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
-                        )}
-                        {@const stateClass = isJukeboxTemplate
-                          ? distance >= hideThreshold
-                            ? "is-hidden"
-                            : distance < 0.5
-                              ? "active"
-                              : distance < 1.25
-                                ? "near"
-                                : "far"
-                          : distance >= hideThreshold
-                            ? "is-hidden"
-                            : distance < 0.5
-                              ? "active"
-                              : distance < 1.5
-                                ? "near"
-                                : "far"}
-                        <button
-                          class={`carousel-card ${stateClass}`}
-                          type="button"
-                          style={
-                            isJukeboxTemplate
-                              ? getJukeboxCardStyle(
-                                  activeIndex,
-                                  entry.sourceIndex,
-                                  category.items.length
-                                )
-                              : getFocusRowCardStyle(
-                                  activeIndex,
-                                  entry.sourceIndex,
-                                  category.items.length
-                                )
-                          }
-                          on:click={() => openDish(category.id, entry.item.id)}
-                        >
-                          <div class="carousel-media">
-                            <img
-                              src={getCarouselImageSource(entry.item)}
-                              srcset={buildResponsiveSrcSetFromMedia(entry.item)}
-                              sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
-                              alt={textOf(entry.item.name)}
-                              draggable="false"
-                              on:contextmenu|preventDefault
-                              on:dragstart|preventDefault
-                              loading="lazy"
-                              decoding="async"
-                              fetchpriority="low"
-                            />
-                          </div>
-                          <div class="carousel-text">
-                            <div class="carousel-row">
-                              <p class="carousel-title">
-                                {textOf(entry.item.name)}
-                                {#if entry.item.vegan}
-                                  <span class="vegan-icon" title={getMenuTerm("vegan")}>🌿</span>
-                                {/if}
-                              </p>
-                              <span class="carousel-price">
-                                {formatPrice(entry.item.price.amount)}
-                              </span>
-                            </div>
-                            <p class="carousel-desc">{textOf(entry.item.description)}</p>
-                          </div>
-                        </button>
-                      {/each}
-                    </div>
-                  </section>
-                {/each}
-              </div>
-              <div class="menu-tap-hint" aria-hidden="true">
-                <span class="menu-tap-hint__dot"></span>
-                <span>{getDishTapHint(locale)}</span>
-              </div>
-              <p class="menu-asset-disclaimer" aria-hidden="true">
-                {getAssetOwnershipDisclaimer(locale)}
-              </p>
-            {/if}
-          </section>
-        </section>
-      </section>
+      <PreviewCanvas
+        {layoutMode}
+        {effectivePreview}
+        {activeProject}
+        bind:locale
+        {previewStartupLoading}
+        {previewStartupProgress}
+        {previewBackgrounds}
+        {activeBackgroundIndex}
+        {isBlankMenu}
+        {isJukeboxTemplate}
+        {carouselActive}
+        {deviceMode}
+        {previewFontStack}
+        {t}
+        {textOf}
+        {getLoadingLabel}
+        {getFocusRowsScrollHint}
+        {getJukeboxScrollHint}
+        {getCarouselImageSource}
+        {buildResponsiveSrcSetFromMedia}
+        {getMenuTerm}
+        {formatPrice}
+        {getDishTapHint}
+        {getAssetOwnershipDisclaimer}
+        {shiftSection}
+        {handleMenuScroll}
+        {shiftCarousel}
+        {handleCarouselWheel}
+        {handleCarouselTouchStart}
+        {handleCarouselTouchMove}
+        {handleCarouselTouchEnd}
+        {openDish}
+      />
     </div>
   {/if}
 </main>
@@ -6726,58 +5818,23 @@ void prewarmInteractiveDetailAssets();
   {@const dish = resolveActiveDish()}
   {#if dish}
     {@const interactiveAsset = getInteractiveDetailAsset(dish)}
-    <div class="dish-modal" on:click={closeDish}>
-      <div class="dish-modal__card" on:click|stopPropagation>
-        <div class="dish-modal__header">
-          <p class="dish-modal__title">{textOf(dish.name)}</p>
-          <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
-        </div>
-        <div class="dish-modal__media" bind:this={modalMediaHost}>
-          {#if interactiveAsset && supportsInteractiveMedia()}
-            <p class="dish-modal__media-note">{getDetailRotateHint(locale)}</p>
-            <button
-              class={`dish-modal__media-toggle ${detailRotateDirection === -1 ? "is-reversed" : ""}`}
-              type="button"
-              title={getDetailRotateToggleHint(locale)}
-              aria-label={getDetailRotateToggleHint(locale)}
-              on:click|stopPropagation={toggleDetailRotateDirection}
-            >
-              <span aria-hidden="true">⇄</span>
-            </button>
-          {/if}
-          <img
-            bind:this={modalMediaImage}
-            src={getDetailImageSource(dish)}
-            srcset={buildResponsiveSrcSetFromMedia(dish)}
-            sizes="(max-width: 720px) 90vw, 440px"
-            alt={textOf(dish.name)}
-            draggable="false"
-            on:contextmenu|preventDefault
-            on:dragstart|preventDefault
-            decoding="async"
-          />
-        </div>
-        <div class="dish-modal__content">
-          <div class="dish-modal__text">
-            <p class="dish-modal__desc">{textOf(dish.description)}</p>
-            {#if textOf(dish.longDescription)}
-              <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
-            {/if}
-            {#if dish.allergens?.length}
-              <p class="dish-modal__allergens">
-                {getMenuTerm("allergens")}: {getAllergenValues(dish).join(", ")}
-              </p>
-            {/if}
-            {#if dish.vegan}
-              <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
-            {/if}
-          </div>
-          <p class="dish-modal__price">
-            {formatPrice(dish.price.amount)}
-          </p>
-        </div>
-      </div>
-    </div>
+    <DishModal
+      {dish}
+      interactiveEnabled={Boolean(interactiveAsset && supportsInteractiveMedia())}
+      {detailRotateDirection}
+      detailRotateHint={getDetailRotateHint(locale)}
+      detailRotateToggleHint={getDetailRotateToggleHint(locale)}
+      bind:modalMediaHost
+      bind:modalMediaImage
+      {textOf}
+      {getDetailImageSource}
+      {buildResponsiveSrcSetFromMedia}
+      {getAllergenValues}
+      {getMenuTerm}
+      {formatPrice}
+      on:close={closeDish}
+      on:toggleRotate={toggleDetailRotateDirection}
+    />
   {/if}
 {/if}
 
