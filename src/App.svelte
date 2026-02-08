@@ -7,8 +7,14 @@
 
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
+  import {
+    getAllergenLabel as getLocalizedAllergenLabel,
+    getAllergenValues as getLocalizedAllergenValues
+  } from "./core/menu/allergens";
   import { commonAllergenCatalog, menuTerms } from "./core/menu/catalogs";
   import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
+  import { normalizeProject } from "./core/menu/normalization";
+  import { formatMenuPrice } from "./core/menu/pricing";
   import {
     FOCUS_ROWS_TOUCH_DELTA_SCALE,
     FOCUS_ROWS_TOUCH_INTENT_THRESHOLD,
@@ -681,16 +687,11 @@
 
   const getAllergenLabel = (entry: AllergenEntry, lang = locale) => {
     const defaultLocale = activeProject?.meta.defaultLocale ?? "es";
-    return (
-      getLocalizedValue(entry.label, lang, defaultLocale) ||
-      getLocalizedValue(entry.label, defaultLocale, "en")
-    );
+    return getLocalizedAllergenLabel(entry, lang, defaultLocale);
   };
 
   const getAllergenValues = (item: MenuItem, lang = locale) =>
-    (item.allergens ?? [])
-      .map((entry) => getAllergenLabel(entry, lang))
-      .filter((value) => value.trim().length > 0);
+    getLocalizedAllergenValues(item.allergens, lang, activeProject?.meta.defaultLocale ?? "es");
 
   const ensureMetaTitle = () => {
     if (!draft) return null;
@@ -706,78 +707,6 @@
       draft.meta.restaurantName = createLocalized(draft.meta.locales);
     }
     return draft.meta.restaurantName;
-  };
-
-  const normalizeProject = (value: MenuProject) => {
-    const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
-    value.meta.locales = locales;
-    if (!value.meta.title) {
-      value.meta.title = createLocalized(locales);
-    }
-    if (!value.meta.restaurantName) {
-      value.meta.restaurantName = createLocalized(locales);
-    }
-    if (!value.meta.fontFamily) {
-      value.meta.fontFamily = "Fraunces";
-    }
-    if (value.meta.fontSource === undefined) {
-      value.meta.fontSource = "";
-    }
-    if (!value.meta.currencyPosition) {
-      value.meta.currencyPosition = "left";
-    }
-    value.categories = (value.categories ?? []).map((category) => ({
-      ...category,
-      items: (category.items ?? []).map((item) => {
-        const rawAllergens = (item as MenuItem & { allergens?: unknown }).allergens;
-        const normalizedAllergens: AllergenEntry[] = Array.isArray(rawAllergens)
-          ? rawAllergens
-              .map((entry) => {
-                if (typeof entry === "string") {
-                  const clean = entry.trim();
-                  if (!clean) return null;
-                  return {
-                    label: locales.reduce<Record<string, string>>((acc, lang) => {
-                      acc[lang] = clean;
-                      return acc;
-                    }, {})
-                  };
-                }
-                if (entry && typeof entry === "object" && "label" in entry) {
-                  const asEntry = entry as AllergenEntry;
-                  const safeLabel = locales.reduce<Record<string, string>>((acc, lang) => {
-                    acc[lang] = getLocalizedValue(
-                      asEntry.label,
-                      lang,
-                      value.meta.defaultLocale ?? "en"
-                    );
-                    return acc;
-                  }, {});
-                  return {
-                    id: asEntry.id,
-                    label: safeLabel
-                  };
-                }
-                return null;
-              })
-              .filter((entry): entry is AllergenEntry => Boolean(entry))
-          : [];
-        return {
-          ...item,
-          allergens: normalizedAllergens
-        };
-      })
-    }));
-    const legacyTemplateMap: Record<string, string> = {
-      "bar-pub": "focus-rows",
-      "cafe-brunch": "focus-rows",
-      "street-food": "focus-rows"
-    };
-    value.meta.template = legacyTemplateMap[value.meta.template] ?? value.meta.template;
-    if (!value.meta.template) {
-      value.meta.template = "focus-rows";
-    }
-    return value;
   };
 
   const changeProject = async (slug: string) => {
@@ -5720,9 +5649,8 @@ Windows:
 
   const formatPrice = (amount: number) => {
     const currency = activeProject?.meta.currency ?? "USD";
-    const symbol = currencyOptions.find((option) => option.code === currency)?.symbol ?? currency;
     const position = activeProject?.meta.currencyPosition ?? "left";
-    return position === "left" ? `${symbol}${amount}` : `${amount}${symbol}`;
+    return formatMenuPrice(amount, currency, position);
   };
 
   const handleLocalizedInput = (
