@@ -80,6 +80,12 @@
   let detailRotateDirection: 1 | -1 = -1;
   let detailRotateSource = "";
   const detailRotateDirectionBySource = new Map<string, 1 | -1>();
+  const DEBUG_INTERACTIVE_CENTER =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("debugRotate");
+  const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
+  const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
+  const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
   let interactivePrewarmSignature = "";
   let carouselActive: Record<string, number> = {};
   let focusRowSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
