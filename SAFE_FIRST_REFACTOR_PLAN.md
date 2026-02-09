@@ -1,74 +1,256 @@
-# Safe-First Refactor Plan
+# Safe-First Refactor Plan (Container-Ready + Performance-Centric)
 
-## Goal
-Refactor in small, low-risk steps while keeping the menu editor stable and shippable at every checkpoint.
+## Objective
+Refactor MenuMaker into a future-proof architecture while keeping runtime behavior equivalent to today:
+- same user workflows (create/open/wizard/edit/assets/save/export),
+- same bridge API semantics,
+- same import/export compatibility,
+- same interactive template behavior (`focus-rows`, `jukebox`).
 
-## Current baseline
-- Main behavior is concentrated in `src/App.svelte`.
-- Bridge API contract is in `vite.config.ts` and is tightly coupled to frontend calls.
-- Import/export and zip flows are high-impact paths.
+The refactor is explicitly designed to support containerized execution and faster, asset-rich exported static sites.
+
+## Current baseline (verified on this branch)
+- Most behavior remains concentrated in `src/App.svelte` (~7.8k lines).
+- Bridge API and filesystem concerns are coupled inside `vite.config.ts` + UI state logic.
+- Export runtime (`buildExportScript`) is generated inline from `src/App.svelte`.
 - `npm run build` passes.
-- `npm test` currently fails because `jsdom` is missing.
+- `npm test` passes (Vitest isolated from Playwright e2e specs).
+- `npm run test:e2e` passes with baseline smoke coverage for:
+  - landing,
+  - create project,
+  - open json,
+  - open zip,
+  - save/export downloads.
+- No first-class container files exist yet (`Dockerfile`, `docker-compose` not present).
 
-## Global guardrails
-1. Change only one high-coupling subsystem per phase.
-2. No schema changes without updating `normalizeProject` behavior.
-3. If bridge endpoints change, update frontend call sites in the same change.
-4. Keep user-visible behavior unchanged unless explicitly planned.
-5. Every phase must pass validation gates before moving forward.
+## Non-negotiable guardrails
+1. Behavior parity first, architecture second.
+2. No breaking schema changes to `menu.json` without migration and compatibility tests.
+3. Keep bridge endpoint behavior stable during extraction.
+4. Keep exported static zip layout stable unless versioned and explicitly approved.
+5. One high-coupling subsystem per phase; no multi-axis refactors.
+6. Every phase ends with measurable validation gates.
 
-## Validation gates (run each phase)
+## Target architecture (future-proof)
+
+## A) Layered boundaries
+- `core` (pure domain): types, normalization, validation, template capability matrix.
+- `application` (use-cases): create/open/save/export/wizard/asset orchestration.
+- `infrastructure` (adapters): bridge API, filesystem API, zip, image processing, fetch.
+- `ui` (Svelte components + stores): presentation and interaction only.
+- `export-runtime` (shared web runtime): static-site script/runtime assembly decoupled from `App.svelte`.
+
+## B) Proposed directory direction
+- `src/core/menu/*`
+- `src/core/templates/*`
+- `src/application/projects/*`
+- `src/application/assets/*`
+- `src/application/export/*`
+- `src/infrastructure/bridge/*`
+- `src/infrastructure/filesystem/*`
+- `src/infrastructure/zip/*`
+- `src/infrastructure/media/*`
+- `src/ui/components/*`
+- `src/ui/stores/*`
+- `src/export-runtime/*`
+
+## C) State model direction
+- Central `project store` for canonical draft/project state.
+- `asset store` for filesystem/bridge tree and selection.
+- `ui store` for editor/wizard/preview mode state.
+- Derived selectors for localized text, template render items, wizard validity.
+
+## D) Template expansion contract
+- Add a template capability matrix (navigation model, interaction mode, required assets, fallbacks).
+- Keep template-specific logic in isolated strategy modules instead of inside `App.svelte`.
+
+## Containerization plan (parity-preserving)
+
+## Goals
+- Run dev/editor in container without changing app behavior.
+- Keep bridge-backed asset persistence via mounted volume.
+- Validate exported static zips in a lightweight container server.
+
+## Deliverables
+1. `Dockerfile.dev`:
+   - Node 20 image,
+   - installs deps,
+   - runs Vite dev server.
+2. `Dockerfile.prod`:
+   - multi-stage build (build + serve),
+   - serves `dist/`.
+3. `docker-compose.yml`:
+   - `app` service for editor/dev,
+   - persistent volume for `public/projects`,
+   - optional `preview` service for exported site checks.
+4. Environment contract:
+   - explicit host/port config,
+   - clear mount points for project assets.
+
+## Critical parity note
+Containerization must not alter:
+- bridge URL contract (`/api/assets/*`),
+- slug/path normalization behavior,
+- import/export file structure.
+
+## Export performance plan (asset-rich + fast loading)
+
+## Performance budgets (initial)
+- Export JS gzip <= 95 KB (currently ~80.75 KB gzip in app build baseline).
+- CSS gzip <= 12 KB.
+- Exported first-view image payload <= 1.2 MB on default sample profile.
+- Startup loader to interactive <= 2.5s on mid-tier mobile profile (internal benchmark).
+
+## Export pipeline improvements
+1. Keep responsive variants generation but move into dedicated media/export service.
+2. Add deterministic export manifest (`asset-manifest.json`) for diagnostics and validation.
+3. Add per-export report:
+   - asset counts,
+   - total bytes,
+   - missing assets,
+   - responsive coverage.
+4. Keep `ImageDecoder` enhancement path with graceful fallback.
+5. Add strict checks for broken asset references before zip generation.
+
+## Runtime loading improvements
+1. Prioritized preload list for first visible assets only.
+2. Keep lazy loading for non-visible dish media.
+3. Ensure template runtime avoids unnecessary reflows during carousel updates.
+4. Maintain startup loader semantics while reducing total blocking asset set.
+
+## Test and validation strategy
+
+## Gate 0 (baseline hardening, before deep refactor)
+1. Split test runners:
+   - Vitest only for unit/component tests.
+   - Playwright only via `npm run test:e2e`.
+2. Update stale copy assertions in:
+   - `src/App.test.ts`
+   - `tests/e2e/app.spec.ts`
+3. Add smoke checks for these critical flows:
+   - create project,
+   - open `.json`,
+   - open `.zip`,
+   - save project zip,
+   - export static site zip.
+
+Status:
+- Completed on this branch.
+
+## Per-phase required gates
 1. `npm run build`
-2. `npm test` (after adding `jsdom`)
-3. `npm run test:e2e` (or at least landing + open/create flow smoke check)
-4. Manual checks:
-   - Create project
-   - Open/import project (json + zip)
-   - Save project zip
-   - Export static site zip
-   - Upload/move/delete asset in current mode
+2. `npm test`
+3. `npm run test:e2e` (or documented fallback smoke if CI browsers unavailable)
+4. Static export validation:
+   - unzip and verify required files,
+   - verify `menu.json` paths and responsive entries.
+5. Manual parity checklist:
+   - wizard progress logic,
+   - assets CRUD (bridge and/or filesystem mode),
+   - modal media interactions,
+   - template navigation parity.
 
-## Phase plan
+## Phase roadmap
 
-### Phase 0: Test baseline hardening
-- Add missing `jsdom` dev dependency.
-- Keep existing tests green and stable.
-- Add minimal smoke tests for key flows where possible.
+## Phase 1: Refactor scaffolding + test stabilization
+- Introduce target folder structure (without behavior changes).
+- Fix runner boundaries and stale tests.
+- Add parity fixture set from current sample project.
 
-### Phase 1: Low-risk extraction (copy/config only)
-- Extract UI copy, template options, and static catalogs from `src/App.svelte` into `src/lib/` modules.
-- Keep all existing function signatures and behavior unchanged.
+Exit criteria:
+- green build + unit + e2e smoke,
+- no user-visible behavior changes.
 
-### Phase 2: Styling reorganization
-- Split `src/app.css` into logical sections/files (layout/editor/preview/assets/wizard/modal).
-- Preserve class names and DOM structure.
+## Phase 2: Domain extraction (`core`)
+- Move `normalizeProject`, localization helpers, currency formatting, allergen helpers into pure modules.
+- Add unit tests for schema normalization and locale fallback rules.
 
-### Phase 3: Asset operations adapter
-- Extract filesystem + bridge asset operations from `src/App.svelte` into a dedicated adapter module.
-- Keep current API behavior for:
-  - list, upload, mkdir, move, rename, delete, bulk actions.
-- Add focused tests for path normalization and move/rename rules.
+Exit criteria:
+- no UI regression,
+- pure-domain tests cover migration/defaulting paths.
 
-### Phase 4: Import/export extraction
-- Move project zip and static export logic into dedicated `src/lib/` modules.
-- Keep output structure and filenames unchanged.
-- Preserve current zip compatibility assumptions (stored entries only).
+## Phase 3: Infrastructure adapters
+- Extract bridge client and filesystem operations into adapter interfaces.
+- Keep existing endpoint contract and path rules intact.
+- Add contract tests for slug/path normalization and move/rename safety.
 
-### Phase 5: Project data safety
-- Add explicit runtime guards around project loading/import.
-- Centralize migration/defaulting behavior in normalization utilities.
-- Verify all sample projects in `public/projects/` still load.
+Exit criteria:
+- asset workflows parity in both modes,
+- same bridge semantics from UI perspective.
 
-### Phase 6: App component decomposition
-- Split `src/App.svelte` into focused components (landing, editor tabs, preview, modal).
-- Keep state flow and props/events explicit and minimal.
-- Ensure no behavior regression in wizard, preview carousel, and editor actions.
+## Phase 4: Import/export isolation
+- Move zip read/write and static export assembly to `application/export` + `infrastructure/*`.
+- Extract export runtime builder from `App.svelte`.
+- Add golden tests for export zip structure and key file content checks.
 
-## Rollback strategy
-1. Keep phases small and atomic.
-2. If a phase fails gates, revert only that phase.
-3. Do not batch multiple high-coupling changes in one commit.
+Exit criteria:
+- exported zip file set unchanged (unless versioned),
+- import compatibility retained for stored zip entries.
 
-## Notes for upcoming work
-- Start from Phase 0 before any deep refactor so test feedback is reliable.
-- Prioritize user-critical paths first: import, save, export, assets.
+## Phase 5: UI decomposition (Svelte)
+- Decompose `App.svelte` into:
+  - `LandingView`,
+  - `EditorShell`,
+  - `AssetsManager`,
+  - `EditPanel`,
+  - `WizardPanel`,
+  - `PreviewCanvas`,
+  - `DishModal`.
+- Keep current CSS class hooks to reduce style regression risk.
+
+Exit criteria:
+- behavior parity checklist passes,
+- component boundaries align with stores/use-cases.
+
+## Phase 6: Containerization enablement
+- Add Dockerfiles + compose + volume mapping for `public/projects`.
+- Document local container workflows for dev/build/test.
+- Add container smoke checks for bridge and export flows.
+
+Exit criteria:
+- app works in container with same core behaviors,
+- parity checklist still passes.
+
+## Phase 7: Performance hardening (export + runtime)
+- Implement export diagnostics manifest/report.
+- Add performance thresholds in CI checks.
+- Tune startup preload strategy and runtime rendering hot paths.
+
+Status:
+- Implemented on this branch:
+  - export now emits `asset-manifest.json` and `export-report.json`,
+  - startup preloading now uses blocking-first + deferred warmup strategy,
+  - `npm run test:perf` validates export diagnostics and budget checks through e2e export flow.
+
+Exit criteria:
+- budget targets met or explicitly baselined with approved exceptions,
+- no regression in interaction quality.
+
+## Phase 8: Template system expansion readiness
+- Implement capability matrix and template strategy interface.
+- Ensure adding new template does not require editing core UI shell.
+- Add at least one template smoke test fixture path.
+
+Status:
+- Implemented on this branch:
+  - capability matrix + strategy registry in `src/core/templates/registry.ts`,
+  - `PreviewCanvas` and app interaction handlers now consume template capabilities/strategy interfaces,
+  - template smoke fixture path added via `public/projects/sample-jukebox-smoke/menu.json`,
+  - e2e smoke coverage includes fixture-based jukebox strategy shell validation.
+
+Exit criteria:
+- extensibility achieved with low coupling,
+- existing template behavior unchanged.
+
+## Rollback and release strategy
+1. Keep each phase in separate PR(s) with explicit parity checklist.
+2. If any gate fails, rollback only that phase.
+3. Avoid mixing container/performance/template work in the same PR.
+4. Tag stable checkpoints after Phases 2, 4, 6, and 8.
+
+## Definition of done for this refactor program
+- Architecture split implemented across core/application/infrastructure/ui layers.
+- Containerized dev/build workflow available and documented.
+- Behavior parity validated for critical user and export flows.
+- Export pipeline provides measurable asset/performance diagnostics.
+- New template development can be added through strategy modules, not monolithic edits.

@@ -1,0 +1,21 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM node:20-bookworm-slim AS runtime
+
+WORKDIR /app
+
+RUN npm install -g http-server@14.1.1
+
+COPY --from=build /app/dist ./dist
+
+EXPOSE 4173
+
+CMD ["http-server", "dist", "-a", "0.0.0.0", "-p", "4173", "-c-1"]

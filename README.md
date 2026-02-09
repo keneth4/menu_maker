@@ -167,6 +167,8 @@ Creates `<slug>-export.zip` containing:
 - `app.js`
 - `menu.json`
 - `assets/...`
+- `asset-manifest.json`
+- `export-report.json`
 - `favicon.ico`
 - `serve.command` and `serve.bat`
 - `README.txt`
@@ -174,6 +176,8 @@ Creates `<slug>-export.zip` containing:
 Export rules:
 - hero images can be auto-generated into responsive variants (`small`, `medium`, `large`),
 - exported app script inlines interaction runtime and menu payload,
+- startup preload uses a blocking first-view set plus deferred warmup for remaining assets,
+- export diagnostics include deterministic manifest + budget report data,
 - output expects serving over local HTTP (not direct `file://` open).
 
 ## 8) Import Rules and Constraints
@@ -218,6 +222,90 @@ Commands:
 - `npm run build`
 - `npm run test`
 - `npm run test:e2e`
+- `npm run test:perf` (export budget check via e2e export flow; falls back to container smoke if local Node is below Playwright minimum)
+
+## 12) Container Workflows (Phase 6)
+
+Added container files:
+- `Dockerfile.dev`
+- `Dockerfile.prod`
+- `docker-compose.yml`
+- `scripts/container-smoke.sh`
+
+### Environment contract
+- `VITE_PORT` (default `5173`): host port mapped to dev app (`app` service).
+- `PREVIEW_PORT` (default `4173`): host port mapped to static preview (`preview` service).
+- `APP_PORT` (default `5173`): smoke script target port.
+- `PLAYWRIGHT_DOCKER_TAG` (default auto-derived, fallback `v1.58.1-jammy`): Playwright image tag used by container smoke e2e service.
+
+Mount points in `docker-compose.yml`:
+- Source code: `./ -> /app`
+- Dependencies cache: `menumaker_node_modules -> /app/node_modules`
+- Persistent project assets: `menumaker_projects -> /app/public/projects`
+
+This keeps the bridge API contract stable under container dev:
+- `/api/assets/ping`
+- `/api/assets/list`
+- `/api/assets/file`
+- `/api/assets/upload`
+- `/api/assets/delete`
+- `/api/assets/mkdir`
+- `/api/assets/move`
+- `/api/assets/seed`
+- `/api/assets/save-project`
+- `/api/assets/rename-project`
+
+### Container commands
+- `npm run docker:dev`
+  - Builds and runs the editor/dev server at `http://127.0.0.1:${VITE_PORT:-5173}`.
+  - First run installs container dependencies into the `menumaker_node_modules` volume.
+- `npm run docker:preview`
+  - Builds production bundle and serves `dist/` at `http://127.0.0.1:${PREVIEW_PORT:-4173}`.
+- `npm run docker:smoke`
+  - Runs bridge smoke checks (ping/upload/list/file) plus export-flow smoke via a dedicated Playwright container against the running containerized app.
+  - E2E container uses internal Docker alias `menumaker-dev` (avoids Chromium HSTS behavior on hostname `app`).
+
+### Optional manual smoke sequence
+1. `docker compose up -d --build app`
+2. Verify bridge: `curl "http://127.0.0.1:5173/api/assets/ping?project=manual-smoke"`
+3. Run export flow against containerized server:
+   `PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run test:e2e -- --grep "save project and export static site create zip downloads"`
+4. `docker compose down`
+
+## 13) Performance Hardening (Phase 7)
+
+Added in this phase:
+- deterministic export diagnostics files:
+  - `asset-manifest.json` (all exported files with sizes, mime, role, first-view flag),
+  - `export-report.json` (counts/bytes/missing assets/responsive coverage + budget checks).
+- export budget evaluation for:
+  - Export JS gzip (`<= 95 KB` target),
+  - Export CSS gzip (`<= 12 KB` target),
+  - first-view image payload (`<= 1.2 MB` target).
+- startup preload strategy update:
+  - block on first-view asset subset,
+  - defer non-critical asset warmup to idle/background.
+
+Validation:
+- `npm run test:perf` asserts export zip includes diagnostics and that no budget check is failing.
+
+## 14) Template System Readiness (Phase 8)
+
+Added in this phase:
+- capability matrix + strategy registry:
+  - `src/core/templates/registry.ts`
+- template options now derive from the capability matrix:
+  - `src/core/templates/templateOptions.ts`
+- preview shell rendering now uses strategy interface methods instead of hardcoded template branches:
+  - `src/ui/components/PreviewCanvas.svelte`
+- interaction handlers in app shell now use template capabilities (axis, thresholds, settle timing) instead of `focus-rows`/`jukebox` conditionals:
+  - `src/App.svelte`
+- fixture-backed template smoke path added for strategy validation:
+  - `public/projects/sample-jukebox-smoke/menu.json`
+
+Validation:
+- `src/core/templates/registry.test.ts` validates registry coverage and fixture paths.
+- `tests/e2e/app.spec.ts` includes a template fixture smoke test for the `jukebox` strategy shell.
 
 ---
 

@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/svelte";
 import App from "./App.svelte";
 
 describe("App", () => {
-  it("renders base copy", () => {
+  it("renders landing title", () => {
     render(App);
-    expect(screen.getByText(/Menús interactivos/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /menu maker/i })).toBeInTheDocument();
   });
 });

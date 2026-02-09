@@ -2,8 +2,12 @@ import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { normalizeProjectSlug } from "./src/infrastructure/bridge/pathing";
 
 export default defineConfig({
+  server: {
+    allowedHosts: ["menumaker-dev"]
+  },
   plugins: [
     svelte(),
     {
@@ -17,8 +21,7 @@ export default defineConfig({
           await fs.mkdir(base, { recursive: true });
           return base;
         };
-        const sanitizeSlug = (value: string) =>
-          value.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "");
+        const sanitizeSlug = (value: string) => normalizeProjectSlug(value);
         const resolveAssetPath = async (project: string, targetPath: string) => {
           const base = await ensureProjectRoot(project);
           const safePath = targetPath.replace(/^\/+/, "");
@@ -265,6 +268,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./vitest.setup.ts"]
+    setupFiles: ["./vitest.setup.ts"],
+    exclude: ["tests/e2e/**", "node_modules/**", "dist/**"]
   }
 });

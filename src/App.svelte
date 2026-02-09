@@ -6,11 +6,87 @@
 </svelte:head>
 
 <script lang="ts">
+  import {
+    buildProjectAssetPairs,
+    buildProjectZipEntries,
+    collectProjectAssetPaths
+  } from "./application/export/projectZip";
+  import {
+    type ExportAssetManifestEntry,
+    buildExportDiagnostics,
+    buildExportDiagnosticsEntries
+  } from "./application/export/diagnostics";
+  import {
+    evaluateExportBudgets,
+    measureGzipBytes
+  } from "./application/export/performanceBudget";
+  import { buildStaticShellEntries } from "./application/export/staticShell";
+  import {
+    findMenuJsonEntry,
+    getZipAssetEntries,
+    getZipFolderName
+  } from "./application/projects/importZip";
   import { onDestroy, onMount, tick } from "svelte";
+  import {
+    getAllergenLabel as getLocalizedAllergenLabel,
+    getAllergenValues as getLocalizedAllergenValues
+  } from "./core/menu/allergens";
+  import { commonAllergenCatalog, menuTerms } from "./core/menu/catalogs";
+  import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
+  import { normalizeProject } from "./core/menu/normalization";
+  import { formatMenuPrice } from "./core/menu/pricing";
+  import { buildStartupAssetPlan, collectItemPrioritySources } from "./core/menu/startupAssets";
+  import {
+    INTERACTIVE_GIF_MAX_FRAMES,
+    INTERACTIVE_KEEP_ORIGINAL_PLACEMENT,
+    wrapCarouselIndex
+  } from "./core/templates/previewInteraction";
+  import {
+    getTemplateCapabilities,
+    getTemplateStrategy,
+    resolveTemplateId,
+    type TemplateCapabilities,
+    type TemplateId,
+    type TemplateStrategy
+  } from "./core/templates/registry";
+  import { templateOptions } from "./core/templates/templateOptions";
+  import { createBridgeAssetClient } from "./infrastructure/bridge/client";
+  import {
+    normalizeAssetPath,
+    planEntryMove,
+    planEntryRename,
+    resolveBridgeAssetLookup
+  } from "./infrastructure/bridge/pathing";
+  import {
+    copyDirectoryHandleTo,
+    copyFileHandleTo,
+    getDirectoryHandleByPath as getDirectoryHandleByFsPath,
+    getFileHandleByPath as getFileHandleByFsPath,
+    listFilesystemEntries,
+    writeFileToDirectory
+  } from "./infrastructure/filesystem/client";
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
   import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "./lib/types";
+  import {
+    instructionCopy as instructionCopyConfig,
+    type InstructionKey
+  } from "./ui/config/instructionCopy";
+  import {
+    builtInFontSources,
+    currencyOptions,
+    fontOptions,
+    languageOptions
+  } from "./ui/config/staticOptions";
+  import AssetsManager from "./ui/components/AssetsManager.svelte";
+  import DishModal from "./ui/components/DishModal.svelte";
+  import EditorShell from "./ui/components/EditorShell.svelte";
+  import EditPanel from "./ui/components/EditPanel.svelte";
+  import LandingView from "./ui/components/LandingView.svelte";
+  import PreviewCanvas from "./ui/components/PreviewCanvas.svelte";
+  import WizardPanel from "./ui/components/WizardPanel.svelte";
+  import { uiCopy as uiCopyConfig, type UiKey } from "./ui/config/uiCopy";
   import appCssRaw from "./app.css?raw";
 
   let project: MenuProject | null = null;
@@ -28,7 +104,9 @@
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
   let deviceMode: "mobile" | "desktop" = "desktop";
-  let isJukeboxTemplate = false;
+  let activeTemplateId: TemplateId = "focus-rows";
+  let activeTemplateCapabilities: TemplateCapabilities = getTemplateCapabilities(activeTemplateId);
+  let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy(activeTemplateId);
   let editorTab: "info" | "assets" | "edit" | "wizard" = "info";
   let wizardStep = 0;
   let projectFileInput: HTMLInputElement | null = null;
@@ -46,29 +124,23 @@
   let detailRotateDirection: 1 | -1 = -1;
   let detailRotateSource = "";
   const detailRotateDirectionBySource = new Map<string, 1 | -1>();
+  const DEBUG_INTERACTIVE_CENTER =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("debugRotate");
+  const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
+  const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
+  const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
   let interactivePrewarmSignature = "";
   let carouselActive: Record<string, number> = {};
-  let focusRowSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
-  let focusRowTouchState: Record<
+  let carouselSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
+  let carouselTouchState: Record<
     string,
     | {
         touchId: number;
         startX: number;
         startY: number;
-        lastX: number;
-        axis: "pending" | "vertical" | "horizontal";
-      }
-    | null
-  > = {};
-  let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
-  let jukeboxTouchState: Record<
-    string,
-    | {
-        touchId: number;
-        startX: number;
-        startY: number;
-        lastY: number;
-        axis: "pending" | "vertical" | "horizontal";
+        lastPrimary: number;
+        axis: "pending" | "primary" | "secondary";
       }
     | null
   > = {};
@@ -149,6 +221,7 @@
     TEMPLATE_DEMO_PROJECT_SLUG,
     "demo"
   ]);
+  const bridgeClient = createBridgeAssetClient(fetch);
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -161,485 +234,13 @@
     large: string;
   };
 
-  const languageOptions = [
-    { code: "es", label: "Español" },
-    { code: "en", label: "English" },
-    { code: "fr", label: "Français" },
-    { code: "pt", label: "Português" },
-    { code: "it", label: "Italiano" },
-    { code: "de", label: "Deutsch" },
-    { code: "ja", label: "日本語" },
-    { code: "ko", label: "한국어" },
-    { code: "zh", label: "中文" }
-  ];
+  const uiCopy = uiCopyConfig;
 
-  const currencyOptions = [
-    { code: "MXN", label: "Peso MXN", symbol: "$" },
-    { code: "USD", label: "US Dollar", symbol: "$" },
-    { code: "EUR", label: "Euro", symbol: "€" },
-    { code: "GBP", label: "Pound", symbol: "£" },
-    { code: "JPY", label: "Yen", symbol: "¥" },
-    { code: "COP", label: "Peso COP", symbol: "$" },
-    { code: "ARS", label: "Peso ARS", symbol: "$" }
-  ];
-
-  const fontOptions = [
-    { value: "Fraunces", label: "Fraunces" },
-    { value: "Cinzel", label: "Cinzel" },
-    { value: "Cormorant Garamond", label: "Cormorant Garamond" },
-    { value: "Playfair Display", label: "Playfair Display" },
-    { value: "Poppins", label: "Poppins" }
-  ];
-
-  const builtInFontSources: Record<string, string> = {
-    Fraunces: "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;700&display=swap",
-    Cinzel: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap",
-    "Cormorant Garamond":
-      "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;700&display=swap",
-    "Playfair Display":
-      "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap",
-    Poppins: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap"
-  };
-
-  const menuTerms = {
-    es: { allergens: "Alérgenos", vegan: "Vegano" },
-    en: { allergens: "Allergens", vegan: "Vegan" },
-    fr: { allergens: "Allergènes", vegan: "Végétalien" },
-    pt: { allergens: "Alergênicos", vegan: "Vegano" },
-    it: { allergens: "Allergeni", vegan: "Vegano" },
-    de: { allergens: "Allergene", vegan: "Vegan" },
-    ja: { allergens: "アレルゲン", vegan: "ヴィーガン" },
-    ko: { allergens: "알레르겐", vegan: "비건" },
-    zh: { allergens: "过敏原", vegan: "纯素" }
-  } as const;
-
-  const commonAllergenCatalog = [
-    {
-      id: "gluten",
-      label: {
-        es: "Gluten",
-        en: "Gluten",
-        fr: "Gluten",
-        pt: "Glúten",
-        it: "Glutine",
-        de: "Gluten",
-        ja: "グルテン",
-        ko: "글루텐",
-        zh: "麸质"
-      }
-    },
-    {
-      id: "dairy",
-      label: {
-        es: "Lácteos",
-        en: "Dairy",
-        fr: "Produits laitiers",
-        pt: "Laticínios",
-        it: "Latticini",
-        de: "Milchprodukte",
-        ja: "乳製品",
-        ko: "유제품",
-        zh: "乳制品"
-      }
-    },
-    {
-      id: "egg",
-      label: {
-        es: "Huevo",
-        en: "Egg",
-        fr: "Oeuf",
-        pt: "Ovo",
-        it: "Uovo",
-        de: "Ei",
-        ja: "卵",
-        ko: "달걀",
-        zh: "鸡蛋"
-      }
-    },
-    {
-      id: "nuts",
-      label: {
-        es: "Frutos secos",
-        en: "Nuts",
-        fr: "Fruits à coque",
-        pt: "Nozes",
-        it: "Frutta a guscio",
-        de: "Schalenfrüchte",
-        ja: "木の実",
-        ko: "견과류",
-        zh: "坚果"
-      }
-    },
-    {
-      id: "peanut",
-      label: {
-        es: "Cacahuate",
-        en: "Peanut",
-        fr: "Arachide",
-        pt: "Amendoim",
-        it: "Arachide",
-        de: "Erdnuss",
-        ja: "ピーナッツ",
-        ko: "땅콩",
-        zh: "花生"
-      }
-    },
-    {
-      id: "soy",
-      label: {
-        es: "Soya",
-        en: "Soy",
-        fr: "Soja",
-        pt: "Soja",
-        it: "Soia",
-        de: "Soja",
-        ja: "大豆",
-        ko: "대두",
-        zh: "大豆"
-      }
-    },
-    {
-      id: "fish",
-      label: {
-        es: "Pescado",
-        en: "Fish",
-        fr: "Poisson",
-        pt: "Peixe",
-        it: "Pesce",
-        de: "Fisch",
-        ja: "魚",
-        ko: "생선",
-        zh: "鱼类"
-      }
-    },
-    {
-      id: "shellfish",
-      label: {
-        es: "Mariscos",
-        en: "Shellfish",
-        fr: "Crustacés",
-        pt: "Mariscos",
-        it: "Crostacei",
-        de: "Schalentiere",
-        ja: "甲殻類",
-        ko: "갑각류",
-        zh: "甲壳类"
-      }
-    },
-    {
-      id: "sesame",
-      label: {
-        es: "Ajonjolí",
-        en: "Sesame",
-        fr: "Sésame",
-        pt: "Gergelim",
-        it: "Sesamo",
-        de: "Sesam",
-        ja: "ごま",
-        ko: "참깨",
-        zh: "芝麻"
-      }
-    }
-  ] satisfies { id: string; label: Record<string, string> }[];
-
-  const uiCopy = {
-    es: {
-      appTitle: "Menú Interactivo",
-      studioTitle: "Menú Interactivo",
-      studioSubtitle: "Centro de control del proyecto.",
-      landingTitle: "Menu Maker",
-      landingBy: "By keneth4",
-      landingCreate: "Crear proyecto",
-      landingOpen: "Abrir proyecto",
-      landingWizard: "Iniciar wizard",
-      tabProject: "Proyecto",
-      tabAssets: "Assets",
-      tabEdit: "Edición",
-      tabWizard: "Wizard",
-      newProject: "Nuevo proyecto",
-      open: "Abrir proyecto",
-      save: "Guardar proyecto",
-      export: "Exportar sitio",
-      toggleView: "Cambiar vista",
-      toggleLang: "Cambiar idioma UI",
-      openEditor: "Abrir editor",
-      closeEditor: "Cerrar editor",
-      loadingProject: "Cargando proyecto...",
-      uploadAssets: "Subir assets",
-      uploadHint: "Arrastra archivos o usa el botón para subir.",
-      uploadTo: "Subir a",
-      promptMoveTo: "Mover a (ruta dentro de la carpeta raíz)",
-      step: "Paso",
-      wizardProgress: "Progreso",
-      wizardNext: "Siguiente",
-      wizardBack: "Anterior",
-      wizardComplete: "Completo",
-      wizardMissingBackground: "Agrega al menos un fondo con src.",
-      wizardRequireRootBackground:
-        "Sube y selecciona al menos un fondo propio para dejar de usar el demo.",
-      wizardDemoPreviewHint:
-        "Vista demo activa: sube tus assets y selecciona al menos un fondo para usar tu carpeta raíz.",
-      wizardMissingCategories: "Crea al menos una sección con nombre.",
-      wizardMissingDishes: "Agrega al menos un platillo con nombre y precio.",
-      exporting: "Exportando...",
-      exportReady: "Exportación lista.",
-      exportFailed: "No se pudo exportar.",
-      tipRotate: "Consejo: gira el dispositivo a horizontal para ver el layout completo.",
-      selectFolder: "Seleccionar carpeta",
-      newFolder: "Nueva carpeta",
-      rootTitle: "Assets del proyecto",
-      rootNone: "Sin ubicación",
-      dragDrop: "Arrastra archivos aquí o usa el botón de subir.",
-      selectAll: "Seleccionar todo",
-      clear: "Limpiar",
-      move: "Mover",
-      delete: "Eliminar",
-      rename: "Renombrar",
-      pickRootHint: "Sube assets para verlos aquí.",
-      rootEmpty: "Sin archivos en este proyecto.",
-      filesCount: "archivos",
-      projectName: "Nombre del proyecto",
-      template: "Template",
-      languages: "Idiomas disponibles",
-      defaultLang: "Idioma default",
-      font: "Tipografía",
-      fontCustom: "Fuente personalizada",
-      fontCustomName: "Nombre de fuente",
-      fontCustomSrc: "Archivo de fuente",
-      restaurantName: "Nombre del restaurante",
-      menuTitle: "Título del menú",
-      menuTitleFallback: "Menú",
-      restaurantFallback: "Restaurante",
-      blankMenu: "Selecciona una plantilla para comenzar.",
-      currency: "Moneda",
-      currencyPos: "Posición del símbolo",
-      currencyLeft: "Izquierda (€150)",
-      currencyRight: "Derecha (150€)",
-      editLang: "Idioma de edición",
-      editIdentity: "Identidad",
-      editSections: "Secciones",
-      editDishes: "Platillos",
-      editHierarchyHint: "Jerarquía: Sección > Platillo",
-      sectionHint: "Renombra y organiza las secciones del menú.",
-      dishHint: "Edita platillos dentro de la sección seleccionada.",
-      section: "Sección",
-      sectionName: "Nombre de sección",
-      deleteSection: "Eliminar sección",
-      dish: "Platillo",
-      dishData: "Datos del platillo",
-      name: "Nombre",
-      description: "Descripción",
-      longDescription: "Historia / descripción larga",
-      allergensLabel: "Alérgenos",
-      commonAllergens: "Alérgenos comunes",
-      customAllergens: "Alérgenos personalizados",
-      customAllergensHint: "Escribe separados por coma y tradúcelos en cada idioma.",
-      veganLabel: "Vegano",
-      price: "Precio",
-      asset360: "Asset 360",
-      addSection: "Agregar sección",
-      addDish: "Agregar platillo",
-      prevDish: "Platillo anterior",
-      nextDish: "Platillo siguiente",
-      wizardPick: "Elige una estructura base para comenzar.",
-      wizardTip: "Tip: si ya tienes categorías, el template solo cambia el estilo.",
-      wizardIdentity: "Define identidad y fondos.",
-      wizardCategories: "Crea categorías principales.",
-      wizardDishes: "Agrega platillos y sus GIFs 360.",
-      wizardPreview: "Revisa el preview final.",
-      wizardAssetsHint: "Sube assets en la pestaña Assets para seleccionarlos aquí.",
-      wizardStepStructure: "Estructura",
-      wizardStepIdentity: "Identidad",
-      wizardStepCategories: "Categorías",
-      wizardStepDishes: "Platillos",
-      wizardStepPreview: "Preview",
-      wizardAddBg: "+ Fondo",
-      wizardLabel: "Label",
-      wizardSrc: "Src",
-      wizardLanguage: "Idioma",
-      wizardCategory: "Categoría",
-      wizardAddCategory: "+ Categoría",
-      wizardAddDish: "+ Platillo",
-      wizardExportNote: "El exportador del sitio estático se agregará en este paso.",
-      backgroundLabel: "Fondo",
-      errOpenProject: "No se pudo abrir el archivo",
-      errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
-      errOpenFolder: "No se pudo abrir la carpeta.",
-      errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
-      errZipMissing: "El zip no contiene menu.json.",
-      errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
-      errZipNoBridge: "Para abrir zips necesitas el almacenamiento local activo.",
-      assetsRequired: "Carga los assets del proyecto para completar el preview.",
-      assetsReadOnly:
-        "Este proyecto demo es de solo lectura. No puedes modificar ni borrar sus assets.",
-      assetsOwnershipNotice:
-        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
-      promptNewFolder: "Nombre de la nueva carpeta",
-      promptRename: "Nuevo nombre",
-      promptSaveName: "Nombre del archivo del proyecto (zip)"
-    },
-    en: {
-      appTitle: "Interactive Menu",
-      studioTitle: "Interactive Menu",
-      studioSubtitle: "Project control center.",
-      landingTitle: "Menu Maker",
-      landingBy: "By keneth4",
-      landingCreate: "Create project",
-      landingOpen: "Open project",
-      landingWizard: "Run wizard",
-      tabProject: "Project",
-      tabAssets: "Assets",
-      tabEdit: "Edit",
-      tabWizard: "Wizard",
-      newProject: "New project",
-      open: "Open project",
-      save: "Save project",
-      export: "Export site",
-      toggleView: "Toggle view",
-      toggleLang: "Toggle UI language",
-      openEditor: "Open editor",
-      closeEditor: "Close editor",
-      loadingProject: "Loading project...",
-      uploadAssets: "Upload assets",
-      uploadHint: "Drag files here or use the upload button.",
-      uploadTo: "Upload to",
-      promptMoveTo: "Move to (path inside root folder)",
-      step: "Step",
-      wizardProgress: "Progress",
-      wizardNext: "Next",
-      wizardBack: "Back",
-      wizardComplete: "Complete",
-      wizardMissingBackground: "Add at least one background with src.",
-      wizardRequireRootBackground:
-        "Upload and select at least one of your own backgrounds to stop using demo assets.",
-      wizardDemoPreviewHint:
-        "Demo preview is active: upload your assets and pick at least one background from your root folder.",
-      wizardMissingCategories: "Create at least one section with a name.",
-      wizardMissingDishes: "Add at least one dish with name and price.",
-      exporting: "Exporting...",
-      exportReady: "Export ready.",
-      exportFailed: "Export failed.",
-      tipRotate: "Tip: rotate the device to landscape to see the full layout.",
-      selectFolder: "Select folder",
-      newFolder: "New folder",
-      rootTitle: "Project assets",
-      rootNone: "No location",
-      dragDrop: "Drag files here or use the upload button.",
-      selectAll: "Select all",
-      clear: "Clear",
-      move: "Move",
-      delete: "Delete",
-      rename: "Rename",
-      pickRootHint: "Upload assets to see them here.",
-      rootEmpty: "No files in this project yet.",
-      filesCount: "files",
-      projectName: "Project name",
-      template: "Template",
-      languages: "Available languages",
-      defaultLang: "Default language",
-      font: "Typography",
-      fontCustom: "Custom font",
-      fontCustomName: "Font name",
-      fontCustomSrc: "Font file",
-      restaurantName: "Restaurant name",
-      menuTitle: "Menu title",
-      menuTitleFallback: "Menu",
-      restaurantFallback: "Restaurant",
-      blankMenu: "Select a template to begin.",
-      currency: "Currency",
-      currencyPos: "Symbol position",
-      currencyLeft: "Left (€150)",
-      currencyRight: "Right (150€)",
-      editLang: "Editing language",
-      editIdentity: "Identity",
-      editSections: "Sections",
-      editDishes: "Dishes",
-      editHierarchyHint: "Hierarchy: Section > Dish",
-      sectionHint: "Rename and organize menu sections.",
-      dishHint: "Edit dishes inside the selected section.",
-      section: "Section",
-      sectionName: "Section name",
-      deleteSection: "Delete section",
-      dish: "Dish",
-      dishData: "Dish details",
-      name: "Name",
-      description: "Description",
-      longDescription: "History / long description",
-      allergensLabel: "Allergens",
-      commonAllergens: "Common Allergens",
-      customAllergens: "Custom Allergens",
-      customAllergensHint: "Use comma-separated names and translate them for each language.",
-      veganLabel: "Vegan",
-      price: "Price",
-      asset360: "360 asset",
-      addSection: "Add section",
-      addDish: "Add dish",
-      prevDish: "Previous dish",
-      nextDish: "Next dish",
-      wizardPick: "Choose a base structure to start.",
-      wizardTip: "Tip: if you already have categories, the template only changes layout.",
-      wizardIdentity: "Define identity and backgrounds.",
-      wizardCategories: "Create main categories.",
-      wizardDishes: "Add dishes and their 360 GIFs.",
-      wizardPreview: "Review the final preview.",
-      wizardAssetsHint: "Upload assets in the Assets tab to select them here.",
-      wizardStepStructure: "Structure",
-      wizardStepIdentity: "Identity",
-      wizardStepCategories: "Categories",
-      wizardStepDishes: "Dishes",
-      wizardStepPreview: "Preview",
-      wizardAddBg: "+ Background",
-      wizardLabel: "Label",
-      wizardSrc: "Src",
-      wizardLanguage: "Language",
-      wizardCategory: "Category",
-      wizardAddCategory: "+ Category",
-      wizardAddDish: "+ Dish",
-      wizardExportNote: "The static site exporter will be added in this step.",
-      backgroundLabel: "Background",
-      errOpenProject: "Unable to open the file",
-      errNoFolder: "Your browser doesn't support local folder access.",
-      errOpenFolder: "Unable to open the folder.",
-      errMoveFolder: "Your browser doesn't support moving files by folder.",
-      errZipMissing: "The zip file doesn't contain menu.json.",
-      errZipCompression: "The zip uses unsupported compression. Use a stored zip.",
-      errZipNoBridge: "Zip import requires local bridge storage.",
-      assetsRequired: "Upload the project assets to complete the preview.",
-      assetsReadOnly:
-        "This demo project is read-only. You cannot modify or delete its assets.",
-      assetsOwnershipNotice:
-        "Assets belong to their owners. Do not copy or reuse this content without permission.",
-      promptNewFolder: "New folder name",
-      promptRename: "New name",
-      promptSaveName: "Project file name (zip)"
-    }
-  };
-
-  type UiKey = keyof (typeof uiCopy)["es"];
   let t: (key: UiKey) => string = (key) => uiCopy.es[key];
   let selectedLabel: (count: number) => string = (count) => `${count} seleccionados`;
   $: t = (key) => uiCopy[uiLang]?.[key] ?? key;
   $: selectedLabel = (count) =>
     uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
-
-  type TemplateOption = {
-    id: string;
-    label: Record<string, string>;
-    categories: Record<string, string[]>;
-  };
-
-  const templateOptions: TemplateOption[] = [
-    {
-      id: "focus-rows",
-      label: { es: "Filas En Foco", en: "In Focus Rows" },
-      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-    },
-    {
-      id: "jukebox",
-      label: { es: "Jukebox", en: "Jukebox" },
-      categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-    }
-  ];
 
   $: if (draft) {
     const validCategory = draft.categories.some((item) => item.id === selectedCategoryId);
@@ -928,8 +529,7 @@
       window.addEventListener("orientationchange", handleViewportChange);
 
       try {
-        const response = await fetch("/api/assets/ping");
-        bridgeAvailable = response.ok;
+        bridgeAvailable = await bridgeClient.ping();
       } catch {
         bridgeAvailable = false;
       }
@@ -991,7 +591,11 @@
       void prewarmInteractiveDetailAssets(activeProject);
     }
   }
-  $: isJukeboxTemplate = activeProject?.meta.template === "jukebox";
+  $: {
+    activeTemplateId = resolveTemplateId(activeProject?.meta.template);
+    activeTemplateCapabilities = getTemplateCapabilities(activeTemplateId);
+    activeTemplateStrategy = getTemplateStrategy(activeTemplateId);
+  }
   $: assetProjectReadOnly = isProtectedAssetProjectSlug(
     draft?.meta.slug || activeSlug || "nuevo-proyecto"
   );
@@ -1063,27 +667,6 @@
     return entry[locale] ?? entry[activeProject?.meta.defaultLocale ?? "es"] ?? fallback;
   };
 
-  const normalizeLocaleCode = (lang: string) => lang.toLowerCase().split("-")[0];
-
-  const getLocalizedValue = (
-    labels: Record<string, string> | undefined,
-    lang: string,
-    defaultLang = "en"
-  ) => {
-    if (!labels) return "";
-    const normalized = normalizeLocaleCode(lang);
-    const defaultNormalized = normalizeLocaleCode(defaultLang);
-    return (
-      labels[lang] ??
-      labels[normalized] ??
-      labels[defaultLang] ??
-      labels[defaultNormalized] ??
-      labels.en ??
-      Object.values(labels).find((value) => value.trim().length > 0) ??
-      ""
-    );
-  };
-
   const normalizeAssetSrc = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return "";
@@ -1113,109 +696,7 @@
     return menuTerms[localeKey]?.[term] ?? menuTerms.en[term];
   };
 
-  const instructionCopy = {
-    en: {
-      loadingLabel: "Loading assets",
-      tapHint: "Tap or click a dish for details",
-      assetDisclaimer:
-        "Assets belong to their owners. Do not copy or reuse this content without permission.",
-      jukeboxHint: "Scroll vertically to spin the disc. Horizontal to switch sections.",
-      focusRowsHint: "Scroll vertically for sections. Horizontally for dishes.",
-      rotateHintTouch: "Swipe horizontally on the image to rotate",
-      rotateHintMouse: "Drag horizontally with the mouse to rotate",
-      rotateToggle: "Reverse rotation"
-    },
-    es: {
-      loadingLabel: "Cargando assets",
-      tapHint: "Toca o haz clic en un platillo para ver detalles",
-      assetDisclaimer:
-        "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
-      jukeboxHint: "Desliza vertical para girar el disco. Horizontal para cambiar sección.",
-      focusRowsHint: "Desliza vertical para secciones. Horizontal para platillos.",
-      rotateHintTouch: "Desliza horizontal sobre la imagen para girar",
-      rotateHintMouse: "Arrastra horizontal con el mouse para girar",
-      rotateToggle: "Invertir giro"
-    },
-    fr: {
-      loadingLabel: "Chargement des assets",
-      tapHint: "Touchez ou cliquez sur un plat pour voir les détails",
-      assetDisclaimer:
-        "Les assets appartiennent à leurs propriétaires. Ne copiez ni ne réutilisez ce contenu sans autorisation.",
-      jukeboxHint:
-        "Faites défiler verticalement pour faire tourner le disque. Horizontalement pour changer de section.",
-      focusRowsHint: "Faites défiler verticalement pour les sections. Horizontalement pour les plats.",
-      rotateHintTouch: "Balayez horizontalement l'image pour faire tourner",
-      rotateHintMouse: "Faites glisser horizontalement avec la souris pour faire tourner",
-      rotateToggle: "Inverser la rotation"
-    },
-    pt: {
-      loadingLabel: "Carregando assets",
-      tapHint: "Toque ou clique em um prato para ver detalhes",
-      assetDisclaimer:
-        "Os assets pertencem aos seus proprietários. Não copie nem reutilize este conteúdo sem autorização.",
-      jukeboxHint: "Deslize verticalmente para girar o disco. Horizontalmente para mudar de seção.",
-      focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para pratos.",
-      rotateHintTouch: "Deslize horizontalmente na imagem para girar",
-      rotateHintMouse: "Arraste horizontalmente com o mouse para girar",
-      rotateToggle: "Inverter rotação"
-    },
-    it: {
-      loadingLabel: "Caricamento assets",
-      tapHint: "Tocca o fai clic su un piatto per vedere i dettagli",
-      assetDisclaimer:
-        "Gli assets appartengono ai rispettivi proprietari. Non copiare o riutilizzare questo contenuto senza autorizzazione.",
-      jukeboxHint: "Scorri verticalmente per far girare il disco. Orizzontalmente per cambiare sezione.",
-      focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per i piatti.",
-      rotateHintTouch: "Scorri orizzontalmente sull'immagine per ruotare",
-      rotateHintMouse: "Trascina orizzontalmente con il mouse per ruotare",
-      rotateToggle: "Inverti rotazione"
-    },
-    de: {
-      loadingLabel: "Assets werden geladen",
-      tapHint: "Tippe oder klicke auf ein Gericht, um Details zu sehen",
-      assetDisclaimer:
-        "Assets gehören ihren Eigentümern. Bitte nicht ohne Genehmigung kopieren oder wiederverwenden.",
-      jukeboxHint: "Vertikal scrollen, um die Scheibe zu drehen. Horizontal, um die Sektion zu wechseln.",
-      focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Gerichte.",
-      rotateHintTouch: "Wische horizontal über das Bild, um zu drehen",
-      rotateHintMouse: "Ziehe horizontal mit der Maus, um zu drehen",
-      rotateToggle: "Drehrichtung umkehren"
-    },
-    ja: {
-      loadingLabel: "アセットを読み込み中",
-      tapHint: "料理をタップまたはクリックして詳細を見る",
-      assetDisclaimer:
-        "アセットは各所有者に帰属します。許可なく複製・再利用しないでください。",
-      jukeboxHint: "縦スクロールでディスクを回転。横スクロールでセクション切替。",
-      focusRowsHint: "縦スクロールでセクション。横スクロールで料理。",
-      rotateHintTouch: "画像上で横にスワイプして回転",
-      rotateHintMouse: "画像上で横にドラッグして回転",
-      rotateToggle: "回転方向を反転"
-    },
-    ko: {
-      loadingLabel: "에셋 로딩 중",
-      tapHint: "요리를 탭하거나 클릭해 상세 정보를 확인하세요",
-      assetDisclaimer:
-        "에셋은 각 소유자에게 귀속됩니다. 허가 없이 복사하거나 재사용하지 마세요.",
-      jukeboxHint: "세로 스크롤로 디스크를 회전. 가로 스크롤로 섹션 전환.",
-      focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 요리.",
-      rotateHintTouch: "이미지에서 가로로 스와이프해 회전",
-      rotateHintMouse: "마우스로 가로로 드래그해 회전",
-      rotateToggle: "회전 방향 반전"
-    },
-    zh: {
-      loadingLabel: "正在加载素材",
-      tapHint: "点按或点击菜品查看详情",
-      assetDisclaimer: "素材归其所有者所有。未经许可请勿复制或再利用。",
-      jukeboxHint: "纵向滚动旋转转盘，横向滚动切换分类。",
-      focusRowsHint: "纵向滚动浏览分类，横向滚动浏览菜品。",
-      rotateHintTouch: "在图片上横向滑动以旋转",
-      rotateHintMouse: "用鼠标横向拖动以旋转",
-      rotateToggle: "反向旋转"
-    }
-  } as const;
-
-  type InstructionKey = keyof (typeof instructionCopy)["en"];
+  const instructionCopy = instructionCopyConfig;
 
   const getInstructionCopy = (key: InstructionKey, lang = locale) => {
     const localeKey = normalizeLocaleCode(lang) as keyof typeof instructionCopy;
@@ -1232,20 +713,20 @@
 
   const getFocusRowsScrollHint = (lang = locale) => getInstructionCopy("focusRowsHint", lang);
 
+  const getTemplateScrollHint = (
+    lang = locale,
+    templateId: string = activeTemplateId
+  ) => getInstructionCopy(getTemplateCapabilities(templateId).instructionHintKey, lang);
+
   const isProtectedAssetProjectSlug = (slug: string) => READ_ONLY_ASSET_PROJECTS.has(slug);
 
   const getAllergenLabel = (entry: AllergenEntry, lang = locale) => {
     const defaultLocale = activeProject?.meta.defaultLocale ?? "es";
-    return (
-      getLocalizedValue(entry.label, lang, defaultLocale) ||
-      getLocalizedValue(entry.label, defaultLocale, "en")
-    );
+    return getLocalizedAllergenLabel(entry, lang, defaultLocale);
   };
 
   const getAllergenValues = (item: MenuItem, lang = locale) =>
-    (item.allergens ?? [])
-      .map((entry) => getAllergenLabel(entry, lang))
-      .filter((value) => value.trim().length > 0);
+    getLocalizedAllergenValues(item.allergens, lang, activeProject?.meta.defaultLocale ?? "es");
 
   const ensureMetaTitle = () => {
     if (!draft) return null;
@@ -1261,78 +742,6 @@
       draft.meta.restaurantName = createLocalized(draft.meta.locales);
     }
     return draft.meta.restaurantName;
-  };
-
-  const normalizeProject = (value: MenuProject) => {
-    const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
-    value.meta.locales = locales;
-    if (!value.meta.title) {
-      value.meta.title = createLocalized(locales);
-    }
-    if (!value.meta.restaurantName) {
-      value.meta.restaurantName = createLocalized(locales);
-    }
-    if (!value.meta.fontFamily) {
-      value.meta.fontFamily = "Fraunces";
-    }
-    if (value.meta.fontSource === undefined) {
-      value.meta.fontSource = "";
-    }
-    if (!value.meta.currencyPosition) {
-      value.meta.currencyPosition = "left";
-    }
-    value.categories = (value.categories ?? []).map((category) => ({
-      ...category,
-      items: (category.items ?? []).map((item) => {
-        const rawAllergens = (item as MenuItem & { allergens?: unknown }).allergens;
-        const normalizedAllergens: AllergenEntry[] = Array.isArray(rawAllergens)
-          ? rawAllergens
-              .map((entry) => {
-                if (typeof entry === "string") {
-                  const clean = entry.trim();
-                  if (!clean) return null;
-                  return {
-                    label: locales.reduce<Record<string, string>>((acc, lang) => {
-                      acc[lang] = clean;
-                      return acc;
-                    }, {})
-                  };
-                }
-                if (entry && typeof entry === "object" && "label" in entry) {
-                  const asEntry = entry as AllergenEntry;
-                  const safeLabel = locales.reduce<Record<string, string>>((acc, lang) => {
-                    acc[lang] = getLocalizedValue(
-                      asEntry.label,
-                      lang,
-                      value.meta.defaultLocale ?? "en"
-                    );
-                    return acc;
-                  }, {});
-                  return {
-                    id: asEntry.id,
-                    label: safeLabel
-                  };
-                }
-                return null;
-              })
-              .filter((entry): entry is AllergenEntry => Boolean(entry))
-          : [];
-        return {
-          ...item,
-          allergens: normalizedAllergens
-        };
-      })
-    }));
-    const legacyTemplateMap: Record<string, string> = {
-      "bar-pub": "focus-rows",
-      "cafe-brunch": "focus-rows",
-      "street-food": "focus-rows"
-    };
-    value.meta.template = legacyTemplateMap[value.meta.template] ?? value.meta.template;
-    if (!value.meta.template) {
-      value.meta.template = "focus-rows";
-    }
-    return value;
   };
 
   const changeProject = async (slug: string) => {
@@ -1616,7 +1025,15 @@
         openError = error instanceof Error ? error.message : t("errOpenProject");
       }
     }
-    const zipEntries = await buildProjectZipEntries(draft.meta.slug || nextSlug);
+    const zipEntries = await buildProjectZipEntries({
+      project: draft,
+      slug: draft.meta.slug || nextSlug,
+      normalizePath,
+      readAssetBytes,
+      onMissingAsset: (sourcePath, error) => {
+        console.warn("Missing asset", sourcePath, error);
+      }
+    });
     if (zipEntries.length === 0) return;
     const blob = createZipBlob(zipEntries);
     const url = URL.createObjectURL(blob);
@@ -2792,19 +2209,67 @@ const getAssetDisclaimer = () => getInstructionCopy("assetDisclaimer");
 const getJukeboxHint = () => getInstructionCopy("jukeboxHint");
 const getFocusRowsHint = () => getInstructionCopy("focusRowsHint");
 const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
-const collectStartupSources = () => {
-  const urls = new Set();
+const STARTUP_BLOCKING_BACKGROUND_LIMIT = 1;
+const STARTUP_BLOCKING_ITEM_LIMIT = 6;
+const collectStartupItemPrioritySources = () => {
+  const rows = DATA.categories.map((category) =>
+    category.items
+      .map((item) => (getCarouselImageSrc(item) || "").trim())
+      .filter((src) => src.length > 0)
+  );
+  const ordered = [];
+  let depth = 0;
+  while (true) {
+    let foundAtDepth = false;
+    rows.forEach((row) => {
+      const src = row[depth];
+      if (!src) return;
+      ordered.push(src);
+      foundAtDepth = true;
+    });
+    if (!foundAtDepth) break;
+    depth += 1;
+  }
+  const deduped = [];
+  const seen = new Set();
+  ordered.forEach((src) => {
+    if (seen.has(src)) return;
+    seen.add(src);
+    deduped.push(src);
+  });
+  return deduped;
+};
+const buildStartupSourcePlan = () => {
+  const backgroundSources = [];
+  const backgroundSeen = new Set();
   backgrounds.forEach((bg) => {
     const src = (bg?.src || "").trim();
-    if (src) urls.add(src);
+    if (!src || backgroundSeen.has(src)) return;
+    backgroundSeen.add(src);
+    backgroundSources.push(src);
   });
-  DATA.categories.forEach((category) => {
-    category.items.forEach((item) => {
-      const src = (getCarouselImageSrc(item) || "").trim();
-      if (src) urls.add(src);
-    });
+  const itemSources = collectStartupItemPrioritySources();
+  const blocking = [];
+  const blockingSet = new Set();
+  backgroundSources.slice(0, STARTUP_BLOCKING_BACKGROUND_LIMIT).forEach((src) => {
+    if (blockingSet.has(src)) return;
+    blockingSet.add(src);
+    blocking.push(src);
   });
-  return Array.from(urls);
+  itemSources.slice(0, STARTUP_BLOCKING_ITEM_LIMIT).forEach((src) => {
+    if (blockingSet.has(src)) return;
+    blockingSet.add(src);
+    blocking.push(src);
+  });
+  const all = [];
+  const seen = new Set();
+  [...backgroundSources, ...itemSources].forEach((src) => {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    all.push(src);
+  });
+  const deferred = all.filter((src) => !blockingSet.has(src));
+  return { blocking, deferred };
 };
 const preloadImageAsset = (src) =>
   new Promise((resolve) => {
@@ -2821,6 +2286,33 @@ const preloadImageAsset = (src) =>
       resolve();
     }
   });
+const preloadImageBatch = async (sources, onProgress, concurrency = 4) => {
+  if (!sources.length) return;
+  const queue = sources.slice();
+  const workers = Math.max(1, Math.min(concurrency, queue.length));
+  let loaded = 0;
+  const runWorker = async () => {
+    while (queue.length > 0) {
+      const source = queue.shift();
+      if (!source) continue;
+      await preloadImageAsset(source);
+      loaded += 1;
+      onProgress?.(loaded, sources.length);
+    }
+  };
+  await Promise.all(Array.from({ length: workers }, () => runWorker()));
+};
+const preloadDeferredAssets = (sources) => {
+  if (!sources.length) return;
+  const run = () => {
+    void preloadImageBatch(sources, null, 3);
+  };
+  if ("requestIdleCallback" in window && typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => run(), { timeout: 900 });
+    return;
+  }
+  window.setTimeout(run, 120);
+};
 const syncStartupUi = () => {
   const preview = app.querySelector(".menu-preview");
   const loader = app.querySelector(".menu-startup-loader");
@@ -2833,31 +2325,31 @@ const syncStartupUi = () => {
 };
 const preloadStartupAssets = async () => {
   const token = ++startupToken;
-  const sources = collectStartupSources();
-  if (sources.length === 0) {
+  const plan = buildStartupSourcePlan();
+  if (plan.blocking.length === 0) {
     startupProgress = 100;
     startupLoading = false;
     syncStartupUi();
+    preloadDeferredAssets(plan.deferred);
     return;
   }
   startupLoading = true;
   startupProgress = 0;
   syncStartupUi();
-  let loaded = 0;
-  await Promise.all(
-    sources.map((src) =>
-      preloadImageAsset(src).finally(() => {
-        if (token !== startupToken) return;
-        loaded += 1;
-        startupProgress = Math.round((loaded / sources.length) * 100);
-        syncStartupUi();
-      })
-    )
+  await preloadImageBatch(
+    plan.blocking,
+    (loaded, total) => {
+      if (token !== startupToken) return;
+      startupProgress = Math.round((loaded / total) * 100);
+      syncStartupUi();
+    },
+    4
   );
   if (token !== startupToken) return;
   startupProgress = 100;
   startupLoading = false;
   syncStartupUi();
+  preloadDeferredAssets(plan.deferred);
 };
 
 const buildCarousel = (category) => {
@@ -2881,11 +2373,12 @@ const buildCarousel = (category) => {
       : ""}
     <div class="menu-carousel \${category.items.length <= 1 ? "single" : ""}" data-category-id="\${category.id}">
       \${entries
-        .map(
-          (entry) => \`
+        .map((entry) => {
+          const srcSet = buildSrcSet(entry.item);
+          return \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
-                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
+                <img src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -2895,8 +2388,8 @@ const buildCarousel = (category) => {
                 <p class="carousel-desc">\${textOf(entry.item.description)}</p>
               </div>
             </button>
-          \`
-        )
+          \`;
+        })
         .join("")}
     </div>
   \`;
@@ -3528,54 +3021,13 @@ void prewarmInteractiveDetailAssets();
 `;
   };
 
-  const buildExportHtml = (version: string) => `
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-    <title>Menu Export</title>
-    <link rel="icon" href="favicon.ico" />
-    <link rel="stylesheet" href="styles.css?v=${version}" />
-  </head>
-  <body>
-    <div id="app"></div>
-    <div id="dish-modal" class="dish-modal">
-      <div id="dish-modal-content" class="dish-modal__card"></div>
-    </div>
-    <script src="app.js?v=${version}"></scr${"ipt"}>
-  </body>
-</html>
-`;
-
-  const collectAssetPaths = (data: MenuProject) => {
-    const assets = new Set<string>();
-    if (data.meta.fontSource) {
-      assets.add(data.meta.fontSource);
-    }
-    data.backgrounds.forEach((bg) => {
-      if (bg.src) assets.add(bg.src);
-    });
-    data.categories.forEach((category) => {
-      category.items.forEach((item) => {
-        if (item.media.hero360) assets.add(item.media.hero360);
-      });
-    });
-    return Array.from(assets)
-      .map((path) => normalizePath(path))
-      .filter((path) => path && !path.startsWith("http"));
-  };
-
   const readAssetBytes = async (
     slug: string,
     sourcePath: string
   ): Promise<Uint8Array | null> => {
     if (assetMode === "filesystem" && rootHandle) {
       try {
-        const fileHandle = await getFileHandleByPath(sourcePath);
+        const fileHandle = await getFileHandleByFsPath(rootHandle, sourcePath);
         const file = await fileHandle.getFile();
         const buffer = await file.arrayBuffer();
         return new Uint8Array(buffer);
@@ -3585,14 +3037,7 @@ void prewarmInteractiveDetailAssets();
     }
     if (assetMode === "bridge") {
       const lookup = resolveBridgeAssetLookup(sourcePath, slug);
-      const response = await fetch(
-        `/api/assets/file?project=${encodeURIComponent(lookup.slug)}&path=${encodeURIComponent(
-          lookup.path
-        )}`
-      );
-      if (!response.ok) return null;
-      const buffer = await response.arrayBuffer();
-      return new Uint8Array(buffer);
+      return await bridgeClient.readFileBytes(lookup.slug, lookup.path);
     }
     const publicPath = normalizeAssetSrc(sourcePath);
     if (publicPath.startsWith("/projects/")) {
@@ -3604,76 +3049,6 @@ void prewarmInteractiveDetailAssets();
     return null;
   };
 
-  const buildProjectZipEntries = async (slug: string) => {
-    if (!draft) return [];
-    const encoder = new TextEncoder();
-    const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
-    const assets = collectAssetPaths(draft);
-    const assetPairs = assets.map((assetPath) => {
-      const normalized = normalizePath(assetPath);
-      const prefix = `projects/${slug}/assets/`;
-      let relativePath = normalized;
-      if (normalized.startsWith(prefix)) {
-        relativePath = normalized.slice(prefix.length);
-      } else if (normalized.includes("assets/")) {
-        relativePath = normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length);
-      } else {
-        relativePath = normalized.split("/").filter(Boolean).pop() ?? "asset";
-      }
-      return {
-        sourcePath: normalized,
-        relativePath,
-        zipPath: `${slug}/assets/${relativePath}`
-      };
-    });
-
-    if (exportProject.meta.fontSource) {
-      const normalized = normalizePath(exportProject.meta.fontSource);
-      const pair = assetPairs.find((item) => item.sourcePath === normalized);
-      if (pair) {
-        exportProject.meta.fontSource = `assets/${pair.relativePath}`;
-      }
-    }
-
-    exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
-      const normalized = normalizePath(bg.src || "");
-      const pair = assetPairs.find((item) => item.sourcePath === normalized);
-      return { ...bg, src: pair ? `assets/${pair.relativePath}` : bg.src };
-    });
-    exportProject.categories = exportProject.categories.map((category) => ({
-      ...category,
-      items: category.items.map((item) => {
-        const hero = normalizePath(item.media.hero360 || "");
-        const pair = assetPairs.find((p) => p.sourcePath === hero);
-        const media = {
-          ...item.media,
-          hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
-        };
-        delete (media as { responsive?: unknown }).responsive;
-        return {
-          ...item,
-          media
-        };
-      })
-    }));
-
-    const entries: { name: string; data: Uint8Array }[] = [];
-    const menuData = JSON.stringify(exportProject, null, 2);
-    entries.push({ name: `${slug}/menu.json`, data: encoder.encode(menuData) });
-
-    for (const pair of assetPairs) {
-      try {
-        const data = await readAssetBytes(slug, pair.sourcePath);
-        if (!data) continue;
-        entries.push({ name: pair.zipPath, data });
-      } catch (error) {
-        console.warn("Missing asset", pair.sourcePath, error);
-      }
-    }
-
-    return entries;
-  };
-
   const exportStaticSite = async () => {
     if (!draft) return;
     exportError = "";
@@ -3681,23 +3056,18 @@ void prewarmInteractiveDetailAssets();
     try {
       const slug = getProjectSlug();
       const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
-      const assets = collectAssetPaths(draft);
-      const assetPairs = assets.map((assetPath) => {
-        const normalized = normalizePath(assetPath);
-        const prefix = `projects/${slug}/assets/`;
-        let exportPath = normalized;
-        if (normalized.startsWith(prefix)) {
-          exportPath = `assets/${normalized.slice(prefix.length)}`;
-        } else if (normalized.includes("assets/")) {
-          exportPath = `assets/${normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)}`;
-        } else if (!normalized.startsWith("assets/")) {
-          const fileName = normalized.split("/").filter(Boolean).pop() ?? "asset";
-          exportPath = `assets/${fileName}`;
-        }
-        return { sourcePath: normalized, exportPath };
-      });
+      const assets = collectProjectAssetPaths(draft, normalizePath);
+      const assetPairs = buildProjectAssetPairs(slug, assets, normalizePath);
       const entries: { name: string; data: Uint8Array }[] = [];
+      const manifestEntries: ExportAssetManifestEntry[] = [];
+      const missingSourcePaths = new Set<string>();
       const heroSources = new Set<string>();
+      const backgroundSources = new Set(
+        draft.backgrounds
+          .map((bg) => normalizePath(bg.src || ""))
+          .filter((source) => source.length > 0)
+      );
+      const fontSource = normalizePath(draft.meta.fontSource || "");
       draft.categories.forEach((category) => {
         category.items.forEach((item) => {
           const hero = normalizePath(item.media.hero360 || "");
@@ -3706,25 +3076,61 @@ void prewarmInteractiveDetailAssets();
       });
       const sourceToExportPath = new Map<string, string>();
       const sourceToResponsive = new Map<string, ResponsiveMediaPaths>();
+      const getSourceRole = (sourcePath: string): ExportAssetManifestEntry["role"] => {
+        if (fontSource && sourcePath === fontSource) return "font";
+        if (backgroundSources.has(sourcePath)) return "background";
+        if (heroSources.has(sourcePath)) return "hero";
+        return "other";
+      };
 
       for (const pair of assetPairs) {
         try {
+          const exportPath = `assets/${pair.relativePath}`;
           const data = await readAssetBytes(slug, pair.sourcePath);
-          if (!data) continue;
-          const mime = getMimeType(pair.exportPath).toLowerCase();
+          if (!data) {
+            missingSourcePaths.add(pair.sourcePath);
+            continue;
+          }
+          const mime = getMimeType(exportPath).toLowerCase();
           const shouldResize = heroSources.has(pair.sourcePath) && isResponsiveImageMime(mime);
           if (shouldResize) {
-            const responsive = await createResponsiveImageVariants(pair.exportPath, data, mime);
+            const responsive = await createResponsiveImageVariants(exportPath, data, mime);
             if (responsive) {
-              responsive.entries.forEach((entry) => entries.push(entry));
+              const responsiveVariantByPath = new Map<string, "small" | "medium" | "large">([
+                [responsive.paths.small, "small"],
+                [responsive.paths.medium, "medium"],
+                [responsive.paths.large, "large"]
+              ]);
+              responsive.entries.forEach((entry) => {
+                entries.push(entry);
+                manifestEntries.push({
+                  outputPath: entry.name,
+                  sourcePath: pair.sourcePath,
+                  role: getSourceRole(pair.sourcePath),
+                  mime,
+                  bytes: entry.data.byteLength,
+                  responsiveVariant: responsiveVariantByPath.get(entry.name) ?? null,
+                  firstView: false
+                });
+              });
               sourceToExportPath.set(pair.sourcePath, responsive.paths.large);
               sourceToResponsive.set(pair.sourcePath, responsive.paths);
               continue;
             }
           }
-          entries.push({ name: pair.exportPath, data });
-          sourceToExportPath.set(pair.sourcePath, pair.exportPath);
+          entries.push({ name: exportPath, data });
+          manifestEntries.push({
+            outputPath: exportPath,
+            sourcePath: pair.sourcePath,
+            role: getSourceRole(pair.sourcePath),
+            mime,
+            bytes: data.byteLength,
+            responsiveVariant: null,
+            firstView: false
+          });
+          sourceToExportPath.set(pair.sourcePath, exportPath);
         } catch (error) {
+          missingSourcePaths.add(pair.sourcePath);
           console.warn("Missing asset", pair.sourcePath, error);
         }
       }
@@ -3765,37 +3171,65 @@ void prewarmInteractiveDetailAssets();
         })
       }));
 
-      const encoder = new TextEncoder();
       const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
-      const serveCommand = `#!/bin/bash
-set -e
-cd "$(dirname "$0")"
-python3 -m http.server 4173 --bind 127.0.0.1
-`;
-      const serveBat = `@echo off
-cd /d %~dp0
-python -m http.server 4173 --bind 127.0.0.1
-`;
-      const readme = `Open this exported site with a local server (recommended).
+      const stylesCss = buildExportStyles();
+      const appJs = buildExportScript(exportProject);
+      const shellEntries = buildStaticShellEntries({
+        menuJson: menuData,
+        stylesCss,
+        appJs,
+        exportVersion,
+        faviconIco: fromBase64(FAVICON_ICO_BASE64)
+      });
+      entries.push(...shellEntries);
+      shellEntries.forEach((entry) => {
+        manifestEntries.push({
+          outputPath: entry.name,
+          sourcePath: null,
+          role: "shell",
+          mime: getMimeType(entry.name),
+          bytes: entry.data.byteLength,
+          responsiveVariant: null,
+          firstView: false
+        });
+      });
 
-macOS / Linux:
-1. Run chmod +x serve.command
-2. Run ./serve.command
-3. Open http://127.0.0.1:4173
+      const startupPlan = buildStartupAssetPlan({
+        backgroundSources: exportProject.backgrounds.map((bg) => bg.src || ""),
+        itemSources: collectItemPrioritySources(exportProject, getCarouselImageSource),
+        blockingBackgroundLimit: 1,
+        blockingItemLimit: 6
+      });
+      const firstViewSources = new Set(startupPlan.blocking);
+      manifestEntries.forEach((entry) => {
+        if (firstViewSources.has(entry.outputPath)) {
+          entry.firstView = true;
+        }
+      });
 
-Windows:
-1. Run serve.bat
-2. Open http://127.0.0.1:4173
-`;
-      entries.push({ name: "menu.json", data: encoder.encode(menuData) });
-      entries.push({ name: "styles.css", data: encoder.encode(buildExportStyles()) });
-      entries.push({ name: "app.js", data: encoder.encode(buildExportScript(exportProject)) });
-      entries.push({ name: "index.html", data: encoder.encode(buildExportHtml(exportVersion)) });
-      entries.push({ name: "favicon.ico", data: fromBase64(FAVICON_ICO_BASE64) });
-      entries.push({ name: "serve.command", data: encoder.encode(serveCommand) });
-      entries.push({ name: "serve.bat", data: encoder.encode(serveBat) });
-      entries.push({ name: "README.txt", data: encoder.encode(readme) });
+      const firstViewImageBytes = manifestEntries
+        .filter((entry) => entry.firstView && entry.mime.startsWith("image/"))
+        .reduce((sum, entry) => sum + entry.bytes, 0);
+      const budgets = evaluateExportBudgets({
+        jsGzipBytes: await measureGzipBytes(appJs),
+        cssGzipBytes: await measureGzipBytes(stylesCss),
+        firstViewImageBytes
+      });
+      const diagnostics = buildExportDiagnostics({
+        slug,
+        generatedAt: new Date().toISOString(),
+        manifestEntries,
+        referencedSourcePaths: assetPairs.map((pair) => pair.sourcePath),
+        missingSourcePaths: Array.from(missingSourcePaths),
+        heroSourceCount: heroSources.size,
+        responsiveHeroSourceCount: sourceToResponsive.size,
+        budgets
+      });
+      entries.push(...buildExportDiagnosticsEntries(diagnostics));
+      if (!budgets.passed) {
+        console.warn("Export performance budgets exceeded", diagnostics.report.budgets.checks);
+      }
 
       const blob = createZipBlob(entries);
       const url = URL.createObjectURL(blob);
@@ -3852,119 +3286,14 @@ Windows:
     t("wizardStepPreview")
   ];
 
-  const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 260;
-  const FOCUS_ROWS_WHEEL_SETTLE_MS = 200;
-  const FOCUS_ROWS_WHEEL_DELTA_CAP = 140;
-  const FOCUS_ROWS_TOUCH_DELTA_SCALE = 2.2;
-  const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
-  const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
-  const JUKEBOX_WHEEL_SETTLE_MS = 240;
-  const JUKEBOX_WHEEL_DELTA_CAP = 140;
-  const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
-  const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
-  const INTERACTIVE_GIF_MAX_FRAMES = 72;
-  const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
-  const DEBUG_INTERACTIVE_CENTER =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("debugRotate");
-  const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
-  const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
-  const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
-
-  const getFocusRowRenderItems = (items: MenuItem[]) =>
-    items.map((item, index) => ({
-      item,
-      sourceIndex: index,
-      key: `${item.id}-focus`
-    }));
-
-  const getJukeboxRenderItems = (items: MenuItem[]) =>
-    items.map((item, index) => ({
-      item,
-      sourceIndex: index,
-      key: `${item.id}-jukebox`
-    }));
-
-  const getCircularOffset = (activeIndex: number, targetIndex: number, count: number) => {
-    if (count <= 1) return 0;
-    let offset = targetIndex - activeIndex;
-    const half = count / 2;
-    while (offset > half) offset -= count;
-    while (offset < -half) offset += count;
-    return offset;
-  };
-
-  const wrapCarouselIndex = (value: number, count: number) => {
-    if (count <= 0) return 0;
-    return ((value % count) + count) % count;
-  };
-
-  const getFocusRowCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
-    const offset = getCircularOffset(activeIndex, sourceIndex, count);
-    const distance = Math.abs(offset);
-    const stepX = 220;
-    const maxDistance = 2.6;
-    const hideAt = Math.max(1.6, count / 2 - 0.25);
-    const x = offset * stepX;
-    const y = Math.min(18, distance * 6);
-    const scale = distance < 0.5 ? 1 : Math.max(0.68, 1 - distance * 0.14);
-    let opacity =
-      distance < 0.5 ? 1 : distance <= maxDistance ? Math.max(0, 1 - distance * 0.34) : 0;
-    if (distance >= hideAt) {
-      opacity = 0;
-    }
-    const blur = Math.min(8, distance * 2.4);
-    const depth = Math.max(1, 120 - Math.round(distance * 18));
-    return `--row-x:${x.toFixed(1)}px;--row-y:${y.toFixed(1)}px;--row-scale:${scale.toFixed(
-      3
-    )};--row-opacity:${opacity.toFixed(3)};--row-blur:${blur.toFixed(
-      2
-    )}px;--row-depth:${depth};`;
-  };
-
-  const getJukeboxCardStyle = (activeIndex: number, sourceIndex: number, count: number) => {
-    const offset = getCircularOffset(activeIndex, sourceIndex, count);
-    const distance = Math.abs(offset);
-    const wheelRadius = 420;
-    const stepY = 210;
-    const discBiasX = -72;
-    const rawY = offset * stepY;
-    const clampedY = Math.max(-wheelRadius, Math.min(wheelRadius, rawY));
-    const chord = Math.sqrt(Math.max(0, wheelRadius * wheelRadius - clampedY * clampedY));
-    const arcX = distance < 0.5 ? discBiasX : discBiasX - (wheelRadius - chord);
-    const focusShift = distance < 0.5 ? -arcX : 0;
-    const arcY = clampedY;
-    const scale = distance < 0.5 ? 1 : 0.88;
-    const opacity = distance < 0.5 ? 1 : distance <= 1.2 ? 0.82 : 0;
-    const depth = Math.max(1, 220 - Math.round(distance * 26));
-    return `--arc-x:${arcX.toFixed(1)}px;--arc-y:${arcY.toFixed(1)}px;--card-scale:${scale.toFixed(
-      3
-    )};--card-opacity:${opacity.toFixed(3)};--focus-shift:${focusShift.toFixed(
-      1
-    )}px;--ring-depth:${depth};`;
-  };
-
-  const normalizeJukeboxWheelDelta = (event: WheelEvent) => {
-    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
-    const scaled = event.deltaY * modeScale;
-    return Math.max(-JUKEBOX_WHEEL_DELTA_CAP, Math.min(JUKEBOX_WHEEL_DELTA_CAP, scaled));
-  };
-
   const clearCarouselWheelState = () => {
-    Object.values(jukeboxWheelSnapTimeout).forEach((timer) => {
+    Object.values(carouselSnapTimeout).forEach((timer) => {
       if (timer) {
         clearTimeout(timer);
       }
     });
-    Object.values(focusRowSnapTimeout).forEach((timer) => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    });
-    jukeboxWheelSnapTimeout = {};
-    jukeboxTouchState = {};
-    focusRowSnapTimeout = {};
-    focusRowTouchState = {};
+    carouselSnapTimeout = {};
+    carouselTouchState = {};
   };
 
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
@@ -4853,55 +4182,80 @@ Windows:
       }
     });
 
-  const collectPreviewStartupSources = (data: MenuProject) => {
-    const urls = new Set<string>();
-    data.backgrounds.forEach((bg) => {
-      const src = (bg.src || "").trim();
-      if (src) {
-        urls.add(src);
+  const preloadImageAssetBatch = async (
+    sources: string[],
+    onProgress: ((loaded: number, total: number) => void) | null,
+    concurrency = 4
+  ) => {
+    if (sources.length === 0) return;
+    const queue = [...sources];
+    const workers = Math.max(1, Math.min(concurrency, queue.length));
+    let loaded = 0;
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const source = queue.shift();
+        if (!source) continue;
+        await preloadImageAsset(source);
+        loaded += 1;
+        onProgress?.(loaded, sources.length);
       }
-    });
-    data.categories.forEach((category) => {
-      category.items.forEach((item) => {
-        const src = getCarouselImageSource(item).trim();
-        if (src) {
-          urls.add(src);
-        }
-      });
-    });
-    return Array.from(urls);
+    };
+    await Promise.all(Array.from({ length: workers }, () => runWorker()));
   };
 
-  const preloadPreviewStartupAssets = async (sources: string[]) => {
+  const preloadDeferredPreviewAssets = (sources: string[]) => {
+    if (!sources.length) return;
+    const run = () => {
+      void preloadImageAssetBatch(sources, null, 3);
+    };
+    if ("requestIdleCallback" in window) {
+      (window as Window & { requestIdleCallback?: (cb: IdleRequestCallback, options?: IdleRequestOptions) => number }).requestIdleCallback?.(
+        () => run(),
+        { timeout: 900 }
+      );
+      return;
+    }
+    window.setTimeout(run, 120);
+  };
+
+  const collectPreviewStartupPlan = (data: MenuProject) =>
+    buildStartupAssetPlan({
+      backgroundSources: data.backgrounds.map((bg) => bg.src || ""),
+      itemSources: collectItemPrioritySources(data, getCarouselImageSource),
+      blockingBackgroundLimit: 1,
+      blockingItemLimit: 6
+    });
+
+  const preloadPreviewStartupAssets = async (plan: { blocking: string[]; deferred: string[] }) => {
     const token = ++previewStartupToken;
-    if (sources.length === 0) {
+    if (plan.blocking.length === 0) {
       previewStartupProgress = 100;
       previewStartupLoading = false;
+      preloadDeferredPreviewAssets(plan.deferred);
       return;
     }
     previewStartupLoading = true;
     previewStartupProgress = 0;
-    let loaded = 0;
-    await Promise.all(
-      sources.map((src) =>
-        preloadImageAsset(src).finally(() => {
-          if (token !== previewStartupToken) return;
-          loaded += 1;
-          previewStartupProgress = Math.round((loaded / sources.length) * 100);
-        })
-      )
+    await preloadImageAssetBatch(
+      plan.blocking,
+      (loaded, total) => {
+        if (token !== previewStartupToken) return;
+        previewStartupProgress = Math.round((loaded / total) * 100);
+      },
+      4
     );
     if (token !== previewStartupToken) return;
     previewStartupProgress = 100;
     previewStartupLoading = false;
+    preloadDeferredPreviewAssets(plan.deferred);
   };
 
   $: if (activeProject && typeof window !== "undefined") {
-    const sources = collectPreviewStartupSources(activeProject);
-    const signature = sources.join("|");
+    const startupPlan = collectPreviewStartupPlan(activeProject);
+    const signature = startupPlan.all.join("|");
     if (signature !== previewStartupSignature) {
       previewStartupSignature = signature;
-      void preloadPreviewStartupAssets(sources);
+      void preloadPreviewStartupAssets(startupPlan);
     }
   } else {
     previewStartupSignature = "";
@@ -5058,29 +4412,23 @@ Windows:
           openError = message.includes("compression") ? t("errZipCompression") : message;
           return;
         }
-        const menuEntry = entries.find((entry) => entry.name.endsWith("menu.json"));
+        const menuEntry = findMenuJsonEntry(entries);
         if (!menuEntry) {
           openError = t("errZipMissing");
           return;
         }
         const menuText = new TextDecoder().decode(menuEntry.data);
         const data = normalizeProject(JSON.parse(menuText) as MenuProject);
-        const prefix = menuEntry.name.replace(/menu\.json$/i, "");
-        const folder = prefix.replace(/\/$/, "");
-        const folderName = folder.split("/").filter(Boolean).pop() ?? "";
+        const folderName = getZipFolderName(menuEntry.name);
         const slug =
           slugifyName(data.meta.slug || folderName || data.meta.name || "menu") || "menu";
         data.meta.slug = slug;
         applyImportedPaths(data, slug);
         if (assetMode === "bridge") {
-          const assetsPrefix = prefix ? `${prefix}assets/` : "assets/";
-          const assetEntries = entries.filter((entry) => entry.name.startsWith(assetsPrefix));
-          for (const entry of assetEntries) {
-            const relative = entry.name.slice(assetsPrefix.length);
-            if (!relative) continue;
-            const parts = relative.split("/").filter(Boolean);
-            const name = parts.pop() ?? "";
-            const targetPath = parts.join("/");
+          const assetEntries = getZipAssetEntries(entries, menuEntry.name);
+          for (const assetEntry of assetEntries) {
+            const { name, targetPath, entry } = assetEntry;
+            if (!name) continue;
             const mime = getMimeType(name);
             const dataUrl = `data:${mime};base64,${toBase64(entry.data)}`;
             await bridgeRequest(
@@ -5175,7 +4523,7 @@ Windows:
 
   const handleMenuScroll = (event: Event) => {
     const container = event.currentTarget as HTMLElement;
-    if (isJukeboxTemplate) {
+    if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
       if (container.scrollWidth <= container.clientWidth + 4) return;
       if (sectionSnapTimeout) {
         clearTimeout(sectionSnapTimeout);
@@ -5185,7 +4533,7 @@ Windows:
         if (closestIndex >= 0) {
           centerSectionHorizontally(container, closestIndex, "smooth");
         }
-      }, 170);
+      }, activeTemplateCapabilities.sectionSnapDelayMs);
       return;
     }
     if (sectionFocusRaf) {
@@ -5199,7 +4547,7 @@ Windows:
     }
     sectionSnapTimeout = setTimeout(() => {
       snapSectionToCenter(container);
-    }, 180);
+    }, activeTemplateCapabilities.sectionSnapDelayMs);
   };
 
   const syncCarousels = async () => {
@@ -5208,7 +4556,7 @@ Windows:
     if (menuScroll) {
       applySectionFocus(menuScroll);
     }
-    if (isJukeboxTemplate || !activeProject) {
+    if (activeTemplateCapabilities.carousel.primaryAxis === "vertical" || !activeProject) {
       return;
     }
     const next = { ...carouselActive };
@@ -5250,6 +4598,7 @@ Windows:
   };
 
   const shiftSection = (direction: number) => {
+    if (activeTemplateCapabilities.sectionSnapAxis !== "horizontal") return;
     const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
     if (!container) return;
     const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
@@ -5295,40 +4644,11 @@ Windows:
 
   const refreshRootEntries = async () => {
     if (!rootHandle) return;
-    const entries: {
-      id: string;
-      name: string;
-      path: string;
-      kind: "file" | "directory";
-      handle: FileSystemHandle | null;
-      parent: FileSystemDirectoryHandle | null;
-      source: "filesystem" | "bridge";
-    }[] = [];
-    const walk = async (dir: FileSystemDirectoryHandle, prefix = "") => {
-      for await (const [name, handle] of dir.entries()) {
-        const path = `${prefix}${name}`;
-        entries.push({
-          id: path,
-          name,
-          path,
-          kind: handle.kind,
-          handle,
-          parent: dir,
-          source: "filesystem"
-        });
-        if (handle.kind === "directory") {
-          await walk(handle as FileSystemDirectoryHandle, `${path}/`);
-        }
-      }
-    };
-    await walk(rootHandle);
-    entries.sort((a, b) => {
-      if (a.kind !== b.kind) {
-        return a.kind === "directory" ? -1 : 1;
-      }
-      return a.path.localeCompare(b.path);
-    });
-    fsEntries = entries;
+    const entries = await listFilesystemEntries(rootHandle);
+    fsEntries = entries.map((entry) => ({
+      ...entry,
+      source: "filesystem" as const
+    }));
     rootFiles = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
   };
 
@@ -5356,15 +4676,7 @@ Windows:
     const slug = getProjectSlug();
     bridgeProjectSlug = slug;
     try {
-      const response = await fetch(`/api/assets/list?project=${encodeURIComponent(slug)}`);
-      if (!response.ok) {
-        fsError = t("errOpenFolder");
-        return;
-      }
-      const data = (await response.json()) as {
-        entries?: { path: string; kind: "file" | "directory" }[];
-      };
-      const entries = (data.entries ?? []).map((entry) => {
+      const entries = (await bridgeClient.list(slug)).map((entry) => {
         const name = entry.path.split("/").filter(Boolean).pop() ?? entry.path;
         return {
           id: entry.path,
@@ -5393,33 +4705,10 @@ Windows:
     overrideSlug?: string
   ) => {
     const slug = overrideSlug ?? getProjectSlug();
-    const response = await fetch(`/api/assets/${endpoint}?project=${encodeURIComponent(slug)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload ? JSON.stringify(payload) : undefined
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "Bridge error");
-    }
+    await bridgeClient.request(endpoint, slug, payload);
   };
 
-  const normalizePath = (value: string) => value.replace(/^\/+/, "").trim();
-
-  const resolveBridgeAssetLookup = (sourcePath: string, fallbackSlug: string) => {
-    const normalized = normalizePath(sourcePath);
-    const match = normalized.match(/^projects\/([^/]+)\/assets\/(.+)$/);
-    if (match) {
-      return { slug: match[1], path: match[2] };
-    }
-    if (normalized.includes("assets/")) {
-      return {
-        slug: fallbackSlug,
-        path: normalized.slice(normalized.lastIndexOf("assets/") + "assets/".length)
-      };
-    }
-    return { slug: fallbackSlug, path: normalized };
-  };
+  const normalizePath = normalizeAssetPath;
 
   const toBase64 = (data: Uint8Array) => {
     let binary = "";
@@ -5446,9 +4735,19 @@ Windows:
     if (["png", "gif", "webp", "jpg", "jpeg", "svg"].includes(ext)) {
       return `image/${ext === "jpg" ? "jpeg" : ext}`;
     }
+    if (ext === "ico") return "image/x-icon";
     if (["mp4", "webm"].includes(ext)) {
       return `video/${ext}`;
     }
+    if (ext === "css") return "text/css";
+    if (ext === "js") return "application/javascript";
+    if (ext === "json") return "application/json";
+    if (ext === "html") return "text/html";
+    if (ext === "txt") return "text/plain";
+    if (ext === "woff2") return "font/woff2";
+    if (ext === "woff") return "font/woff";
+    if (ext === "ttf") return "font/ttf";
+    if (ext === "otf") return "font/otf";
     return "application/octet-stream";
   };
 
@@ -5554,39 +4853,13 @@ Windows:
     return `@font-face { font-family: "${family}"; src: url("${source}")${formatLine}; font-display: swap; }`;
   };
 
-  const getDirectoryHandleByPath = async (
-    path: string,
-    create = false
-  ): Promise<FileSystemDirectoryHandle> => {
-    if (!rootHandle) {
-      throw new Error(t("errNoFolder"));
-    }
-    const parts = normalizePath(path).split("/").filter(Boolean);
-    let current = rootHandle;
-    for (const part of parts) {
-      current = await current.getDirectoryHandle(part, { create });
-    }
-    return current;
-  };
-
-  const getFileHandleByPath = async (path: string): Promise<FileSystemFileHandle> => {
-    const normalized = normalizePath(path);
-    const parts = normalized.split("/").filter(Boolean);
-    const fileName = parts.pop();
-    if (!fileName) {
-      throw new Error("Missing file name");
-    }
-    const dir = await getDirectoryHandleByPath(parts.join("/"), false);
-    return await dir.getFileHandle(fileName);
-  };
-
   const createFolder = async () => {
     if (!ensureAssetProjectWritable()) return;
     const name = window.prompt(t("promptNewFolder"));
     if (!name) return;
     if (assetMode === "filesystem") {
       if (!rootHandle) return;
-      await getDirectoryHandleByPath(name, true);
+      await getDirectoryHandleByFsPath(rootHandle, name, true);
       await refreshRootEntries();
       return;
     }
@@ -5600,44 +4873,6 @@ Windows:
     }
   };
 
-  const writeFileTo = async (
-    file: File,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const newHandle = await destination.getFileHandle(name, { create: true });
-    const writable = await newHandle.createWritable();
-    await writable.write(await file.arrayBuffer());
-    await writable.close();
-  };
-
-  const copyFileTo = async (
-    source: FileSystemFileHandle,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const file = await source.getFile();
-    const newHandle = await destination.getFileHandle(name, { create: true });
-    const writable = await newHandle.createWritable();
-    await writable.write(await file.arrayBuffer());
-    await writable.close();
-  };
-
-  const copyDirectoryTo = async (
-    source: FileSystemDirectoryHandle,
-    destination: FileSystemDirectoryHandle,
-    name: string
-  ) => {
-    const newDir = await destination.getDirectoryHandle(name, { create: true });
-    for await (const [entryName, handle] of source.entries()) {
-      if (handle.kind === "file") {
-        await copyFileTo(handle as FileSystemFileHandle, newDir, entryName);
-      } else {
-        await copyDirectoryTo(handle as FileSystemDirectoryHandle, newDir, entryName);
-      }
-    }
-  };
-
   const renameEntry = async (entry: (typeof fsEntries)[number]) => {
     if (!ensureAssetProjectWritable()) return;
     const newName = window.prompt(t("promptRename"), entry.name);
@@ -5645,19 +4880,17 @@ Windows:
     if (assetMode === "filesystem") {
       if (!rootHandle || !entry.parent || !entry.handle) return;
       if (entry.kind === "file") {
-        await copyFileTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
+        await copyFileHandleTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
         await entry.parent.removeEntry(entry.name);
       } else {
-        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, entry.parent, newName);
+        await copyDirectoryHandleTo(entry.handle as FileSystemDirectoryHandle, entry.parent, newName);
         await entry.parent.removeEntry(entry.name, { recursive: true });
       }
       await refreshRootEntries();
       return;
     }
     if (assetMode === "bridge") {
-      const parts = entry.path.split("/").filter(Boolean);
-      parts.pop();
-      const newPath = [...parts, newName].join("/");
+      const newPath = planEntryRename(entry.path, newName);
       try {
         await bridgeRequest("move", { from: entry.path, to: newPath });
         await refreshBridgeEntries();
@@ -5671,57 +4904,30 @@ Windows:
     entry: (typeof fsEntries)[number],
     targetPath: string
   ) => {
+    const plan = planEntryMove(entry.kind, entry.name, targetPath);
     if (assetMode === "filesystem") {
       if (!rootHandle || !entry.parent || !entry.handle) return;
-      const raw = normalizePath(targetPath);
-      const endsWithSlash = targetPath.trim().endsWith("/");
-      const parts = raw.split("/").filter(Boolean);
       if (entry.kind === "file") {
-        let fileName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          fileName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
-        await copyFileTo(entry.handle as FileSystemFileHandle, destination, fileName);
+        const destination = await getDirectoryHandleByFsPath(rootHandle, plan.destinationDirPath, true);
+        await copyFileHandleTo(
+          entry.handle as FileSystemFileHandle,
+          destination,
+          plan.destinationName
+        );
         await entry.parent.removeEntry(entry.name);
       } else {
-        let folderName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          folderName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        const destination = await getDirectoryHandleByPath(folderParts.join("/"), true);
-        await copyDirectoryTo(entry.handle as FileSystemDirectoryHandle, destination, folderName);
+        const destination = await getDirectoryHandleByFsPath(rootHandle, plan.destinationDirPath, true);
+        await copyDirectoryHandleTo(
+          entry.handle as FileSystemDirectoryHandle,
+          destination,
+          plan.destinationName
+        );
         await entry.parent.removeEntry(entry.name, { recursive: true });
       }
       return;
     }
     if (assetMode === "bridge") {
-      const raw = normalizePath(targetPath);
-      const endsWithSlash = targetPath.trim().endsWith("/");
-      const parts = raw.split("/").filter(Boolean);
-      let destinationPath = raw;
-      if (entry.kind === "file") {
-        let fileName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          fileName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        destinationPath = [...folderParts, fileName].join("/");
-      } else {
-        let folderName = entry.name;
-        let folderParts = parts;
-        if (!endsWithSlash && parts.length) {
-          folderName = parts[parts.length - 1];
-          folderParts = parts.slice(0, -1);
-        }
-        destinationPath = [...folderParts, folderName].join("/");
-      }
-      await bridgeRequest("move", { from: entry.path, to: destinationPath });
+      await bridgeRequest("move", { from: entry.path, to: plan.destinationPath });
     }
   };
 
@@ -5804,9 +5010,9 @@ Windows:
         fsError = t("errNoFolder");
         return;
       }
-      const destination = await getDirectoryHandleByPath(target, true);
+      const destination = await getDirectoryHandleByFsPath(rootHandle, target, true);
       for (const file of uploads) {
-        await writeFileTo(file, destination, file.name);
+        await writeFileToDirectory(file, destination, file.name);
       }
       await refreshRootEntries();
       return;
@@ -5895,11 +5101,10 @@ Windows:
     options: { source?: "wizard" | "project" } = {}
   ) => {
     if (!draft) return;
-    draft.meta.template = templateId;
-    const template = templateOptions.find((item) => item.id === templateId);
-    if (!template) return;
+    const resolvedTemplateId = resolveTemplateId(templateId);
+    draft.meta.template = resolvedTemplateId;
     if (options.source === "wizard") {
-      wizardShowcaseProject = await buildWizardShowcaseProject(templateId);
+      wizardShowcaseProject = await buildWizardShowcaseProject(resolvedTemplateId);
       syncWizardShowcaseVisibility();
     } else {
       wizardShowcaseProject = null;
@@ -6071,138 +5276,68 @@ Windows:
     carouselActive = { ...carouselActive, [categoryId]: next };
   };
 
-  const normalizeFocusRowWheelDelta = (event: WheelEvent) => {
-    const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
-    const scaled = event.deltaX * modeScale;
-    return Math.max(-FOCUS_ROWS_WHEEL_DELTA_CAP, Math.min(FOCUS_ROWS_WHEEL_DELTA_CAP, scaled));
-  };
-
-  const queueFocusRowSnap = (categoryId: string, count: number) => {
+  const queueCarouselSnap = (categoryId: string, count: number) => {
     if (count <= 1) return;
-    if (focusRowSnapTimeout[categoryId]) {
-      clearTimeout(focusRowSnapTimeout[categoryId] ?? undefined);
+    if (carouselSnapTimeout[categoryId]) {
+      clearTimeout(carouselSnapTimeout[categoryId] ?? undefined);
     }
     const settleTimer = window.setTimeout(() => {
       const current = carouselActive[categoryId] ?? 0;
       const normalized = wrapCarouselIndex(Math.round(current), count);
       carouselActive = { ...carouselActive, [categoryId]: normalized };
-      focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: null };
-    }, FOCUS_ROWS_WHEEL_SETTLE_MS);
-    focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: settleTimer };
+      carouselSnapTimeout = { ...carouselSnapTimeout, [categoryId]: null };
+    }, activeTemplateCapabilities.carousel.wheelSettleMs);
+    carouselSnapTimeout = { ...carouselSnapTimeout, [categoryId]: settleTimer };
   };
 
-  const applyFocusRowDelta = (categoryId: string, count: number, delta: number) => {
+  const applyCarouselDelta = (categoryId: string, count: number, delta: number) => {
     if (!delta || count <= 1) return;
     const current = carouselActive[categoryId] ?? 0;
-    const next = wrapCarouselIndex(current + delta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
+    const next = wrapCarouselIndex(
+      current + delta / activeTemplateCapabilities.carousel.wheelStepThreshold,
+      count
+    );
     carouselActive = { ...carouselActive, [categoryId]: next };
-    queueFocusRowSnap(categoryId, count);
-  };
-
-  const queueJukeboxSnap = (categoryId: string, count: number) => {
-    if (count <= 1) return;
-    if (jukeboxWheelSnapTimeout[categoryId]) {
-      clearTimeout(jukeboxWheelSnapTimeout[categoryId] ?? undefined);
-    }
-    const settleTimer = window.setTimeout(() => {
-      const current = carouselActive[categoryId] ?? 0;
-      const normalized = wrapCarouselIndex(Math.round(current), count);
-      carouselActive = { ...carouselActive, [categoryId]: normalized };
-      jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
-    }, JUKEBOX_WHEEL_SETTLE_MS);
-    jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: settleTimer };
-  };
-
-  const applyJukeboxDelta = (categoryId: string, count: number, delta: number) => {
-    if (!delta || count <= 1) return;
-    const current = carouselActive[categoryId] ?? 0;
-    const next = wrapCarouselIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
-    carouselActive = { ...carouselActive, [categoryId]: next };
-    queueJukeboxSnap(categoryId, count);
+    queueCarouselSnap(categoryId, count);
   };
 
   const handleCarouselWheel = (categoryId: string, event: WheelEvent) => {
-    if (isJukeboxTemplate) {
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      if (count <= 1) return;
-      const delta = normalizeJukeboxWheelDelta(event);
-      if (!delta) return;
-      applyJukeboxDelta(categoryId, count, delta);
-      return;
-    }
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+    const primaryAxis = activeTemplateCapabilities.carousel.primaryAxis;
+    const isPrimaryDelta =
+      primaryAxis === "vertical"
+        ? Math.abs(event.deltaY) > Math.abs(event.deltaX)
+        : Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!isPrimaryDelta) return;
     event.preventDefault();
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
     if (count <= 1) return;
-    const delta = normalizeFocusRowWheelDelta(event);
+    const delta = activeTemplateStrategy.normalizeWheelDelta(event);
     if (!delta) return;
-    applyFocusRowDelta(categoryId, count, delta);
+    applyCarouselDelta(categoryId, count, delta);
   };
 
   const handleCarouselTouchStart = (categoryId: string, event: TouchEvent) => {
     const touch = event.changedTouches[0];
     if (!touch) return;
-    if (isJukeboxTemplate) {
-      jukeboxTouchState = {
-        ...jukeboxTouchState,
-        [categoryId]: {
-          touchId: touch.identifier,
-          startX: touch.clientX,
-          startY: touch.clientY,
-          lastY: touch.clientY,
-          axis: "pending"
-        }
-      };
-      return;
-    }
-    focusRowTouchState = {
-      ...focusRowTouchState,
+    const lastPrimary =
+      activeTemplateCapabilities.carousel.primaryAxis === "vertical"
+        ? touch.clientY
+        : touch.clientX;
+    carouselTouchState = {
+      ...carouselTouchState,
       [categoryId]: {
         touchId: touch.identifier,
         startX: touch.clientX,
         startY: touch.clientY,
-        lastX: touch.clientX,
+        lastPrimary,
         axis: "pending"
       }
     };
   };
 
   const handleCarouselTouchMove = (categoryId: string, event: TouchEvent) => {
-    if (isJukeboxTemplate) {
-      const state = jukeboxTouchState[categoryId];
-      if (!state) return;
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      if (count <= 1) return;
-      const trackedTouch = Array.from(event.touches).find(
-        (touch) => touch.identifier === state.touchId
-      );
-      if (!trackedTouch) return;
-
-      const totalDx = trackedTouch.clientX - state.startX;
-      const totalDy = trackedTouch.clientY - state.startY;
-      if (
-        state.axis === "pending" &&
-        Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
-      ) {
-        state.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
-      }
-
-      if (state.axis !== "vertical") return;
-
-      event.preventDefault();
-      const deltaY = trackedTouch.clientY - state.lastY;
-      state.lastY = trackedTouch.clientY;
-      if (Math.abs(deltaY) < 0.2) return;
-      applyJukeboxDelta(categoryId, count, -deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
-      return;
-    }
-
-    const state = focusRowTouchState[categoryId];
+    const state = carouselTouchState[categoryId];
     if (!state) return;
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
@@ -6214,40 +5349,39 @@ Windows:
 
     const totalDx = trackedTouch.clientX - state.startX;
     const totalDy = trackedTouch.clientY - state.startY;
+    const primaryAxis = activeTemplateCapabilities.carousel.primaryAxis;
+    const primaryMagnitude = primaryAxis === "vertical" ? Math.abs(totalDy) : Math.abs(totalDx);
+    const secondaryMagnitude = primaryAxis === "vertical" ? Math.abs(totalDx) : Math.abs(totalDy);
     if (
       state.axis === "pending" &&
-      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= FOCUS_ROWS_TOUCH_INTENT_THRESHOLD
+      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >=
+        activeTemplateCapabilities.carousel.touchIntentThreshold
     ) {
-      state.axis = Math.abs(totalDx) >= Math.abs(totalDy) ? "horizontal" : "vertical";
+      state.axis = primaryMagnitude >= secondaryMagnitude ? "primary" : "secondary";
     }
 
-    if (state.axis !== "horizontal") return;
+    if (state.axis !== "primary") return;
 
     event.preventDefault();
-    const deltaX = trackedTouch.clientX - state.lastX;
-    state.lastX = trackedTouch.clientX;
-    if (Math.abs(deltaX) < 0.2) return;
-    applyFocusRowDelta(categoryId, count, -deltaX * FOCUS_ROWS_TOUCH_DELTA_SCALE);
+    const currentPrimary = primaryAxis === "vertical" ? trackedTouch.clientY : trackedTouch.clientX;
+    const delta = currentPrimary - state.lastPrimary;
+    state.lastPrimary = currentPrimary;
+    if (Math.abs(delta) < 0.2) return;
+    applyCarouselDelta(
+      categoryId,
+      count,
+      -delta * activeTemplateCapabilities.carousel.touchDeltaScale
+    );
   };
 
   const handleCarouselTouchEnd = (categoryId: string, event: TouchEvent) => {
-    if (isJukeboxTemplate) {
-      const state = jukeboxTouchState[categoryId];
-      if (!state) return;
-      const ended = Array.from(event.changedTouches).some(
-        (touch) => touch.identifier === state.touchId
-      );
-      if (!ended) return;
-      jukeboxTouchState = { ...jukeboxTouchState, [categoryId]: null };
-      return;
-    }
-    const state = focusRowTouchState[categoryId];
+    const state = carouselTouchState[categoryId];
     if (!state) return;
     const ended = Array.from(event.changedTouches).some(
       (touch) => touch.identifier === state.touchId
     );
     if (!ended) return;
-    focusRowTouchState = { ...focusRowTouchState, [categoryId]: null };
+    carouselTouchState = { ...carouselTouchState, [categoryId]: null };
   };
 
   const openDish = (categoryId: string, itemId: string) => {
@@ -6379,9 +5513,8 @@ Windows:
 
   const formatPrice = (amount: number) => {
     const currency = activeProject?.meta.currency ?? "USD";
-    const symbol = currencyOptions.find((option) => option.code === currency)?.symbol ?? currency;
     const position = activeProject?.meta.currencyPosition ?? "left";
-    return position === "left" ? `${symbol}${amount}` : `${amount}${symbol}`;
+    return formatMenuPrice(amount, currency, position);
   };
 
   const handleLocalizedInput = (
@@ -6459,62 +5592,14 @@ Windows:
     on:change={handleProjectFile}
   />
   {#if showLanding}
-    <section class="landing-screen">
-      <div class="landing-lang">
-        <div class="lang-toggle" aria-label={t("toggleLang")}>
-          <button
-            class="lang-btn {uiLang === 'es' ? 'active' : ''}"
-            type="button"
-            on:click={() => (uiLang = 'es')}
-          >
-            ES
-          </button>
-          <button
-            class="lang-btn {uiLang === 'en' ? 'active' : ''}"
-            type="button"
-            on:click={() => (uiLang = 'en')}
-          >
-            EN
-          </button>
-        </div>
-      </div>
-      <header class="landing-header">
-        <h1>{t("landingTitle")}</h1>
-        <p>{t("landingBy")}</p>
-      </header>
-      <div class="landing-actions">
-        <button type="button" class="landing-action" on:click={startCreateProject}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-          </span>
-          <span>{t("landingCreate")}</span>
-        </button>
-        <button type="button" class="landing-action" on:click={startOpenProject}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
-              <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
-            </svg>
-          </span>
-          <span>{t("landingOpen")}</span>
-        </button>
-        <button type="button" class="landing-action" on:click={startWizard}>
-          <span class="landing-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 20l10-10"></path>
-              <path d="M14 10l6-6"></path>
-              <path d="M18 4l2 2"></path>
-              <path d="M6 14l4 4"></path>
-              <path d="M16 6l2 2"></path>
-            </svg>
-          </span>
-          <span>{t("landingWizard")}</span>
-        </button>
-      </div>
-    </section>
+    <LandingView
+      {uiLang}
+      {t}
+      on:switchLang={(event) => (uiLang = event.detail)}
+      on:createProject={startCreateProject}
+      on:openProject={startOpenProject}
+      on:startWizard={startWizard}
+    />
   {:else if loadError}
     <div class="rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-sm text-red-100">
       {loadError}
@@ -6540,115 +5625,17 @@ Windows:
         <div class="editor-backdrop" on:click={toggleEditor}></div>
       {/if}
 
-      <aside class="editor-panel {editorVisible ? 'open' : ''} {editorLocked ? 'locked' : ''}">
-        <div class="editor-panel__header">
-          <div>
-            <p class="editor-eyebrow">{t("studioTitle")}</p>
-            <p class="mt-1 text-xs text-slate-400">{t("studioSubtitle")}</p>
-          </div>
-          <div class="editor-actions">
-            <button
-              class="icon-btn"
-              type="button"
-              aria-label={t("toggleView")}
-              title={t("toggleView")}
-              on:click={togglePreviewMode}
-            >
-              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="2.5" y="4.5" width="13" height="9" rx="1.5"></rect>
-                <rect x="18" y="6" width="3.5" height="10" rx="1"></rect>
-                <path d="M6 18h6"></path>
-              </svg>
-            </button>
-            <div class="lang-toggle" aria-label={t("toggleLang")}>
-              <button
-                class="lang-btn {uiLang === 'es' ? 'active' : ''}"
-                type="button"
-                on:click={() => (uiLang = 'es')}
-              >
-                ES
-              </button>
-              <button
-                class="lang-btn {uiLang === 'en' ? 'active' : ''}"
-                type="button"
-                on:click={() => (uiLang = 'en')}
-              >
-                EN
-              </button>
-            </div>
-            {#if !editorLocked}
-              <button
-                class="editor-close"
-                type="button"
-                aria-label={t("closeEditor")}
-                on:click={toggleEditor}
-              >
-                ✕
-              </button>
-            {/if}
-          </div>
-        </div>
-
-        <div class="editor-tabs">
-          <button
-            class="editor-tab {editorTab === 'info' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('info')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
-                <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
-              </svg>
-            </span>
-            <span>{t("tabProject")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'assets' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('assets')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 6h16v12H4z"></path>
-                <path d="M8 10h8"></path>
-                <path d="M8 14h6"></path>
-              </svg>
-            </span>
-            <span>{t("tabAssets")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'edit' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('edit')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 20h6"></path>
-                <path d="M14 4l6 6"></path>
-                <path d="M5 19l4-1 9-9-3-3-9 9z"></path>
-              </svg>
-            </span>
-            <span>{t("tabEdit")}</span>
-          </button>
-          <button
-            class="editor-tab {editorTab === 'wizard' ? 'active' : ''}"
-            type="button"
-            on:click={() => setEditorTab('wizard')}
-          >
-            <span class="editor-tab__icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 20l10-10"></path>
-                <path d="M14 10l6-6"></path>
-                <path d="M18 4l2 2"></path>
-                <path d="M6 14l4 4"></path>
-              </svg>
-            </span>
-            <span>{t("tabWizard")}</span>
-          </button>
-        </div>
-
-        <div class="editor-content">
+      <EditorShell
+        {t}
+        {editorVisible}
+        {editorLocked}
+        {uiLang}
+        {editorTab}
+        setUiLang={(lang) => (uiLang = lang)}
+        {setEditorTab}
+        {togglePreviewMode}
+        {toggleEditor}
+      >
           {#if editorTab === "info"}
             <div class="editor-toolbar">
               <button
@@ -6823,907 +5810,136 @@ Windows:
               </div>
             {/if}
           {:else if editorTab === "assets"}
-            <section class="asset-manager">
-              <div class="asset-manager__header">
-                <div>
-                  <p>{t("rootTitle")}</p>
-                  <span>{rootLabel}</span>
-                </div>
-                <div class="asset-actions">
-                  <button type="button" on:click={createFolder} disabled={assetProjectReadOnly}>
-                    {t("newFolder")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={assetProjectReadOnly}
-                    on:click={() => assetUploadInput?.click()}
-                  >
-                    {t("uploadAssets")}
-                  </button>
-                  <input
-                    class="sr-only"
-                    type="file"
-                    multiple
-                    disabled={assetProjectReadOnly}
-                    bind:this={assetUploadInput}
-                    on:change={handleAssetUpload}
-                  />
-                </div>
-              </div>
-              <div class="asset-drop">
-                <label class="editor-field">
-                  <span>{t("uploadTo")}</span>
-                  <select bind:value={uploadTargetPath} class="editor-select" disabled={assetProjectReadOnly}>
-                    {#each uploadFolderOptions as folder}
-                      <option value={folder.value}>{folder.label}</option>
-                    {/each}
-                  </select>
-                </label>
-                {#if needsAssets}
-                  <p class="text-xs text-amber-200">{t("assetsRequired")}</p>
-                {/if}
-                <p>{t("uploadHint")}</p>
-                <div
-                  class={`asset-drop__zone ${assetProjectReadOnly ? "disabled" : ""}`}
-                  on:dragover={handleAssetDragOver}
-                  on:drop={handleAssetDrop}
-                >
-                  {t("dragDrop")}
-                </div>
-              </div>
-              {#if assetProjectReadOnly}
-                <p class="text-xs text-amber-200">{t("assetsReadOnly")}</p>
-              {/if}
-              {#if fsError}
-                <p class="text-xs text-red-300">{fsError}</p>
-              {/if}
-              <div class="asset-bulk">
-                <button type="button" on:click={selectAllAssets} disabled={assetProjectReadOnly}>
-                  {t("selectAll")}
-                </button>
-                <button type="button" on:click={clearAssetSelection}>{t("clear")}</button>
-                <button type="button" on:click={bulkMove} disabled={assetProjectReadOnly}>
-                  {t("move")}
-                </button>
-                <button type="button" on:click={bulkDelete} disabled={assetProjectReadOnly}>
-                  {t("delete")}
-                </button>
-              </div>
-              <div class="asset-list">
-                {#if assetMode === "none"}
-                  <p class="text-xs text-slate-400">{t("pickRootHint")}</p>
-                {:else if fsEntries.length === 0}
-                  <p class="text-xs text-slate-400">{t("rootEmpty")}</p>
-                {:else}
-                  {#each treeRows as row}
-                    <div class="asset-item">
-                      <label class="asset-check">
-                        <input
-                          type="checkbox"
-                          disabled={assetProjectReadOnly}
-                          checked={selectedAssetIds.includes(row.entry.id)}
-                          on:change={() => toggleAssetSelection(row.entry.id)}
-                        />
-                      </label>
-                      <div>
-                        <div
-                          class="asset-name"
-                          style={`padding-left:${row.depth * 16}px`}
-                        >
-                          {#if row.entry.kind === "directory" && row.hasChildren}
-                            <button
-                              class="asset-toggle"
-                              type="button"
-                              on:click={() => toggleExpandPath(row.entry.path)}
-                            >
-                              {row.expanded ? "▾" : "▸"}
-                            </button>
-                          {:else}
-                            <span class="asset-toggle placeholder"></span>
-                          {/if}
-                          <span class="asset-icon">
-                            {row.entry.kind === "directory" ? "📁" : "📄"}
-                          </span>
-                          <span>{row.entry.name}</span>
-                        </div>
-                        <p class="asset-meta">{row.entry.path}</p>
-                      </div>
-                      <div class="asset-actions">
-                        <button
-                          type="button"
-                          class="asset-icon-btn"
-                          title={t("rename")}
-                          aria-label={t("rename")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => renameEntry(row.entry)}
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          class="asset-icon-btn"
-                          title={t("move")}
-                          aria-label={t("move")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => moveEntry(row.entry)}
-                        >
-                          ⇄
-                        </button>
-                        <button
-                          type="button"
-                          class="asset-icon-btn danger"
-                          title={t("delete")}
-                          aria-label={t("delete")}
-                          disabled={assetProjectReadOnly}
-                          on:click={() => deleteEntry(row.entry)}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
-            </section>
+            <AssetsManager
+              {t}
+              {rootLabel}
+              {assetProjectReadOnly}
+              bind:assetUploadInput
+              bind:uploadTargetPath
+              {uploadFolderOptions}
+              {needsAssets}
+              {fsError}
+              {assetMode}
+              {fsEntries}
+              {treeRows}
+              {selectedAssetIds}
+              {createFolder}
+              {handleAssetUpload}
+              {handleAssetDragOver}
+              {handleAssetDrop}
+              {selectAllAssets}
+              {clearAssetSelection}
+              {bulkMove}
+              {bulkDelete}
+              {toggleAssetSelection}
+              {toggleExpandPath}
+              {renameEntry}
+              {moveEntry}
+              {deleteEntry}
+            />
           {:else if editorTab === "edit"}
-            {#if deviceMode === "mobile" && previewMode === "full"}
-              <p class="mt-2 text-xs text-amber-200">
-                {t("tipRotate")}
-              </p>
-            {/if}
-
-            {#if draft}
-              <div class="edit-shell">
-                <div class="edit-subtabs">
-                  <button
-                    class="edit-subtab {editPanel === 'identity' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'identity')}
-                  >
-                    {t("editIdentity")}
-                  </button>
-                  <button
-                    class="edit-subtab {editPanel === 'section' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'section')}
-                  >
-                    {t("editSections")}
-                  </button>
-                  <button
-                    class="edit-subtab {editPanel === 'dish' ? 'active' : ''}"
-                    type="button"
-                    on:click={() => (editPanel = 'dish')}
-                  >
-                    {t("editDishes")}
-                  </button>
-                  <button
-                    class="edit-lang-chip"
-                    type="button"
-                    aria-label={t("editLang")}
-                    title={t("editLang")}
-                    on:click={cycleEditLang}
-                  >
-                    <span aria-hidden="true">🌐</span>
-                    <span>{editLang.toUpperCase()}</span>
-                  </button>
-                </div>
-                <p class="edit-hierarchy">{t("editHierarchyHint")}</p>
-
-                {#if editPanel === "identity"}
-                  <div class="edit-block">
-                    <p class="edit-block__title">{t("restaurantName")}</p>
-                    <label class="editor-field">
-                      <span>{editLang.toUpperCase()}</span>
-                      <input
-                        type="text"
-                        class="editor-input"
-                        value={draft.meta.restaurantName?.[editLang] ?? ""}
-                        on:input={(event) => {
-                          const name = ensureRestaurantName();
-                          if (!name) return;
-                          handleLocalizedInput(name, editLang, event);
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div class="edit-block">
-                    <p class="edit-block__title">{t("menuTitle")}</p>
-                    <label class="editor-field">
-                      <span>{editLang.toUpperCase()}</span>
-                      <input
-                        type="text"
-                        class="editor-input"
-                        value={draft.meta.title?.[editLang] ?? ""}
-                        on:input={(event) => {
-                          const title = ensureMetaTitle();
-                          if (!title) return;
-                          handleLocalizedInput(title, editLang, event);
-                        }}
-                      />
-                    </label>
-                  </div>
-                {:else}
-                  <div class="edit-row">
-                    <label class="editor-field">
-                      <span>{t("section")}</span>
-                      <select bind:value={selectedCategoryId} class="editor-select">
-                        {#each draft.categories as category}
-                          <option value={category.id}>
-                            {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale)}
-                          </option>
-                        {/each}
-                      </select>
-                    </label>
-                    <div class="edit-actions">
-                      <button
-                        class="editor-outline"
-                        type="button"
-                        aria-label={t("addSection")}
-                        title={t("addSection")}
-                        on:click={addSection}
-                      >
-                        <span class="btn-icon">＋</span>
-                      </button>
-                      <button class="editor-outline danger" type="button" on:click={deleteSection}>
-                        {t("deleteSection")}
-                      </button>
-                    </div>
-                  </div>
-
-                  {#if editPanel === "section" && selectedCategory}
-                    <p class="edit-hint">{t("sectionHint")}</p>
-                    <div class="edit-block">
-                      <p class="edit-block__title">{t("sectionName")}</p>
-                      <label class="editor-field">
-                        <span>{editLang.toUpperCase()}</span>
-                        <input
-                          type="text"
-                          class="editor-input"
-                          value={selectedCategory.name?.[editLang] ?? ""}
-                          on:input={(event) =>
-                            handleLocalizedInput(selectedCategory.name, editLang, event)}
-                        />
-                      </label>
-                    </div>
-                  {/if}
-
-                  {#if editPanel === "dish" && selectedCategory}
-                    <p class="edit-hint">{t("dishHint")}</p>
-                    <div class="edit-row">
-                      <label class="editor-field">
-                        <span>{t("dish")}</span>
-                        <select bind:value={selectedItemId} class="editor-select">
-                          {#each selectedCategory.items as item}
-                            <option value={item.id}>
-                              {getLocalizedValue(item.name, editLang, draft.meta.defaultLocale)}
-                            </option>
-                          {/each}
-                        </select>
-                      </label>
-                      <div class="edit-actions">
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("prevDish")}
-                          title={t("prevDish")}
-                          on:click={goPrevDish}
-                        >
-                          <span class="btn-icon">◀</span>
-                        </button>
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("nextDish")}
-                          title={t("nextDish")}
-                          on:click={goNextDish}
-                        >
-                          <span class="btn-icon">▶</span>
-                        </button>
-                        <button
-                          class="editor-outline"
-                          type="button"
-                          aria-label={t("addDish")}
-                          title={t("addDish")}
-                          on:click={addDish}
-                        >
-                          <span class="btn-icon">＋</span>
-                        </button>
-                        <button class="editor-outline danger" type="button" on:click={deleteDish}>
-                          {t("delete")}
-                        </button>
-                      </div>
-                    </div>
-
-                    {#if selectedItem}
-                      <div class="edit-block">
-                        <p class="edit-block__title">{t("dishData")}</p>
-                        <div class="edit-item">
-                          <div class="edit-item__media-row">
-                            <div class="edit-item__media">
-                              <img
-                                src={selectedItem.media.hero360 ?? ""}
-                                alt={textOf(selectedItem.name)}
-                              />
-                            </div>
-                            <label class="editor-field edit-item__source">
-                              <span>{t("asset360")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={selectedItem.media.hero360}
-                                list="asset-files"
-                              />
-                            </label>
-                          </div>
-                          <div class="edit-item__content">
-                            <label class="editor-field">
-                              <span>{t("name")} ({editLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={selectedItem.name?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLocalizedInput(selectedItem.name, editLang, event)}
-                              />
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("description")} ({editLang.toUpperCase()})</span>
-                              <textarea
-                                class="editor-input"
-                                rows="2"
-                                value={selectedItem.description?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleDescriptionInput(selectedItem, editLang, event)}
-                              ></textarea>
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("longDescription")} ({editLang.toUpperCase()})</span>
-                              <textarea
-                                class="editor-input"
-                                rows="3"
-                                value={selectedItem.longDescription?.[editLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLongDescriptionInput(selectedItem, editLang, event)}
-                              ></textarea>
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("price")}</span>
-                              <input
-                                type="number"
-                                class="editor-input"
-                                bind:value={selectedItem.price.amount}
-                              />
-                            </label>
-                            <div class="editor-field">
-                              <span>{t("commonAllergens")}</span>
-                              <div class="allergen-checklist">
-                                {#each commonAllergenCatalog as allergen}
-                                  <label class="allergen-option">
-                                    <input
-                                      type="checkbox"
-                                      checked={isCommonAllergenChecked(selectedItem, allergen.id)}
-                                      on:change={(event) =>
-                                        handleCommonAllergenToggle(selectedItem, allergen.id, event)}
-                                    />
-                                    <span>{getCommonAllergenLabel(allergen, editLang)}</span>
-                                  </label>
-                                {/each}
-                              </div>
-                            </div>
-                            <label class="editor-field">
-                              <span>{t("customAllergens")} ({editLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={getCustomAllergensInput(selectedItem, editLang)}
-                                on:input={(event) =>
-                                  handleCustomAllergensInput(selectedItem, editLang, event)}
-                              />
-                              <small class="editor-hint">{t("customAllergensHint")}</small>
-                            </label>
-                            <label class="editor-field editor-inline">
-                              <span>{t("veganLabel")}</span>
-                              <input
-                                type="checkbox"
-                                checked={selectedItem.vegan ?? false}
-                                on:change={(event) => handleVeganToggle(selectedItem, event)}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-                    {/if}
-                  {/if}
-                {/if}
-              </div>
-            {/if}
+            <EditPanel
+              {t}
+              {draft}
+              {deviceMode}
+              {previewMode}
+              bind:editPanel
+              {editLang}
+              bind:selectedCategoryId
+              bind:selectedItemId
+              {selectedCategory}
+              {selectedItem}
+              {commonAllergenCatalog}
+              {cycleEditLang}
+              {ensureRestaurantName}
+              {ensureMetaTitle}
+              {handleLocalizedInput}
+              {getLocalizedValue}
+              {addSection}
+              {deleteSection}
+              {goPrevDish}
+              {goNextDish}
+              {addDish}
+              {deleteDish}
+              {textOf}
+              {handleDescriptionInput}
+              {handleLongDescriptionInput}
+              {isCommonAllergenChecked}
+              {handleCommonAllergenToggle}
+              {getCommonAllergenLabel}
+              {getCustomAllergensInput}
+              {handleCustomAllergensInput}
+              {handleVeganToggle}
+            />
           {:else}
-            <section class="wizard">
-              <div class="wizard-header">
-                <p class="text-[0.6rem] uppercase tracking-[0.35em] text-slate-300">
-                  {t("tabWizard")}
-                </p>
-                <span class="text-xs text-slate-400">
-                  {t("step")} {wizardStep + 1} / {wizardSteps.length}
-                </span>
-              </div>
-              <div class="wizard-progress">
-                <span>{t("wizardProgress")} {Math.round(wizardProgress * 100)}%</span>
-                <div class="wizard-progress__bar">
-                  <span style={`width:${wizardProgress * 100}%`}></span>
-                </div>
-              </div>
-              <div class="wizard-steps">
-                {#each wizardSteps as step, index}
-                  <button
-                    class="wizard-step {index === wizardStep ? 'active' : ''} {isWizardStepValid(index) ? 'done' : ''}"
-                    type="button"
-                    on:click={() => goToStep(index)}
-                  >
-                    <span>{step}</span>
-                    <span class="wizard-step__status">
-                      {isWizardStepValid(index) ? "●" : "○"}
-                    </span>
-                  </button>
-                {/each}
-              </div>
-              <div class="wizard-body">
-                {#if wizardStep === 0}
-                  <p class="text-sm text-slate-200">{t("wizardPick")}</p>
-                  <div class="wizard-card-grid">
-                    {#each templateOptions as template}
-                      <button
-                        class="wizard-card {draft?.meta.template === template.id ? 'active' : ''}"
-                        type="button"
-                        on:click={() => applyTemplate(template.id, { source: "wizard" })}
-                      >
-                        <p class="wizard-card__title">
-                          {template.label[uiLang] ?? template.label.es ?? template.id}
-                        </p>
-                        <p class="wizard-card__meta">
-                          {(template.categories[uiLang] ?? template.categories.es ?? []).join(" • ")}
-                        </p>
-                      </button>
-                    {/each}
-                  </div>
-                  <p class="text-xs text-slate-400">
-                    {t("wizardTip")}
-                  </p>
-                  {#if wizardDemoPreview}
-                    <p class="text-xs text-amber-200">{t("wizardDemoPreviewHint")}</p>
-                  {/if}
-                {:else if wizardStep === 1}
-                  <p class="text-sm text-slate-200">{t("wizardIdentity")}</p>
-                  {#if wizardNeedsRootBackground}
-                    <p class="wizard-warning">{t("wizardRequireRootBackground")}</p>
-                  {:else if !wizardStatus.identity}
-                    <p class="wizard-warning">{t("wizardMissingBackground")}</p>
-                  {/if}
-                  {#if assetOptions.length === 0}
-                    <p class="text-xs text-slate-400">{t("wizardAssetsHint")}</p>
-                  {/if}
-                  <div class="wizard-block">
-                    <button class="editor-outline" type="button" on:click={addBackground}>
-                      {t("wizardAddBg")}
-                    </button>
-                    {#if draft}
-                      <div class="wizard-list">
-                        {#each draft.backgrounds as bg}
-                          <div class="wizard-item">
-                            <label class="editor-field">
-                              <span>{t("wizardLabel")}</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                bind:value={bg.label}
-                              />
-                            </label>
-                            <label class="editor-field">
-                              <span>{t("wizardSrc")}</span>
-                              {#if assetOptions.length}
-                                <select bind:value={bg.src} class="editor-select">
-                                  <option value=""></option>
-                                  {#each assetOptions as path}
-                                    <option value={path}>{path}</option>
-                                  {/each}
-                                </select>
-                              {:else}
-                                <input
-                                  type="text"
-                                  class="editor-input"
-                                  bind:value={bg.src}
-                                  list="asset-files"
-                                />
-                              {/if}
-                            </label>
-                            <button
-                              class="editor-outline danger"
-                              type="button"
-                              on:click={() => removeBackground(bg.id)}
-                            >
-                              {t("delete")}
-                            </button>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {:else if wizardStep === 2}
-                  <p class="text-sm text-slate-200">{t("wizardCategories")}</p>
-                  {#if !wizardStatus.categories}
-                    <p class="wizard-warning">{t("wizardMissingCategories")}</p>
-                  {/if}
-                  {#if draft}
-                    <div class="wizard-block">
-                      <label class="editor-field">
-                        <span>{t("wizardLanguage")}</span>
-                        <select bind:value={wizardLang} class="editor-select">
-                          {#each draft.meta.locales as lang}
-                            <option value={lang}>{lang.toUpperCase()}</option>
-                          {/each}
-                        </select>
-                      </label>
-                      <button class="editor-outline" type="button" on:click={addWizardCategory}>
-                        {t("wizardAddCategory")}
-                      </button>
-                      <div class="wizard-list">
-                        {#each draft.categories as category}
-                          <div class="wizard-item">
-                            <label class="editor-field">
-                              <span>{t("name")} ({wizardLang.toUpperCase()})</span>
-                              <input
-                                type="text"
-                                class="editor-input"
-                                value={category.name?.[wizardLang] ?? ""}
-                                on:input={(event) =>
-                                  handleLocalizedInput(category.name, wizardLang, event)}
-                              />
-                            </label>
-                            <button
-                              class="editor-outline danger"
-                              type="button"
-                              on:click={() => removeWizardCategory(category.id)}
-                            >
-                              {t("delete")}
-                            </button>
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  {/if}
-                {:else if wizardStep === 3}
-                  <p class="text-sm text-slate-200">{t("wizardDishes")}</p>
-                  {#if !wizardStatus.dishes}
-                    <p class="wizard-warning">{t("wizardMissingDishes")}</p>
-                  {/if}
-                  {#if draft}
-                    <div class="wizard-block">
-                      <label class="editor-field">
-                        <span>{t("wizardLanguage")}</span>
-                        <select bind:value={wizardLang} class="editor-select">
-                          {#each draft.meta.locales as lang}
-                            <option value={lang}>{lang.toUpperCase()}</option>
-                          {/each}
-                        </select>
-                      </label>
-                      <label class="editor-field">
-                        <span>{t("wizardCategory")}</span>
-                        <select bind:value={wizardCategoryId} class="editor-select">
-                          {#each draft.categories as category}
-                            <option value={category.id}>
-                              {getLocalizedValue(category.name, wizardLang, draft.meta.defaultLocale)}
-                            </option>
-                          {/each}
-                        </select>
-                      </label>
-                      <div class="edit-actions">
-                        <button class="editor-outline" type="button" on:click={addWizardDish}>
-                          {t("wizardAddDish")}
-                        </button>
-                        <button class="editor-outline danger" type="button" on:click={removeWizardDish}>
-                          {t("delete")}
-                        </button>
-                      </div>
-                      {#if wizardCategory}
-                        <label class="editor-field">
-                          <span>{t("dish")}</span>
-                          <select bind:value={wizardItemId} class="editor-select">
-                            {#each wizardCategory.items as item}
-                              <option value={item.id}>
-                                {getLocalizedValue(item.name, wizardLang, draft.meta.defaultLocale)}
-                              </option>
-                            {/each}
-                          </select>
-                        </label>
-                      {/if}
-                      {#if wizardItem}
-                        <label class="editor-field">
-                          <span>{t("name")} ({wizardLang.toUpperCase()})</span>
-                          <input
-                            type="text"
-                            class="editor-input"
-                            value={wizardItem.name?.[wizardLang] ?? ""}
-                            on:input={(event) =>
-                              handleLocalizedInput(wizardItem.name, wizardLang, event)}
-                          />
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("description")} ({wizardLang.toUpperCase()})</span>
-                          <textarea
-                            class="editor-input"
-                            rows="2"
-                            value={wizardItem.description?.[wizardLang] ?? ""}
-                            on:input={(event) => handleDescriptionInput(wizardItem, wizardLang, event)}
-                          ></textarea>
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("price")}</span>
-                          <input
-                            type="number"
-                            class="editor-input"
-                            bind:value={wizardItem.price.amount}
-                          />
-                        </label>
-                        <label class="editor-field">
-                          <span>{t("asset360")}</span>
-                          <input
-                            type="text"
-                            class="editor-input"
-                            bind:value={wizardItem.media.hero360}
-                            list="asset-files"
-                          />
-                        </label>
-                      {/if}
-                    </div>
-                  {/if}
-                {:else}
-                  <p class="text-sm text-slate-200">{t("wizardPreview")}</p>
-                  <p class="text-xs text-slate-400">
-                    {t("wizardExportNote")}
-                  </p>
-                {/if}
-              </div>
-              <div class="wizard-nav">
-                <button
-                  class="editor-outline"
-                  type="button"
-                  on:click={goPrevStep}
-                  disabled={wizardStep === 0}
-                >
-                  {t("wizardBack")}
-                </button>
-                {#if wizardStep < wizardSteps.length - 1}
-                  <button
-                    class="editor-cta"
-                    type="button"
-                    on:click={goNextStep}
-                    disabled={!isWizardStepValid(wizardStep)}
-                  >
-                    {t("wizardNext")}
-                  </button>
-                {:else}
-                  <button
-                    class="editor-cta"
-                    type="button"
-                    on:click={exportStaticSite}
-                    disabled={!wizardStatus.preview}
-                  >
-                    {t("export")}
-                  </button>
-                {/if}
-              </div>
-            </section>
+            <WizardPanel
+              {t}
+              {draft}
+              {uiLang}
+              {templateOptions}
+              {wizardStep}
+              {wizardSteps}
+              {wizardProgress}
+              {wizardStatus}
+              bind:wizardLang
+              bind:wizardCategoryId
+              bind:wizardItemId
+              {wizardCategory}
+              {wizardItem}
+              {wizardDemoPreview}
+              {wizardNeedsRootBackground}
+              {assetOptions}
+              {isWizardStepValid}
+              {goToStep}
+              {applyTemplate}
+              {addBackground}
+              {removeBackground}
+              {addWizardCategory}
+              {removeWizardCategory}
+              {addWizardDish}
+              {removeWizardDish}
+              {handleLocalizedInput}
+              {handleDescriptionInput}
+              {getLocalizedValue}
+              {goPrevStep}
+              {goNextStep}
+              {exportStaticSite}
+            />
           {/if}
-        </div>
-      </aside>
+      </EditorShell>
 
-      <section class="preview-panel {layoutMode}">
-        <section class="preview-shell {effectivePreview}">
-        <section
-          class={`menu-preview template-${activeProject.meta.template || "focus-rows"} ${
-            previewStartupLoading ? "is-loading" : ""
-          }`}
-          style={`--menu-font:${previewFontStack};`}
-        >
-            <div class={`menu-startup-loader ${previewStartupLoading ? "active" : ""}`}>
-              <div class="menu-startup-loader__card">
-                <p class="menu-startup-loader__label">{getLoadingLabel(locale)}</p>
-                <div class="menu-startup-loader__track">
-                  <span
-                    class="menu-startup-loader__fill"
-                    style={`width:${previewStartupProgress}%`}
-                  ></span>
-                </div>
-                <p class="menu-startup-loader__value">{previewStartupProgress}%</p>
-              </div>
-            </div>
-            {#if previewBackgrounds.length}
-              {#each previewBackgrounds as background, index (`${background.id}-${index}`)}
-                <div
-                  class={`menu-background ${index === activeBackgroundIndex ? "active" : ""}`}
-                  style={`background-image: url('${background.src}');`}
-                ></div>
-              {/each}
-            {/if}
-            <div class="menu-overlay"></div>
-
-            {#if isBlankMenu}
-              <div class="menu-blank">
-                <p>{t("blankMenu")}</p>
-              </div>
-            {:else}
-              <header class="menu-topbar">
-                <div class="menu-title-block">
-                  {#if textOf(activeProject.meta.restaurantName)}
-                    <p class="menu-eyebrow">{textOf(activeProject.meta.restaurantName)}</p>
-                  {/if}
-                  <h1 class="menu-title">
-                    {textOf(activeProject.meta.title, t("menuTitleFallback"))}
-                  </h1>
-                </div>
-                <div class="menu-lang">
-                  <select bind:value={locale} class="menu-select">
-                    {#each activeProject.meta.locales as lang}
-                      <option value={lang}>{lang.toUpperCase()}</option>
-                    {/each}
-                  </select>
-                </div>
-              </header>
-
-              {#if !isJukeboxTemplate}
-                <div class="focus-rows-hint" aria-hidden="true">
-                  <span class="focus-rows-hint__label">
-                    {getFocusRowsScrollHint(locale)}
-                  </span>
-                </div>
-              {/if}
-
-              {#if isJukeboxTemplate && activeProject.categories.length > 1}
-                <div class="section-nav">
-                  <button
-                    class="section-nav__btn prev"
-                    type="button"
-                    aria-label={t("prevDish")}
-                    on:click={() => shiftSection(-1)}
-                  >
-                    <span aria-hidden="true">‹</span>
-                  </button>
-                  <span class="section-nav__label">{getJukeboxScrollHint(locale)}</span>
-                  <button
-                    class="section-nav__btn next"
-                    type="button"
-                    aria-label={t("nextDish")}
-                    on:click={() => shiftSection(1)}
-                  >
-                    <span aria-hidden="true">›</span>
-                  </button>
-                </div>
-              {/if}
-
-              <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
-                {#each activeProject.categories as category}
-                  {@const renderItems = isJukeboxTemplate
-                    ? getJukeboxRenderItems(category.items)
-                    : getFocusRowRenderItems(category.items)}
-                  {@const activeIndex = carouselActive[category.id] ?? 0}
-                  {@const hideThreshold = Math.max(1.6, category.items.length / 2 - 0.25)}
-                  <section class="menu-section">
-                    <div class="menu-section__head">
-                      <p class="menu-section__title">{textOf(category.name)}</p>
-                      <span class="menu-section__count">{category.items.length} items</span>
-                    </div>
-                    {#if deviceMode === "desktop" && category.items.length > 1 && !isJukeboxTemplate}
-                      <div class="carousel-nav">
-                        <button
-                          class="carousel-nav__btn prev"
-                          type="button"
-                          aria-label={t("prevDish")}
-                          on:click={() => shiftCarousel(category.id, -1)}
-                        >
-                          <span aria-hidden="true">‹</span>
-                        </button>
-                        <button
-                          class="carousel-nav__btn next"
-                          type="button"
-                          aria-label={t("nextDish")}
-                          on:click={() => shiftCarousel(category.id, 1)}
-                        >
-                          <span aria-hidden="true">›</span>
-                        </button>
-                      </div>
-                    {/if}
-                    <div
-                      class="menu-carousel {category.items.length <= 1 ? 'single' : ''}"
-                      on:wheel={(event) => handleCarouselWheel(category.id, event)}
-                      on:touchstart={(event) => handleCarouselTouchStart(category.id, event)}
-                      on:touchmove|nonpassive={(event) =>
-                        handleCarouselTouchMove(category.id, event)}
-                      on:touchend={(event) => handleCarouselTouchEnd(category.id, event)}
-                      on:touchcancel={(event) => handleCarouselTouchEnd(category.id, event)}
-                      data-category-id={category.id}
-                    >
-                      {#each renderItems as entry (entry.key)}
-                        {@const distance = Math.abs(
-                          getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
-                        )}
-                        {@const stateClass = isJukeboxTemplate
-                          ? distance >= hideThreshold
-                            ? "is-hidden"
-                            : distance < 0.5
-                              ? "active"
-                              : distance < 1.25
-                                ? "near"
-                                : "far"
-                          : distance >= hideThreshold
-                            ? "is-hidden"
-                            : distance < 0.5
-                              ? "active"
-                              : distance < 1.5
-                                ? "near"
-                                : "far"}
-                        <button
-                          class={`carousel-card ${stateClass}`}
-                          type="button"
-                          style={
-                            isJukeboxTemplate
-                              ? getJukeboxCardStyle(
-                                  activeIndex,
-                                  entry.sourceIndex,
-                                  category.items.length
-                                )
-                              : getFocusRowCardStyle(
-                                  activeIndex,
-                                  entry.sourceIndex,
-                                  category.items.length
-                                )
-                          }
-                          on:click={() => openDish(category.id, entry.item.id)}
-                        >
-                          <div class="carousel-media">
-                            <img
-                              src={getCarouselImageSource(entry.item)}
-                              srcset={buildResponsiveSrcSetFromMedia(entry.item)}
-                              sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
-                              alt={textOf(entry.item.name)}
-                              draggable="false"
-                              on:contextmenu|preventDefault
-                              on:dragstart|preventDefault
-                              loading="lazy"
-                              decoding="async"
-                              fetchpriority="low"
-                            />
-                          </div>
-                          <div class="carousel-text">
-                            <div class="carousel-row">
-                              <p class="carousel-title">
-                                {textOf(entry.item.name)}
-                                {#if entry.item.vegan}
-                                  <span class="vegan-icon" title={getMenuTerm("vegan")}>🌿</span>
-                                {/if}
-                              </p>
-                              <span class="carousel-price">
-                                {formatPrice(entry.item.price.amount)}
-                              </span>
-                            </div>
-                            <p class="carousel-desc">{textOf(entry.item.description)}</p>
-                          </div>
-                        </button>
-                      {/each}
-                    </div>
-                  </section>
-                {/each}
-              </div>
-              <div class="menu-tap-hint" aria-hidden="true">
-                <span class="menu-tap-hint__dot"></span>
-                <span>{getDishTapHint(locale)}</span>
-              </div>
-              <p class="menu-asset-disclaimer" aria-hidden="true">
-                {getAssetOwnershipDisclaimer(locale)}
-              </p>
-            {/if}
-          </section>
-        </section>
-      </section>
+      <PreviewCanvas
+        {layoutMode}
+        {effectivePreview}
+        {activeProject}
+        bind:locale
+        {previewStartupLoading}
+        {previewStartupProgress}
+        {previewBackgrounds}
+        {activeBackgroundIndex}
+        {isBlankMenu}
+        {carouselActive}
+        {deviceMode}
+        {previewFontStack}
+        {t}
+        {textOf}
+        {getLoadingLabel}
+        {getTemplateScrollHint}
+        {getCarouselImageSource}
+        {buildResponsiveSrcSetFromMedia}
+        {getMenuTerm}
+        {formatPrice}
+        {getDishTapHint}
+        {getAssetOwnershipDisclaimer}
+        {shiftSection}
+        {handleMenuScroll}
+        {shiftCarousel}
+        {handleCarouselWheel}
+        {handleCarouselTouchStart}
+        {handleCarouselTouchMove}
+        {handleCarouselTouchEnd}
+        {openDish}
+      />
     </div>
   {/if}
 </main>
@@ -7732,58 +5948,23 @@ Windows:
   {@const dish = resolveActiveDish()}
   {#if dish}
     {@const interactiveAsset = getInteractiveDetailAsset(dish)}
-    <div class="dish-modal" on:click={closeDish}>
-      <div class="dish-modal__card" on:click|stopPropagation>
-        <div class="dish-modal__header">
-          <p class="dish-modal__title">{textOf(dish.name)}</p>
-          <button class="dish-modal__close" type="button" on:click={closeDish}>✕</button>
-        </div>
-        <div class="dish-modal__media" bind:this={modalMediaHost}>
-          {#if interactiveAsset && supportsInteractiveMedia()}
-            <p class="dish-modal__media-note">{getDetailRotateHint(locale)}</p>
-            <button
-              class={`dish-modal__media-toggle ${detailRotateDirection === -1 ? "is-reversed" : ""}`}
-              type="button"
-              title={getDetailRotateToggleHint(locale)}
-              aria-label={getDetailRotateToggleHint(locale)}
-              on:click|stopPropagation={toggleDetailRotateDirection}
-            >
-              <span aria-hidden="true">⇄</span>
-            </button>
-          {/if}
-          <img
-            bind:this={modalMediaImage}
-            src={getDetailImageSource(dish)}
-            srcset={buildResponsiveSrcSetFromMedia(dish)}
-            sizes="(max-width: 720px) 90vw, 440px"
-            alt={textOf(dish.name)}
-            draggable="false"
-            on:contextmenu|preventDefault
-            on:dragstart|preventDefault
-            decoding="async"
-          />
-        </div>
-        <div class="dish-modal__content">
-          <div class="dish-modal__text">
-            <p class="dish-modal__desc">{textOf(dish.description)}</p>
-            {#if textOf(dish.longDescription)}
-              <p class="dish-modal__long">{textOf(dish.longDescription)}</p>
-            {/if}
-            {#if dish.allergens?.length}
-              <p class="dish-modal__allergens">
-                {getMenuTerm("allergens")}: {getAllergenValues(dish).join(", ")}
-              </p>
-            {/if}
-            {#if dish.vegan}
-              <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
-            {/if}
-          </div>
-          <p class="dish-modal__price">
-            {formatPrice(dish.price.amount)}
-          </p>
-        </div>
-      </div>
-    </div>
+    <DishModal
+      {dish}
+      interactiveEnabled={Boolean(interactiveAsset && supportsInteractiveMedia())}
+      {detailRotateDirection}
+      detailRotateHint={getDetailRotateHint(locale)}
+      detailRotateToggleHint={getDetailRotateToggleHint(locale)}
+      bind:modalMediaHost
+      bind:modalMediaImage
+      {textOf}
+      {getDetailImageSource}
+      {buildResponsiveSrcSetFromMedia}
+      {getAllergenValues}
+      {getMenuTerm}
+      {formatPrice}
+      on:close={closeDish}
+      on:toggleRotate={toggleDetailRotateDirection}
+    />
   {/if}
 {/if}
 
