@@ -120,6 +120,72 @@ Containerization must not alter:
 3. Ensure template runtime avoids unnecessary reflows during carousel updates.
 4. Maintain startup loader semantics while reducing total blocking asset set.
 
+## Asset derivative pipeline (new requirement)
+
+## Product requirement
+- Process uploaded/imported media into fixed-size derivatives at asset import time.
+- Keep original files for source-of-truth editing and future regeneration.
+- Save project zips must include both originals and generated derivatives.
+- Exported site zips must include derivatives only (no originals).
+
+## Storage direction
+Project asset folder shape should evolve toward explicit originals vs generated derivatives:
+```text
+public/projects/<slug>/assets/
+  originals/
+    backgrounds/
+    dishes/
+  derived/
+    backgrounds/
+    dishes/
+```
+
+## Derivative profiles (initial)
+Use medium + large variants as the default profile.
+
+Background derivatives:
+- fixed viewport-oriented targets based on common screens:
+  - `bg-md`: `1280x720`
+  - `bg-lg`: `1920x1080`
+- fit mode: `cover` (fill viewport, preserve aspect ratio, center crop).
+
+Dish derivatives:
+- fixed square targets:
+  - `dish-md`: `512x512`
+  - `dish-lg`: `768x768`
+- fit mode: `contain` on transparent canvas (preserve full dish silhouette, no cropping).
+
+## Processing and compatibility notes
+- Preserve alpha channel for dish assets.
+- Treat animated inputs (gif/webp) as first-class: resizing must preserve animation, not first-frame fallback.
+- Generate derivatives with `ffmpeg` in the bridge/infrastructure pipeline to keep output deterministic across environments.
+- Prefer animated `webp` derivatives for speed/size; keep originals unchanged under `assets/originals/**`.
+- Optional compatibility mode can emit both `webp` + `gif` derivatives when a target environment needs gif fallback.
+- Representative `ffmpeg` filter strategy:
+  - Background (`cover`): `scale(...:force_original_aspect_ratio=increase)` + centered `crop`.
+  - Dish (`contain` + transparency): `scale(...:force_original_aspect_ratio=decrease)` + transparent `pad`.
+- Add derivative metadata fields for `format`, `width`, `height`, and `profileId`.
+- Ensure `ffmpeg` availability in local/container workflows (`Dockerfile.dev`, `Dockerfile.prod` or sidecar worker image).
+- Keep profile versioning (`profileId`) so future size changes can trigger safe regeneration.
+
+## Save/export behavior contract
+- Save project (`*.zip`):
+  - include `menu.json`,
+  - include `assets/originals/**`,
+  - include `assets/derived/**`,
+  - keep mapping metadata needed to regenerate or remap paths safely.
+- Export site (`*-export.zip`):
+  - include only `assets/derived/**` + runtime shell files,
+  - rewrite all runtime media references to derivative paths,
+  - fail export (or report explicit warning policy) when required derivative is missing.
+
+## Suggested implementation order
+1. Define derivative metadata in schema and normalization.
+2. Add import/upload processing service + job state tracking (`ffmpeg` adapter).
+3. Route preview/runtime source selection to derived paths only.
+4. Update save/export packaging rules.
+5. Add tests for animated-alpha assets and path rewriting parity.
+
 ## Test and validation strategy
 
 ## Gate 0 (baseline hardening, before deep refactor)
@@ -174,6 +240,9 @@ Exit criteria:
 Status:
 - In progress.
 
+Phase-0 extension for derivative requirement:
+- Include parity assertions that preview and exported site resolve the same derivative variant classes (`background md/lg`, `dish md/lg`) for identical viewport conditions.
+
 ## Phase 1: Refactor scaffolding + test stabilization
 - Introduce target folder structure (without behavior changes).
 - Fix runner boundaries and stale tests.
@@ -189,6 +258,7 @@ Status:
 ## Phase 2: Domain extraction (`core`)
 - Move `normalizeProject`, localization helpers, currency formatting, allergen helpers into pure modules.
 - Add unit tests for schema normalization and locale fallback rules.
+- Add derivative/original media metadata normalization and migration defaults.
 
 Exit criteria:
 - no UI regression,
@@ -201,6 +271,7 @@ Status:
 - Extract bridge client and filesystem operations into adapter interfaces.
 - Keep existing endpoint contract and path rules intact.
 - Add contract tests for slug/path normalization and move/rename safety.
+- Add asset-processing adapter contract for derivative generation at import/upload time.
 
 Exit criteria:
 - asset workflows parity in both modes,
@@ -213,6 +284,9 @@ Status:
 - Move zip read/write and static export assembly to `application/export` + `infrastructure/*`.
 - Extract export runtime builder from `App.svelte`.
 - Add golden tests for export zip structure and key file content checks.
+- Enforce save/export packaging split:
+  - save includes originals + derivatives,
+  - export includes derivatives only.
 
 Exit criteria:
 - exported zip file set unchanged (unless versioned),

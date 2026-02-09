@@ -21,6 +21,7 @@ Ensure the in-editor preview and exported static site behave the same for all hi
 | Modal lifecycle | Same open/close rules, overlay click behavior, and media setup/teardown behavior. | Modal parity e2e checks. |
 | Rotation behavior | Same rotation direction source and drag behavior in preview/export. | Interactive media parity e2e checks. |
 | Image source policy | Same source selection for carousel/detail and same responsive fallback order. | DOM assertions + network/request pattern checks. |
+| Derivative usage policy | Same derivative class resolution (`background md/lg`, `dish md/lg`) and same derived format preference (`webp` profile rules) for matching viewport/device conditions. | Fixture parity checks + request assertions. |
 | Localization/currency | Same locale fallback and currency display output. | Snapshot/assertion parity checks. |
 | Startup loading behavior | Same first-view/blocking source set semantics. | Startup plan parity assertions. |
 
@@ -31,10 +32,11 @@ Ensure the in-editor preview and exported static site behave the same for all hi
   - image source selection and startup preload rules,
   - modal interactive media setup/teardown,
   - keyboard/event wiring.
+- Prioritized hotspot inventory is tracked in `PHASE_STATUS_TRACKER.md` (`Drift inventory (2026-02-09)` section).
 
 ## Phase 0 execution checklist
 - [x] Define and publish parity contract.
-- [ ] Inventory duplicated preview/export runtime logic with priority labels.
+- [x] Inventory duplicated preview/export runtime logic with priority labels.
 - [ ] Select first shared runtime extraction slice with lowest break risk.
 - [ ] Implement shared helper module(s) and consume from preview + export builders.
 - [ ] Add parity e2e spec comparing preview and exported runtime against same fixture.
