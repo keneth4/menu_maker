@@ -63,11 +63,12 @@ Contract:
 
 Tracking checklist:
 - [x] Schema + normalization for originals/derived metadata and profile versioning.
-- [ ] Bridge/import-time processing pipeline for animated and transparent assets (`ffmpeg`).
-- [ ] Ensure `ffmpeg` is available in local + container execution paths.
+- [x] Bridge preprocessing pipeline for animated and transparent assets (`ffmpeg`) during save/export.
+- [x] Ensure `ffmpeg` is available in local + container execution paths.
 - [x] Preview/export source selection switched to derived variants.
 - [x] Save packaging includes originals + derived.
-- [ ] Export packaging includes derived only + rewrite validation.
+- [x] Export packaging includes derived only + rewrite validation.
+- [x] Bridge export integration fixture validates derived-only static exports with transparent GIF input.
 - [ ] Test coverage for animated-alpha inputs and packaging contracts.
 
 ## Drift inventory (2026-02-09)
@@ -102,3 +103,24 @@ Tracking checklist:
 - Updated static export asset collection/rewrite to include logo asset paths.
 - Added desktop keyboard controls (`Arrow*` navigation + `Escape` close) in preview and exported runtime.
 - Corrected cw/ccw mapping behavior and switched direction control to a compact toggle below the 360 source input.
+- Enforced derived-only export asset collection (excluding originals when derived variants are available).
+- Updated exported `menu.json` rewrite flow to remap `derived` + `responsive` paths and drop `originalSrc`/`originalHero360`.
+- Added export packaging unit coverage for derived-only source collection.
+- Added shared centered-fit helpers for contain padding and cover cropping, including centered ffmpeg filter templates (`(ow-iw)/2`, `(iw-ow)/2`).
+- Switched in-app generated responsive variants to centered contain placement to enforce symmetric composition.
+- Added bridge ffmpeg preprocessing endpoint (`/api/assets/prepare-derived`) that generates centered background/item derivatives and rewrites project media metadata before export.
+- Export flow in bridge mode now calls derived preprocessing before packaging, preventing original-asset fallback when derivatives can be generated.
+- Added ffmpeg installation to container images (`Dockerfile.dev`, `Dockerfile.prod` build stage).
+- Save flow in bridge mode now runs the same ffmpeg preprocessing before persisting `menu.json` and generating the save zip.
+- Added bridge client regression coverage for `/prepare-derived` request/response/error contract.
+- Added save/export workflow progress UI with step-by-step status and percentage updates, including a dedicated derived-media processing stage.
+- Added bridge e2e integration fixture (`tests/e2e/ffmpeg-derived-export.spec.ts`) that validates static export zips contain derived assets and exclude originals.
+- Improved long-running progress behavior so derived-processing stages keep advancing visibly (decimal progress and higher cap).
+- Added ZIP-import upload progress workflow (parse/upload/apply) when opening a project from zip in bridge mode.
+- ZIP-import in bridge mode now triggers derived-asset preparation after upload, so first export can reuse prebuilt variants.
+- Optimized bridge derivation reuse checks and switched dish derivatives to webp-only output profile to avoid long gif fallback transcodes and export timeouts.
+- ZIP-import now completes without waiting for full derivation (runs background prep), and save/export reuse the same in-flight derivation task to prevent duplicate ffmpeg work.
+- Stabilized derivation naming when source files already live under `originals/**` to prevent recursive re-derivation loops across repeated exports.
+- Increased ffmpeg command timeout budget to reduce false timeouts on large animated source assets.
+- Tuned ffmpeg derivation profile for throughput by capping animation FPS (`items: 24`, `backgrounds: 18`) and reducing libwebp compression level (`6 -> 4`) to avoid long-running export/import stalls.
+- Hardened bridge-derived processing so a single corrupt/unreadable source asset no longer aborts save/export; failed assets now log a warning and continue with the original reference.

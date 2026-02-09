@@ -2,6 +2,7 @@ import type { MenuProject } from "../../lib/types";
 import {
   buildProjectAssetPairs,
   buildProjectZipEntries,
+  collectExportProjectAssetPaths,
   collectProjectAssetPaths,
   collectSaveProjectAssetPaths,
   rewriteProjectForSaveZip
@@ -142,6 +143,19 @@ describe("project zip helpers", () => {
       "assets/items/tostada-sm.webp",
       "assets/items/tostada-md.webp",
       "assets/items/tostada-lg.webp",
+      "projects/demo-menu/assets/derived/items/tostada-md.webp",
+      "projects/demo-menu/assets/derived/items/tostada-md.gif",
+      "projects/demo-menu/assets/derived/items/tostada-lg.webp"
+    ]);
+  });
+
+  it("collects export-project paths using derived assets and excluding originals", () => {
+    const project = createProject();
+    expect(collectExportProjectAssetPaths(project, normalize)).toEqual([
+      "projects/demo-menu/assets/fonts/menu.woff2",
+      "projects/demo-menu/assets/branding/logo.webp",
+      "projects/demo-menu/assets/derived/backgrounds/main-md.webp",
+      "projects/demo-menu/assets/derived/backgrounds/main-lg.webp",
       "projects/demo-menu/assets/derived/items/tostada-md.webp",
       "projects/demo-menu/assets/derived/items/tostada-md.gif",
       "projects/demo-menu/assets/derived/items/tostada-lg.webp"

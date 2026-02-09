@@ -5,6 +5,12 @@
       "name": "SampleCafeBrunchMenu",
       "template": "focus-rows",
       "cover": "/projects/sample-cafebrunch-menu/assets/backgrounds/backery-outside.gif"
+    },
+    {
+      "slug": "cafebrunch-menu",
+      "name": "CafeBrunchMenu",
+      "template": "focus-rows",
+      "cover": "assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
     }
   ]
 }

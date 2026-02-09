@@ -1,4 +1,5 @@
 import type { AssetEntryKind } from "./pathing";
+import type { MenuProject } from "../../lib/types";
 
 export type BridgeAssetEntry = {
   path: string;
@@ -10,6 +11,7 @@ export type BridgeAssetClient = {
   list: (slug: string) => Promise<BridgeAssetEntry[]>;
   request: (endpoint: string, slug: string, payload?: Record<string, unknown>) => Promise<void>;
   readFileBytes: (slug: string, assetPath: string) => Promise<Uint8Array | null>;
+  prepareProjectDerivedAssets: (slug: string, project: MenuProject) => Promise<MenuProject>;
 };
 
 const readErrorMessage = async (response: Response) => {
@@ -55,10 +57,27 @@ export const createBridgeAssetClient = (
     return new Uint8Array(buffer);
   };
 
+  const prepareProjectDerivedAssets = async (slug: string, project: MenuProject) => {
+    const response = await fetchImpl(`${baseUrl}/prepare-derived?project=${encodeURIComponent(slug)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project })
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
+    const data = (await response.json()) as { project?: MenuProject };
+    if (!data.project) {
+      throw new Error("Bridge response missing processed project data");
+    }
+    return data.project;
+  };
+
   return {
     ping,
     list,
     request,
-    readFileBytes
+    readFileBytes,
+    prepareProjectDerivedAssets
   };
 };

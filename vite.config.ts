@@ -1,7 +1,13 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  buildCenteredContainPadFfmpegFilter,
+  buildCenteredCoverCropFfmpegFilter
+} from "./src/core/media/fit";
+import type { MenuItem, MediaAsset, MenuProject } from "./src/lib/types";
 import { normalizeProjectSlug } from "./src/infrastructure/bridge/pathing";
 
 export default defineConfig({
@@ -84,6 +90,434 @@ export default defineConfig({
         const writeIndex = async (data: { projects: any[] }) => {
           await fs.mkdir(root, { recursive: true });
           await fs.writeFile(indexPath, JSON.stringify(data, null, 2));
+        };
+        const decodeMaybe = (value: string) => {
+          try {
+            return decodeURIComponent(value);
+          } catch {
+            return value;
+          }
+        };
+        const toAssetRelativePath = (sourcePath: string, projectSlug: string) => {
+          const raw = String(sourcePath || "").trim();
+          if (!raw) return "";
+          const clean = decodeMaybe(raw.split(/[?#]/, 1)[0]).replace(/\\/g, "/").replace(/^\/+/, "");
+          const projectPrefix = `projects/${projectSlug}/assets/`;
+          if (clean.startsWith(projectPrefix)) {
+            return clean.slice(projectPrefix.length);
+          }
+          const anyProjectMatch = clean.match(/^projects\/[^/]+\/assets\/(.+)$/);
+          if (anyProjectMatch) {
+            return anyProjectMatch[1];
+          }
+          if (clean.startsWith("assets/")) {
+            return clean.slice("assets/".length);
+          }
+          return clean;
+        };
+        const toPublicAssetPath = (projectSlug: string, relativePath: string) =>
+          `/projects/${projectSlug}/assets/${relativePath.replace(/^\/+/, "")}`;
+        const resolveExistingAssetSource = async (projectSlug: string, sourcePath: string) => {
+          const relative = toAssetRelativePath(sourcePath, projectSlug);
+          if (!relative) return null;
+          try {
+            const { full } = await resolveAssetPath(projectSlug, relative);
+            await fs.access(full);
+            return { full, relative };
+          } catch {
+            return null;
+          }
+        };
+        const hashString = (value: string) => {
+          let hash = 0;
+          for (let index = 0; index < value.length; index += 1) {
+            hash = (hash * 31 + value.charCodeAt(index)) | 0;
+          }
+          return Math.abs(hash).toString(16).padStart(6, "0").slice(0, 6);
+        };
+        const sanitizeAssetStem = (relativePath: string, fallbackPrefix: string) => {
+          const extension = path.posix.extname(relativePath);
+          const rawStem = path.posix.basename(relativePath, extension);
+          const baseStem =
+            rawStem
+              .toLowerCase()
+              .replace(/[^a-z0-9._-]+/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^-+|-+$/g, "") || fallbackPrefix;
+          return `${baseStem}-${hashString(relativePath)}`;
+        };
+        const COMMAND_TIMEOUT_MS = 900000;
+        const ITEM_DERIVED_FPS = 24;
+        const BACKGROUND_DERIVED_FPS = 18;
+        const runCommand = async (
+          command: string,
+          args: string[],
+          options: { timeoutMs?: number } = {}
+        ) =>
+          await new Promise<void>((resolve, reject) => {
+            const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
+            const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+            let stderr = "";
+            let timedOut = false;
+            const timeout =
+              timeoutMs > 0
+                ? setTimeout(() => {
+                    timedOut = true;
+                    child.kill("SIGKILL");
+                  }, timeoutMs)
+                : null;
+            child.stderr.on("data", (chunk) => {
+              stderr += String(chunk);
+            });
+            child.on("error", (error) => reject(error));
+            child.on("close", (code) => {
+              if (timeout) clearTimeout(timeout);
+              if (timedOut) {
+                reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+                return;
+              }
+              if (code === 0) {
+                resolve();
+                return;
+              }
+              reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
+            });
+          });
+        const isOutputStale = async (sourceFull: string, outputFull: string) => {
+          try {
+            const [sourceStat, outputStat] = await Promise.all([fs.stat(sourceFull), fs.stat(outputFull)]);
+            return outputStat.size === 0 || outputStat.mtimeMs < sourceStat.mtimeMs;
+          } catch {
+            return true;
+          }
+        };
+        const fileExists = async (fullPath: string) => {
+          try {
+            await fs.access(fullPath);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const resolveDerivedWebpRelative = async (
+          projectSlug: string,
+          value?: string | Record<string, string | undefined>
+        ) => {
+          if (!value) return null;
+          const candidate = typeof value === "string" ? value : value.webp;
+          if (!candidate) return null;
+          const existing = await resolveExistingAssetSource(projectSlug, candidate);
+          return existing ? existing.relative : null;
+        };
+        let ffmpegAvailable: boolean | null = null;
+        const ensureFfmpegAvailable = async () => {
+          if (ffmpegAvailable !== null) return ffmpegAvailable;
+          try {
+            await runCommand("ffmpeg", ["-version"]);
+            ffmpegAvailable = true;
+          } catch {
+            ffmpegAvailable = false;
+          }
+          return ffmpegAvailable;
+        };
+        const ensureCopiedOriginal = async (
+          projectSlug: string,
+          sourceFull: string,
+          sourceRelative: string,
+          targetRelative: string
+        ) => {
+          const { full: targetFull } = await resolveAssetPath(projectSlug, targetRelative);
+          await fs.mkdir(path.dirname(targetFull), { recursive: true });
+          if (sourceRelative !== targetRelative && (await isOutputStale(sourceFull, targetFull))) {
+            await fs.copyFile(sourceFull, targetFull);
+          }
+          return toPublicAssetPath(projectSlug, targetRelative);
+        };
+        const ensureWebpDerivative = async (
+          sourceFull: string,
+          outputFull: string,
+          filter: string
+        ) => {
+          if (!(await isOutputStale(sourceFull, outputFull))) {
+            return false;
+          }
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          await runCommand("ffmpeg", [
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            sourceFull,
+            "-vf",
+            filter,
+            "-an",
+            "-c:v",
+            "libwebp",
+            "-quality",
+            "78",
+            "-compression_level",
+            "4",
+            "-loop",
+            "0",
+            outputFull
+          ]);
+          return true;
+        };
+        const deriveBackgroundAsset = async (
+          projectSlug: string,
+          background: MediaAsset,
+          index: number
+        ) => {
+          const existingOriginalRelative = background.originalSrc
+            ? (await resolveExistingAssetSource(projectSlug, background.originalSrc))?.relative ?? null
+            : null;
+          const existingMediumRelative = await resolveDerivedWebpRelative(
+            projectSlug,
+            background.derived?.medium as string | Record<string, string | undefined> | undefined
+          );
+          const existingLargeRelative = await resolveDerivedWebpRelative(
+            projectSlug,
+            background.derived?.large as string | Record<string, string | undefined> | undefined
+          );
+          if (existingOriginalRelative && existingMediumRelative && existingLargeRelative) {
+            return {
+              ...background,
+              src: toPublicAssetPath(projectSlug, existingLargeRelative),
+              originalSrc: toPublicAssetPath(projectSlug, existingOriginalRelative),
+              derived: {
+                profileId: "ffmpeg-v2-background-cover-webp",
+                medium: {
+                  webp: toPublicAssetPath(projectSlug, existingMediumRelative)
+                },
+                large: {
+                  webp: toPublicAssetPath(projectSlug, existingLargeRelative)
+                }
+              }
+            };
+          }
+          const sourceRef = background.originalSrc || background.src;
+          if (!sourceRef) return background;
+          const source = await resolveExistingAssetSource(projectSlug, sourceRef);
+          if (!source) return background;
+          const extension = path.posix.extname(source.relative) || ".gif";
+          const sourceIsOriginal = source.relative.startsWith("originals/backgrounds/");
+          const stem = sourceIsOriginal
+            ? path.posix.basename(source.relative, extension)
+            : sanitizeAssetStem(source.relative, `background-${index + 1}`);
+          const originalRelative = sourceIsOriginal
+            ? source.relative
+            : `originals/backgrounds/${stem}${extension}`;
+          const mediumRelative = `derived/backgrounds/${stem}-md.webp`;
+          const largeRelative = `derived/backgrounds/${stem}-lg.webp`;
+          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
+          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
+          const reusableProfile =
+            background.derived?.profileId === "ffmpeg-v2-background-cover-webp" ||
+            background.derived?.profileId === "ffmpeg-v1-background-cover";
+          if (
+            reusableProfile &&
+            (await fileExists(originalFull)) &&
+            (await fileExists(mediumFull)) &&
+            (await fileExists(largeFull))
+          ) {
+            return {
+              ...background,
+              src: toPublicAssetPath(projectSlug, largeRelative),
+              originalSrc: toPublicAssetPath(projectSlug, originalRelative),
+              derived: {
+                profileId: "ffmpeg-v2-background-cover-webp",
+                medium: {
+                  webp: toPublicAssetPath(projectSlug, mediumRelative)
+                },
+                large: {
+                  webp: toPublicAssetPath(projectSlug, largeRelative)
+                }
+              }
+            };
+          }
+          const originalPublic = await ensureCopiedOriginal(
+            projectSlug,
+            source.full,
+            source.relative,
+            originalRelative
+          );
+          await ensureWebpDerivative(
+            source.full,
+            mediumFull,
+            `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1280, 720)}`
+          );
+          await ensureWebpDerivative(
+            source.full,
+            largeFull,
+            `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1920, 1080)}`
+          );
+          return {
+            ...background,
+            src: toPublicAssetPath(projectSlug, largeRelative),
+            originalSrc: originalPublic,
+            derived: {
+              profileId: "ffmpeg-v2-background-cover-webp",
+              medium: {
+                webp: toPublicAssetPath(projectSlug, mediumRelative)
+              },
+              large: {
+                webp: toPublicAssetPath(projectSlug, largeRelative)
+              }
+            }
+          };
+        };
+        const deriveDishAsset = async (projectSlug: string, item: MenuItem, index: number) => {
+          const existingOriginalRelative = item.media.originalHero360
+            ? (await resolveExistingAssetSource(projectSlug, item.media.originalHero360))?.relative ?? null
+            : null;
+          const existingMediumRelative = await resolveDerivedWebpRelative(
+            projectSlug,
+            item.media.derived?.medium as string | Record<string, string | undefined> | undefined
+          );
+          const existingLargeRelative = await resolveDerivedWebpRelative(
+            projectSlug,
+            item.media.derived?.large as string | Record<string, string | undefined> | undefined
+          );
+          if (existingOriginalRelative && existingMediumRelative && existingLargeRelative) {
+            return {
+              ...item,
+              media: {
+                ...item.media,
+                hero360: toPublicAssetPath(projectSlug, existingLargeRelative),
+                originalHero360: toPublicAssetPath(projectSlug, existingOriginalRelative),
+                responsive: {
+                  small: toPublicAssetPath(projectSlug, existingMediumRelative),
+                  medium: toPublicAssetPath(projectSlug, existingMediumRelative),
+                  large: toPublicAssetPath(projectSlug, existingLargeRelative)
+                },
+                derived: {
+                  profileId: "ffmpeg-v2-item-contain-webp",
+                  medium: {
+                    webp: toPublicAssetPath(projectSlug, existingMediumRelative)
+                  },
+                  large: {
+                    webp: toPublicAssetPath(projectSlug, existingLargeRelative)
+                  }
+                }
+              }
+            };
+          }
+          const sourceRef = item.media.originalHero360 || item.media.hero360;
+          if (!sourceRef) return item;
+          const source = await resolveExistingAssetSource(projectSlug, sourceRef);
+          if (!source) return item;
+          const extension = path.posix.extname(source.relative) || ".gif";
+          const sourceIsOriginal = source.relative.startsWith("originals/items/");
+          const stem = sourceIsOriginal
+            ? path.posix.basename(source.relative, extension)
+            : sanitizeAssetStem(source.relative, `dish-${index + 1}`);
+          const originalRelative = sourceIsOriginal
+            ? source.relative
+            : `originals/items/${stem}${extension}`;
+          const mediumWebpRelative = `derived/items/${stem}-md.webp`;
+          const largeWebpRelative = `derived/items/${stem}-lg.webp`;
+          const containMd = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(512, 512)}`;
+          const containLg = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(768, 768)}`;
+          const { full: mediumWebpFull } = await resolveAssetPath(projectSlug, mediumWebpRelative);
+          const { full: largeWebpFull } = await resolveAssetPath(projectSlug, largeWebpRelative);
+          const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
+          const reusableProfile =
+            item.media.derived?.profileId === "ffmpeg-v2-item-contain-webp" ||
+            item.media.derived?.profileId === "ffmpeg-v1-item-contain";
+          if (
+            reusableProfile &&
+            (await fileExists(originalFull)) &&
+            (await fileExists(mediumWebpFull)) &&
+            (await fileExists(largeWebpFull))
+          ) {
+            return {
+              ...item,
+              media: {
+                ...item.media,
+                hero360: toPublicAssetPath(projectSlug, largeWebpRelative),
+                originalHero360: toPublicAssetPath(projectSlug, originalRelative),
+                responsive: {
+                  small: toPublicAssetPath(projectSlug, mediumWebpRelative),
+                  medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
+                  large: toPublicAssetPath(projectSlug, largeWebpRelative)
+                },
+                derived: {
+                  profileId: "ffmpeg-v2-item-contain-webp",
+                  medium: {
+                    webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
+                  },
+                  large: {
+                    webp: toPublicAssetPath(projectSlug, largeWebpRelative)
+                  }
+                }
+              }
+            };
+          }
+          const originalPublic = await ensureCopiedOriginal(
+            projectSlug,
+            source.full,
+            source.relative,
+            originalRelative
+          );
+          await ensureWebpDerivative(source.full, mediumWebpFull, containMd);
+          await ensureWebpDerivative(source.full, largeWebpFull, containLg);
+          return {
+            ...item,
+            media: {
+              ...item.media,
+              hero360: toPublicAssetPath(projectSlug, largeWebpRelative),
+              originalHero360: originalPublic,
+              responsive: {
+                small: toPublicAssetPath(projectSlug, mediumWebpRelative),
+                medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
+                large: toPublicAssetPath(projectSlug, largeWebpRelative)
+              },
+              derived: {
+                profileId: "ffmpeg-v2-item-contain-webp",
+                medium: {
+                  webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
+                },
+                large: {
+                  webp: toPublicAssetPath(projectSlug, largeWebpRelative)
+                }
+              }
+            }
+          };
+        };
+        const prepareProjectDerivedAssets = async (projectSlug: string, sourceProject: MenuProject) => {
+          const prepared = JSON.parse(JSON.stringify(sourceProject)) as MenuProject;
+          const nextBackgrounds: MediaAsset[] = [];
+          for (let index = 0; index < prepared.backgrounds.length; index += 1) {
+            const background = prepared.backgrounds[index];
+            try {
+              nextBackgrounds.push(await deriveBackgroundAsset(projectSlug, background, index));
+            } catch (error) {
+              const sourceRef = background.originalSrc || background.src || `background-${index + 1}`;
+              console.warn(`[prepare-derived] background derive failed for "${sourceRef}"`, error);
+              nextBackgrounds.push(background);
+            }
+          }
+          prepared.backgrounds = nextBackgrounds;
+          const nextCategories = prepared.categories.map((category) => ({ ...category, items: [] as MenuItem[] }));
+          for (let categoryIndex = 0; categoryIndex < prepared.categories.length; categoryIndex += 1) {
+            const category = prepared.categories[categoryIndex];
+            const nextItems: MenuItem[] = [];
+            for (let index = 0; index < category.items.length; index += 1) {
+              const item = category.items[index];
+              try {
+                nextItems.push(await deriveDishAsset(projectSlug, item, index));
+              } catch (error) {
+                const sourceRef = item.media.originalHero360 || item.media.hero360 || `item-${index + 1}`;
+                console.warn(`[prepare-derived] dish derive failed for "${sourceRef}"`, error);
+                nextItems.push(item);
+              }
+            }
+            nextCategories[categoryIndex].items = nextItems;
+          }
+          prepared.categories = nextCategories;
+          return prepared;
         };
 
         server.middlewares.use("/api/assets", async (req, res) => {
@@ -223,6 +657,39 @@ export default defineConfig({
               await writeIndex(index);
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
+              return;
+            }
+            if (req.method === "POST" && pathname === "/prepare-derived") {
+              if (isReadOnlyProject) {
+                denyReadOnlyMutation();
+                return;
+              }
+              const body = await readJson(req);
+              const projectData = body.project as MenuProject | undefined;
+              if (!projectData || typeof projectData !== "object") {
+                res.statusCode = 400;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "Missing project payload" }));
+                return;
+              }
+              const hasFfmpeg = await ensureFfmpegAvailable();
+              if (!hasFfmpeg) {
+                res.statusCode = 503;
+                res.setHeader("Content-Type", "application/json");
+                res.end(
+                  JSON.stringify({
+                    error:
+                      "ffmpeg is not available in this environment. Install ffmpeg to generate derived assets."
+                  })
+                );
+                return;
+              }
+              const prepared = await prepareProjectDerivedAssets(safeProject, projectData);
+              const projectDir = path.resolve(root, safeProject);
+              await fs.mkdir(projectDir, { recursive: true });
+              await fs.writeFile(path.join(projectDir, "menu.json"), JSON.stringify(prepared, null, 2));
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: true, project: prepared }));
               return;
             }
             if (req.method === "POST" && pathname === "/rename-project") {

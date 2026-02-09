@@ -9,7 +9,7 @@
   import {
     buildProjectAssetPairs,
     buildProjectZipEntries,
-    collectProjectAssetPaths
+    collectExportProjectAssetPaths
   } from "./application/export/projectZip";
   import {
     type ExportAssetManifestEntry,
@@ -32,9 +32,11 @@
     getAllergenValues as getLocalizedAllergenValues
   } from "./core/menu/allergens";
   import { commonAllergenCatalog, menuTerms } from "./core/menu/catalogs";
+  import { mapProjectAssetPaths } from "./core/menu/assetPathMapping";
   import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
   import { normalizeProject } from "./core/menu/normalization";
   import { formatMenuPrice } from "./core/menu/pricing";
+  import { computeCenteredContainPlacement } from "./core/media/fit";
   import { applyWizardDemoRotationDirections } from "./core/menu/wizardDemoRotation";
   import { buildStartupAssetPlan, collectItemPrioritySources } from "./core/menu/startupAssets";
   import {
@@ -75,7 +77,14 @@
   import { createZipBlob, readZip } from "./lib/zip";
   import { loadProject } from "./lib/loadProject";
   import { loadProjects, type ProjectSummary } from "./lib/loadProjects";
-  import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "./lib/types";
+  import type {
+    AllergenEntry,
+    DerivedMediaMap,
+    DerivedMediaVariant,
+    MenuCategory,
+    MenuItem,
+    MenuProject
+  } from "./lib/types";
   import {
     instructionCopy as instructionCopyConfig,
     type InstructionKey
@@ -123,6 +132,14 @@
   let lastSaveName = "";
   let exportError = "";
   let exportStatus = "";
+  let workflowMode: "save" | "export" | "upload" | null = null;
+  let workflowStep = "";
+  let workflowProgress = 0;
+  let workflowPulseTimer: ReturnType<typeof setInterval> | null = null;
+  let workflowResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let bridgeDeriveTask: Promise<MenuProject> | null = null;
+  let bridgeDeriveTaskSlug = "";
+  let bridgeDeriveTaskSignature = "";
   let activeItem: { category: string; itemId: string } | null = null;
   let modalMediaHost: HTMLDivElement | null = null;
   let modalMediaImage: HTMLImageElement | null = null;
@@ -565,6 +582,8 @@
     teardownInteractiveDetailMedia();
     clearBackgroundRotation();
     clearCarouselWheelState();
+    clearWorkflowPulse();
+    clearWorkflowReset();
     if (typeof window !== "undefined") {
       window.removeEventListener("keydown", handleDesktopPreviewKeydown);
     }
@@ -923,6 +942,156 @@
     return `${slug}.zip`;
   };
 
+  const clearWorkflowPulse = () => {
+    if (!workflowPulseTimer) return;
+    clearInterval(workflowPulseTimer);
+    workflowPulseTimer = null;
+  };
+
+  const clearWorkflowReset = () => {
+    if (!workflowResetTimer) return;
+    clearTimeout(workflowResetTimer);
+    workflowResetTimer = null;
+  };
+
+  const startWorkflow = (mode: "save" | "export" | "upload", stepKey: UiKey, percent = 3) => {
+    clearWorkflowPulse();
+    clearWorkflowReset();
+    workflowMode = mode;
+    workflowStep = t(stepKey);
+    workflowProgress = Math.max(1, Math.min(99, percent));
+  };
+
+  const updateWorkflow = (stepKey: UiKey, percent: number) => {
+    workflowStep = t(stepKey);
+    workflowProgress = Math.max(workflowProgress, Math.max(1, Math.min(99, percent)));
+  };
+
+  const pulseWorkflow = (
+    targetPercent: number,
+    stepKey: UiKey,
+    options: { cadenceMs?: number; tickIncrement?: number } = {}
+  ) => {
+    const cadenceMs = options.cadenceMs ?? 220;
+    const tickIncrement = options.tickIncrement ?? 0.1;
+    updateWorkflow(stepKey, workflowProgress);
+    clearWorkflowPulse();
+    workflowPulseTimer = setInterval(() => {
+      if (!workflowMode) return;
+      if (workflowProgress >= targetPercent) return;
+      workflowProgress = Math.min(targetPercent, workflowProgress + tickIncrement);
+    }, cadenceMs);
+  };
+
+  const updateWorkflowAssetStep = (
+    mode: "save" | "export" | "upload",
+    current: number,
+    total: number,
+    startPercent: number,
+    endPercent: number
+  ) => {
+    const safeTotal = Math.max(1, total);
+    const boundedCurrent = Math.max(0, Math.min(current, safeTotal));
+    const progress = startPercent + ((endPercent - startPercent) * boundedCurrent) / safeTotal;
+    workflowProgress = Math.max(workflowProgress, progress);
+    if (uiLang === "es") {
+      workflowStep =
+        mode === "save"
+          ? `Empaquetando assets (${boundedCurrent}/${safeTotal})`
+          : mode === "upload"
+            ? `Subiendo assets (${boundedCurrent}/${safeTotal})`
+            : `Procesando assets (${boundedCurrent}/${safeTotal})`;
+      return;
+    }
+    workflowStep =
+      mode === "save"
+        ? `Packaging assets (${boundedCurrent}/${safeTotal})`
+        : mode === "upload"
+          ? `Uploading assets (${boundedCurrent}/${safeTotal})`
+          : `Processing assets (${boundedCurrent}/${safeTotal})`;
+  };
+
+  const finishWorkflow = (stepKey: UiKey) => {
+    clearWorkflowPulse();
+    clearWorkflowReset();
+    workflowStep = t(stepKey);
+    workflowProgress = 100;
+    workflowResetTimer = setTimeout(() => {
+      workflowMode = null;
+      workflowStep = "";
+      workflowProgress = 0;
+      workflowResetTimer = null;
+    }, 1400);
+  };
+
+  const failWorkflow = () => {
+    clearWorkflowPulse();
+    clearWorkflowReset();
+    workflowMode = null;
+    workflowStep = "";
+    workflowProgress = 0;
+  };
+
+  const buildDeriveSignature = (value: MenuProject) => {
+    const normalize = (path?: string) => String(path || "").trim();
+    const backgrounds = value.backgrounds.map((bg) => [
+      normalize(bg.src),
+      normalize(bg.originalSrc),
+      normalize(bg.derived?.profileId)
+    ]);
+    const items = value.categories.flatMap((category) =>
+      category.items.map((item) => [
+        normalize(item.media.hero360),
+        normalize(item.media.originalHero360),
+        normalize(item.media.derived?.profileId)
+      ])
+    );
+    return JSON.stringify({ backgrounds, items });
+  };
+
+  const queueBridgeDerivedPreparation = async (
+    slug: string,
+    sourceProject: MenuProject,
+    options: { applyIfUnchanged: boolean }
+  ) => {
+    const signature = buildDeriveSignature(sourceProject);
+    if (
+      bridgeDeriveTask &&
+      bridgeDeriveTaskSlug === slug &&
+      bridgeDeriveTaskSignature === signature
+    ) {
+      return await bridgeDeriveTask;
+    }
+
+    const startedSignature = signature;
+    bridgeDeriveTaskSlug = slug;
+    bridgeDeriveTaskSignature = signature;
+
+    const task = bridgeClient
+      .prepareProjectDerivedAssets(slug, sourceProject)
+      .then((prepared) => normalizeProject(prepared))
+      .then((prepared) => {
+        if (options.applyIfUnchanged && draft) {
+          const currentSlug = draft.meta.slug || activeSlug || "nuevo-proyecto";
+          if (currentSlug === slug && buildDeriveSignature(draft) === startedSignature) {
+            draft = prepared;
+            project = prepared;
+          }
+        }
+        return prepared;
+      })
+      .finally(() => {
+        if (bridgeDeriveTask === task) {
+          bridgeDeriveTask = null;
+          bridgeDeriveTaskSlug = "";
+          bridgeDeriveTaskSignature = "";
+        }
+      });
+
+    bridgeDeriveTask = task;
+    return await task;
+  };
+
   const updateAssetPathsForSlug = (fromSlug: string, toSlug: string) => {
     if (!draft) return;
     if (!fromSlug || !toSlug || fromSlug === toSlug) return;
@@ -930,31 +1099,7 @@
     const toPrefix = `/projects/${toSlug}/assets/`;
     const updatePath = (value: string) =>
       value.startsWith(fromPrefix) ? `${toPrefix}${value.slice(fromPrefix.length)}` : value;
-
-    if (draft.meta.fontSource) {
-      draft.meta.fontSource = updatePath(draft.meta.fontSource);
-    }
-    if (draft.meta.logoSrc) {
-      draft.meta.logoSrc = updatePath(draft.meta.logoSrc);
-    }
-    draft.backgrounds = draft.backgrounds.map((bg) => ({
-      ...bg,
-      src: bg.src ? updatePath(bg.src) : bg.src,
-      originalSrc: bg.originalSrc ? updatePath(bg.originalSrc) : bg.originalSrc
-    }));
-    draft.categories = draft.categories.map((category) => ({
-      ...category,
-      items: category.items.map((item) => ({
-        ...item,
-        media: {
-          ...item.media,
-          hero360: item.media.hero360 ? updatePath(item.media.hero360) : item.media.hero360,
-          originalHero360: item.media.originalHero360
-            ? updatePath(item.media.originalHero360)
-            : item.media.originalHero360
-        }
-      }))
-    }));
+    draft = mapProjectAssetPaths(draft, updatePath);
   };
 
   const mapImportedAssetPath = (value: string, slug: string) => {
@@ -970,43 +1115,23 @@
     return value;
   };
 
-  const applyImportedPaths = (data: MenuProject, slug: string) => {
-    if (data.meta.fontSource) {
-      data.meta.fontSource = mapImportedAssetPath(data.meta.fontSource, slug);
-    }
-    if (data.meta.logoSrc) {
-      data.meta.logoSrc = mapImportedAssetPath(data.meta.logoSrc, slug);
-    }
-    data.backgrounds = data.backgrounds.map((bg) => ({
-      ...bg,
-      src: bg.src ? mapImportedAssetPath(bg.src, slug) : bg.src,
-      originalSrc: bg.originalSrc ? mapImportedAssetPath(bg.originalSrc, slug) : bg.originalSrc
-    }));
-    data.categories = data.categories.map((category) => ({
-      ...category,
-      items: category.items.map((item) => ({
-        ...item,
-        media: {
-          ...item.media,
-          hero360: item.media.hero360 ? mapImportedAssetPath(item.media.hero360, slug) : item.media.hero360,
-          originalHero360: item.media.originalHero360
-            ? mapImportedAssetPath(item.media.originalHero360, slug)
-            : item.media.originalHero360
-        }
-      }))
-    }));
-  };
+  const applyImportedPaths = (data: MenuProject, slug: string) =>
+    mapProjectAssetPaths(data, (value) => mapImportedAssetPath(value, slug));
 
   const saveProject = async () => {
-    if (!draft) return;
+    if (!draft || workflowMode) return;
     const suggested = getSuggestedZipName();
     const response = window.prompt(t("promptSaveName"), suggested);
     if (!response) return;
+    openError = "";
+    exportError = "";
+    exportStatus = "";
     const fileName = normalizeZipName(response) || suggested;
     lastSaveName = fileName;
     const base = fileName.replace(/\.zip$/i, "");
     const nextSlug = slugifyName(base) || draft.meta.slug || "menu";
     const previousSlug = getProjectSlug();
+    startWorkflow("save", "progressSaveStart", 4);
     if (previousSlug && nextSlug && previousSlug !== nextSlug) {
       if (assetMode === "bridge") {
         try {
@@ -1023,23 +1148,44 @@
       activeSlug = nextSlug;
     }
 
+    let projectToPersist = draft;
     if (assetMode === "bridge") {
+      pulseWorkflow(92, "progressSaveDerive", { tickIncrement: 0.06 });
       try {
+        projectToPersist = await queueBridgeDerivedPreparation(
+          draft.meta.slug || nextSlug,
+          projectToPersist,
+          { applyIfUnchanged: false }
+        );
+        draft = projectToPersist;
+      } catch (error) {
+        failWorkflow();
+        openError = error instanceof Error ? error.message : t("errOpenProject");
+        return;
+      } finally {
+        clearWorkflowPulse();
+      }
+    }
+
+    if (assetMode === "bridge") {
+      pulseWorkflow(92, "progressSaveSync", { tickIncrement: 0.12 });
+      try {
+        const slug = projectToPersist.meta.slug || nextSlug;
         await bridgeRequest("save-project", {
-          slug: draft.meta.slug || nextSlug,
-          name: draft.meta.name,
-          template: draft.meta.template,
-          cover: draft.backgrounds?.[0]?.src ?? "",
-          project: draft
+          slug,
+          name: projectToPersist.meta.name,
+          template: projectToPersist.meta.template,
+          cover: projectToPersist.backgrounds?.[0]?.src ?? "",
+          project: projectToPersist
         });
         const existingIndex = projects.findIndex(
-          (item) => item.slug === draft.meta.slug || item.slug === previousSlug
+          (item) => item.slug === slug || item.slug === previousSlug
         );
         const summary = {
-          slug: draft.meta.slug,
-          name: draft.meta.name,
-          template: draft.meta.template,
-          cover: draft.backgrounds?.[0]?.src
+          slug,
+          name: projectToPersist.meta.name,
+          template: projectToPersist.meta.template,
+          cover: projectToPersist.backgrounds?.[0]?.src
         };
         if (existingIndex >= 0) {
           projects = [
@@ -1052,26 +1198,43 @@
         }
         await refreshBridgeEntries();
       } catch (error) {
+        failWorkflow();
         openError = error instanceof Error ? error.message : t("errOpenProject");
+        return;
+      } finally {
+        clearWorkflowPulse();
       }
     }
-    const zipEntries = await buildProjectZipEntries({
-      project: draft,
-      slug: draft.meta.slug || nextSlug,
-      normalizePath,
-      readAssetBytes,
-      onMissingAsset: (sourcePath, error) => {
-        console.warn("Missing asset", sourcePath, error);
+    try {
+      pulseWorkflow(96, "progressSaveZip", { tickIncrement: 0.16 });
+      const zipEntries = await buildProjectZipEntries({
+        project: projectToPersist,
+        slug: projectToPersist.meta.slug || nextSlug,
+        normalizePath,
+        readAssetBytes,
+        onMissingAsset: (sourcePath, error) => {
+          console.warn("Missing asset", sourcePath, error);
+        }
+      });
+      clearWorkflowPulse();
+      if (zipEntries.length === 0) {
+        failWorkflow();
+        openError = t("errOpenProject");
+        return;
       }
-    });
-    if (zipEntries.length === 0) return;
-    const blob = createZipBlob(zipEntries);
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
+      updateWorkflow("progressSaveDownload", 95);
+      const blob = createZipBlob(zipEntries);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      finishWorkflow("progressSaveDone");
+    } catch (error) {
+      failWorkflow();
+      openError = error instanceof Error ? error.message : t("errOpenProject");
+    }
   };
 
   const EXPORT_SHARED_STYLE_START = "/* EXPORT_SHARED_STYLES_START */";
@@ -3124,25 +3287,36 @@ void prewarmInteractiveDetailAssets();
   };
 
   const exportStaticSite = async () => {
-    if (!draft) return;
+    if (!draft || workflowMode) return;
+    openError = "";
     exportError = "";
     exportStatus = t("exporting");
+    startWorkflow("export", "progressExportStart", 4);
     try {
       const slug = getProjectSlug();
-      const exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
-      const assets = collectProjectAssetPaths(draft, normalizePath);
+      let exportProject = JSON.parse(JSON.stringify(draft)) as MenuProject;
+      if (assetMode === "bridge") {
+        pulseWorkflow(95, "progressExportDerive", { tickIncrement: 0.05 });
+        exportProject = await queueBridgeDerivedPreparation(slug, exportProject, {
+          applyIfUnchanged: false
+        });
+        draft = exportProject;
+        clearWorkflowPulse();
+      }
+      updateWorkflow("progressExportCollect", 46);
+      const assets = collectExportProjectAssetPaths(exportProject, normalizePath);
       const assetPairs = buildProjectAssetPairs(slug, assets, normalizePath);
       const entries: { name: string; data: Uint8Array }[] = [];
       const manifestEntries: ExportAssetManifestEntry[] = [];
       const missingSourcePaths = new Set<string>();
       const heroSources = new Set<string>();
       const backgroundSources = new Set(
-        draft.backgrounds
+        exportProject.backgrounds
           .map((bg) => normalizePath(bg.src || ""))
           .filter((source) => source.length > 0)
       );
-      const fontSource = normalizePath(draft.meta.fontSource || "");
-      draft.categories.forEach((category) => {
+      const fontSource = normalizePath(exportProject.meta.fontSource || "");
+      exportProject.categories.forEach((category) => {
         category.items.forEach((item) => {
           const hero = normalizePath(item.media.hero360 || "");
           if (hero) heroSources.add(hero);
@@ -3150,6 +3324,83 @@ void prewarmInteractiveDetailAssets();
       });
       const sourceToExportPath = new Map<string, string>();
       const sourceToResponsive = new Map<string, ResponsiveMediaPaths>();
+      const getMappedSource = (source?: string) => {
+        if (!source) return null;
+        return sourceToExportPath.get(normalizePath(source)) ?? null;
+      };
+      const pickMappedVariantSource = (value?: DerivedMediaVariant): string | null => {
+        if (!value) return null;
+        if (typeof value === "string") {
+          return getMappedSource(value);
+        }
+        const preferredFormats = ["webp", "gif", "png", "jpg", "jpeg", "webm", "mp4"] as const;
+        for (const format of preferredFormats) {
+          const mapped = getMappedSource(value[format]);
+          if (mapped) return mapped;
+        }
+        for (const source of Object.values(value)) {
+          const mapped = getMappedSource(source);
+          if (mapped) return mapped;
+        }
+        return null;
+      };
+      const pickMappedDerivedSource = (derived?: DerivedMediaMap): string | null =>
+        pickMappedVariantSource(derived?.large) ??
+        pickMappedVariantSource(derived?.medium) ??
+        pickMappedVariantSource(derived?.small);
+      const pickMappedResponsiveSource = (responsive?: {
+        small?: string;
+        medium?: string;
+        large?: string;
+      }): string | null =>
+        getMappedSource(responsive?.large) ??
+        getMappedSource(responsive?.medium) ??
+        getMappedSource(responsive?.small);
+      const rewriteDerivedVariant = (
+        value?: DerivedMediaVariant
+      ): DerivedMediaVariant | undefined => {
+        if (!value) return undefined;
+        if (typeof value === "string") {
+          return getMappedSource(value) ?? undefined;
+        }
+        const next: Record<string, string> = {};
+        Object.entries(value).forEach(([format, source]) => {
+          const mapped = getMappedSource(source);
+          if (mapped) {
+            next[format] = mapped;
+          }
+        });
+        return Object.keys(next).length > 0 ? next : undefined;
+      };
+      const rewriteDerived = (value?: DerivedMediaMap): DerivedMediaMap | undefined => {
+        if (!value) return undefined;
+        const small = rewriteDerivedVariant(value.small);
+        const medium = rewriteDerivedVariant(value.medium);
+        const large = rewriteDerivedVariant(value.large);
+        if (!small && !medium && !large && !value.profileId) {
+          return undefined;
+        }
+        return {
+          ...(value.profileId ? { profileId: value.profileId } : {}),
+          ...(small ? { small } : {}),
+          ...(medium ? { medium } : {}),
+          ...(large ? { large } : {})
+        };
+      };
+      const rewriteResponsive = (value?: { small?: string; medium?: string; large?: string }) => {
+        if (!value) return undefined;
+        const small = getMappedSource(value.small);
+        const medium = getMappedSource(value.medium);
+        const large = getMappedSource(value.large);
+        if (!small && !medium && !large) {
+          return undefined;
+        }
+        return {
+          ...(small ? { small } : {}),
+          ...(medium ? { medium } : {}),
+          ...(large ? { large } : {})
+        };
+      };
       const getSourceRole = (sourcePath: string): ExportAssetManifestEntry["role"] => {
         if (fontSource && sourcePath === fontSource) return "font";
         if (backgroundSources.has(sourcePath)) return "background";
@@ -3157,7 +3408,10 @@ void prewarmInteractiveDetailAssets();
         return "other";
       };
 
-      for (const pair of assetPairs) {
+      const totalAssetPairs = Math.max(1, assetPairs.length);
+      for (let assetIndex = 0; assetIndex < assetPairs.length; assetIndex += 1) {
+        const pair = assetPairs[assetIndex];
+        updateWorkflowAssetStep("export", assetIndex, totalAssetPairs, 46, 76);
         try {
           const exportPath = `assets/${pair.relativePath}`;
           const data = await readAssetBytes(slug, pair.sourcePath);
@@ -3206,13 +3460,22 @@ void prewarmInteractiveDetailAssets();
         } catch (error) {
           missingSourcePaths.add(pair.sourcePath);
           console.warn("Missing asset", pair.sourcePath, error);
+        } finally {
+          updateWorkflowAssetStep("export", assetIndex + 1, totalAssetPairs, 46, 76);
         }
       }
 
+      updateWorkflow("progressExportBundle", 80);
+
       exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
-        const normalized = normalizePath(bg.src || "");
-        const mapped = sourceToExportPath.get(normalized);
-        return { ...bg, src: mapped ?? bg.src };
+        const { originalSrc: _originalSrc, derived: _derived, ...bgBase } = bg;
+        const mappedSrc = getMappedSource(bg.src) ?? pickMappedDerivedSource(bg.derived);
+        const rewrittenDerived = rewriteDerived(bg.derived);
+        return {
+          ...bgBase,
+          src: mappedSrc ?? bg.src,
+          ...(rewrittenDerived ? { derived: rewrittenDerived } : {})
+        };
       });
 
       if (exportProject.meta.fontSource) {
@@ -3236,15 +3499,21 @@ void prewarmInteractiveDetailAssets();
           const hero = normalizePath(item.media.hero360 || "");
           const mappedHero = sourceToExportPath.get(hero);
           const responsive = sourceToResponsive.get(hero);
+          const { originalHero360: _originalHero360, responsive: _responsive, derived: _derived, ...mediaBase } =
+            item.media;
+          const mappedFromDerived = pickMappedDerivedSource(item.media.derived);
+          const rewrittenDerived = rewriteDerived(item.media.derived);
+          const rewrittenResponsive = responsive ?? rewriteResponsive(item.media.responsive);
           const nextMedia = {
-            ...item.media,
-            hero360: mappedHero ?? item.media.hero360
+            ...mediaBase,
+            hero360:
+              mappedHero ??
+              mappedFromDerived ??
+              pickMappedResponsiveSource(rewrittenResponsive) ??
+              item.media.hero360
           };
-          if (responsive) {
-            nextMedia.responsive = responsive;
-          } else if ("responsive" in nextMedia) {
-            delete (nextMedia as { responsive?: unknown }).responsive;
-          }
+          if (rewrittenResponsive) nextMedia.responsive = rewrittenResponsive;
+          if (rewrittenDerived) nextMedia.derived = rewrittenDerived;
           return {
             ...item,
             media: nextMedia
@@ -3252,6 +3521,7 @@ void prewarmInteractiveDetailAssets();
         })
       }));
 
+      updateWorkflow("progressExportBundle", 84);
       const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
       const stylesCss = buildExportStyles();
@@ -3292,6 +3562,7 @@ void prewarmInteractiveDetailAssets();
       const firstViewImageBytes = manifestEntries
         .filter((entry) => entry.firstView && entry.mime.startsWith("image/"))
         .reduce((sum, entry) => sum + entry.bytes, 0);
+      updateWorkflow("progressExportReport", 89);
       const budgets = evaluateExportBudgets({
         jsGzipBytes: await measureGzipBytes(appJs),
         cssGzipBytes: await measureGzipBytes(stylesCss),
@@ -3312,6 +3583,7 @@ void prewarmInteractiveDetailAssets();
         console.warn("Export performance budgets exceeded", diagnostics.report.budgets.checks);
       }
 
+      updateWorkflow("progressExportDownload", 95);
       const blob = createZipBlob(entries);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -3320,7 +3592,9 @@ void prewarmInteractiveDetailAssets();
       anchor.click();
       URL.revokeObjectURL(url);
       exportStatus = t("exportReady");
+      finishWorkflow("progressExportDone");
     } catch (error) {
+      failWorkflow();
       exportStatus = "";
       exportError = error instanceof Error ? error.message : t("exportFailed");
     }
@@ -4446,21 +4720,38 @@ void prewarmInteractiveDetailAssets();
   const handleProjectFile = async (event: Event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file) return;
+    if (!file || workflowMode) return;
+    const isZipFile = file.name.toLowerCase().endsWith(".zip");
     try {
       openError = "";
-      if (file.name.toLowerCase().endsWith(".zip")) {
+      exportError = "";
+      exportStatus = "";
+      if (isZipFile) {
+        const showUploadWorkflow = assetMode === "bridge";
+        if (showUploadWorkflow) {
+          startWorkflow("upload", "progressUploadStart", 5);
+          pulseWorkflow(18, "progressUploadStart", { tickIncrement: 0.12 });
+        }
         const buffer = await file.arrayBuffer();
+        if (showUploadWorkflow) {
+          clearWorkflowPulse();
+        }
         let entries: { name: string; data: Uint8Array }[] = [];
         try {
           entries = readZip(buffer);
         } catch (error) {
+          if (showUploadWorkflow) {
+            failWorkflow();
+          }
           const message = error instanceof Error ? error.message : "";
           openError = message.includes("compression") ? t("errZipCompression") : message;
           return;
         }
         const menuEntry = findMenuJsonEntry(entries);
         if (!menuEntry) {
+          if (showUploadWorkflow) {
+            failWorkflow();
+          }
           openError = t("errZipMissing");
           return;
         }
@@ -4470,28 +4761,46 @@ void prewarmInteractiveDetailAssets();
         const slug =
           slugifyName(data.meta.slug || folderName || data.meta.name || "menu") || "menu";
         data.meta.slug = slug;
-        applyImportedPaths(data, slug);
+        let preparedProject = applyImportedPaths(data, slug);
         if (assetMode === "bridge") {
           const assetEntries = getZipAssetEntries(entries, menuEntry.name);
-          for (const assetEntry of assetEntries) {
+          const totalAssets = Math.max(1, assetEntries.length);
+          for (let assetIndex = 0; assetIndex < assetEntries.length; assetIndex += 1) {
+            const assetEntry = assetEntries[assetIndex];
+            updateWorkflowAssetStep("upload", assetIndex, totalAssets, 22, 86);
             const { name, targetPath, entry } = assetEntry;
-            if (!name) continue;
+            if (!name) {
+              updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
+              continue;
+            }
             const mime = getMimeType(name);
             const dataUrl = `data:${mime};base64,${toBase64(entry.data)}`;
+            const assetTargetProgress =
+              22 + ((86 - 22) * Math.max(assetIndex, 0.5)) / Math.max(totalAssets, 1);
+            pulseWorkflow(assetTargetProgress, "progressUploadAssets", { tickIncrement: 0.1 });
             await bridgeRequest(
               "upload",
               { path: targetPath, name, data: dataUrl },
               slug
             );
+            clearWorkflowPulse();
+            updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
           }
+          updateWorkflow("progressUploadApply", 95);
           needsAssets = false;
         } else {
           needsAssets = true;
           openError = t("errZipNoBridge");
         }
-        await applyLoadedProject(data, file.name);
+        await applyLoadedProject(preparedProject, file.name);
         if (assetMode === "bridge") {
           await refreshBridgeEntries();
+          finishWorkflow("progressUploadDone");
+          void queueBridgeDerivedPreparation(slug, preparedProject, { applyIfUnchanged: true }).catch(
+            (error) => {
+              console.warn("Background derived preparation failed", error);
+            }
+          );
         }
       } else {
         const text = await file.text();
@@ -4499,8 +4808,8 @@ void prewarmInteractiveDetailAssets();
         const slug =
           slugifyName(data.meta.slug || data.meta.name || "importado") || "importado";
         data.meta.slug = slug;
-        applyImportedPaths(data, slug);
-        await applyLoadedProject(data, file.name);
+        const prepared = applyImportedPaths(data, slug);
+        await applyLoadedProject(prepared, file.name);
         if (assetMode === "bridge") {
           needsAssets = true;
           editorTab = "assets";
@@ -4509,6 +4818,9 @@ void prewarmInteractiveDetailAssets();
         }
       }
     } catch (error) {
+      if (isZipFile && assetMode === "bridge") {
+        failWorkflow();
+      }
       openError = error instanceof Error ? error.message : t("errOpenProject");
     } finally {
       input.value = "";
@@ -4942,7 +5254,9 @@ void prewarmInteractiveDetailAssets();
           bitmap.close();
           return null;
         }
-        ctx.drawImage(bitmap, 0, 0, width, height);
+        const contain = computeCenteredContainPlacement(bitmap.width, bitmap.height, width, height);
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(bitmap, contain.dx, contain.dy, contain.dw, contain.dh);
         const quality = mime === "image/png" ? undefined : 0.86;
         const blob = await new Promise<Blob | null>((resolve) =>
           canvas.toBlob(resolve, mime, quality)
@@ -5809,6 +6123,7 @@ void prewarmInteractiveDetailAssets();
                 type="button"
                 aria-label={t("newProject")}
                 title={t("newProject")}
+                disabled={workflowMode !== null}
                 on:click={createNewProject}
               >
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -5821,6 +6136,7 @@ void prewarmInteractiveDetailAssets();
                 type="button"
                 aria-label={t("open")}
                 title={t("open")}
+                disabled={workflowMode !== null}
                 on:click={openProjectDialog}
               >
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -5833,6 +6149,7 @@ void prewarmInteractiveDetailAssets();
                 type="button"
                 aria-label={t("save")}
                 title={t("save")}
+                disabled={workflowMode !== null}
                 on:click={saveProject}
               >
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -5846,6 +6163,7 @@ void prewarmInteractiveDetailAssets();
                 type="button"
                 aria-label={t("export")}
                 title={t("export")}
+                disabled={workflowMode !== null}
                 on:click={exportStaticSite}
               >
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -5864,6 +6182,25 @@ void prewarmInteractiveDetailAssets();
             {/if}
             {#if exportError}
               <p class="mt-2 text-xs text-red-300">{exportError}</p>
+            {/if}
+            {#if workflowMode}
+              <div class="mt-3 rounded-lg border border-emerald-400/25 bg-emerald-950/30 p-2">
+                <p class="text-[11px] font-medium text-emerald-100">
+                  {workflowMode === "save"
+                    ? t("progressSaveLabel")
+                    : workflowMode === "upload"
+                      ? t("progressUploadLabel")
+                      : t("progressExportLabel")}
+                </p>
+                <p class="mt-0.5 text-[11px] text-emerald-200">{workflowStep}</p>
+                <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/25">
+                  <div
+                    class="h-full rounded-full bg-emerald-300 transition-all duration-300 ease-out"
+                    style={`width:${Math.max(3, Math.min(100, workflowProgress))}%`}
+                  ></div>
+                </div>
+                <p class="mt-1 text-[10px] text-emerald-200/90">{workflowProgress.toFixed(1)}%</p>
+              </div>
             {/if}
 
             {#if draft}

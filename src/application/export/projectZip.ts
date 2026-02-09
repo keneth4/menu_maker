@@ -55,6 +55,50 @@ const collectDerivedPaths = (assets: Set<string>, derived?: DerivedMediaMap) => 
   collectDerivedVariantPaths(assets, derived.large);
 };
 
+const normalizeCollectedAssetPaths = (
+  assets: Set<string>,
+  normalizePath: (value: string) => string
+) =>
+  Array.from(assets)
+    .map((path) => normalizePath(path))
+    .filter((path) => path && !path.startsWith("http"));
+
+export const collectExportProjectAssetPaths = (
+  project: MenuProject,
+  normalizePath: (value: string) => string
+) => {
+  const assets = new Set<string>();
+  if (project.meta.fontSource) assets.add(project.meta.fontSource);
+  if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
+
+  project.backgrounds.forEach((bg) => {
+    const derivedSources = new Set<string>();
+    collectDerivedPaths(derivedSources, bg.derived);
+    if (derivedSources.size > 0) {
+      derivedSources.forEach((source) => assets.add(source));
+      return;
+    }
+    if (bg.src) assets.add(bg.src);
+  });
+
+  project.categories.forEach((category) => {
+    category.items.forEach((item) => {
+      const derivedSources = new Set<string>();
+      collectDerivedPaths(derivedSources, item.media.derived);
+      if (derivedSources.size > 0) {
+        derivedSources.forEach((source) => assets.add(source));
+        return;
+      }
+      if (item.media.responsive?.small) assets.add(item.media.responsive.small);
+      if (item.media.responsive?.medium) assets.add(item.media.responsive.medium);
+      if (item.media.responsive?.large) assets.add(item.media.responsive.large);
+      if (item.media.hero360) assets.add(item.media.hero360);
+    });
+  });
+
+  return normalizeCollectedAssetPaths(assets, normalizePath);
+};
+
 export const collectSaveProjectAssetPaths = (
   project: MenuProject,
   normalizePath: (value: string) => string
@@ -83,9 +127,7 @@ export const collectSaveProjectAssetPaths = (
     });
   });
 
-  return Array.from(assets)
-    .map((path) => normalizePath(path))
-    .filter((path) => path && !path.startsWith("http"));
+  return normalizeCollectedAssetPaths(assets, normalizePath);
 };
 
 export const buildProjectAssetPairs = (
