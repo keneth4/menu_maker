@@ -9,3 +9,5 @@ public/projects/*
 !public/projects/index.json
 !public/projects/sample-cafebrunch-menu/
 !public/projects/sample-cafebrunch-menu/**
+!public/projects/sample-jukebox-smoke/
+!public/projects/sample-jukebox-smoke/**

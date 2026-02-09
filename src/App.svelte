@@ -37,25 +37,18 @@
   import { formatMenuPrice } from "./core/menu/pricing";
   import { buildStartupAssetPlan, collectItemPrioritySources } from "./core/menu/startupAssets";
   import {
-    FOCUS_ROWS_TOUCH_DELTA_SCALE,
-    FOCUS_ROWS_TOUCH_INTENT_THRESHOLD,
-    FOCUS_ROWS_WHEEL_SETTLE_MS,
-    FOCUS_ROWS_WHEEL_STEP_THRESHOLD,
     INTERACTIVE_GIF_MAX_FRAMES,
     INTERACTIVE_KEEP_ORIGINAL_PLACEMENT,
-    JUKEBOX_TOUCH_DELTA_SCALE,
-    JUKEBOX_TOUCH_INTENT_THRESHOLD,
-    JUKEBOX_WHEEL_SETTLE_MS,
-    JUKEBOX_WHEEL_STEP_THRESHOLD,
-    getCircularOffset,
-    getFocusRowCardStyle,
-    getFocusRowRenderItems,
-    getJukeboxCardStyle,
-    getJukeboxRenderItems,
-    normalizeFocusRowWheelDelta,
-    normalizeJukeboxWheelDelta,
     wrapCarouselIndex
   } from "./core/templates/previewInteraction";
+  import {
+    getTemplateCapabilities,
+    getTemplateStrategy,
+    resolveTemplateId,
+    type TemplateCapabilities,
+    type TemplateId,
+    type TemplateStrategy
+  } from "./core/templates/registry";
   import { templateOptions } from "./core/templates/templateOptions";
   import { createBridgeAssetClient } from "./infrastructure/bridge/client";
   import {
@@ -111,7 +104,9 @@
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
   let deviceMode: "mobile" | "desktop" = "desktop";
-  let isJukeboxTemplate = false;
+  let activeTemplateId: TemplateId = "focus-rows";
+  let activeTemplateCapabilities: TemplateCapabilities = getTemplateCapabilities(activeTemplateId);
+  let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy(activeTemplateId);
   let editorTab: "info" | "assets" | "edit" | "wizard" = "info";
   let wizardStep = 0;
   let projectFileInput: HTMLInputElement | null = null;
@@ -137,27 +132,15 @@
   const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
   let interactivePrewarmSignature = "";
   let carouselActive: Record<string, number> = {};
-  let focusRowSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
-  let focusRowTouchState: Record<
+  let carouselSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
+  let carouselTouchState: Record<
     string,
     | {
         touchId: number;
         startX: number;
         startY: number;
-        lastX: number;
-        axis: "pending" | "vertical" | "horizontal";
-      }
-    | null
-  > = {};
-  let jukeboxWheelSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
-  let jukeboxTouchState: Record<
-    string,
-    | {
-        touchId: number;
-        startX: number;
-        startY: number;
-        lastY: number;
-        axis: "pending" | "vertical" | "horizontal";
+        lastPrimary: number;
+        axis: "pending" | "primary" | "secondary";
       }
     | null
   > = {};
@@ -608,7 +591,11 @@
       void prewarmInteractiveDetailAssets(activeProject);
     }
   }
-  $: isJukeboxTemplate = activeProject?.meta.template === "jukebox";
+  $: {
+    activeTemplateId = resolveTemplateId(activeProject?.meta.template);
+    activeTemplateCapabilities = getTemplateCapabilities(activeTemplateId);
+    activeTemplateStrategy = getTemplateStrategy(activeTemplateId);
+  }
   $: assetProjectReadOnly = isProtectedAssetProjectSlug(
     draft?.meta.slug || activeSlug || "nuevo-proyecto"
   );
@@ -725,6 +712,11 @@
   const getJukeboxScrollHint = (lang = locale) => getInstructionCopy("jukeboxHint", lang);
 
   const getFocusRowsScrollHint = (lang = locale) => getInstructionCopy("focusRowsHint", lang);
+
+  const getTemplateScrollHint = (
+    lang = locale,
+    templateId: string = activeTemplateId
+  ) => getInstructionCopy(getTemplateCapabilities(templateId).instructionHintKey, lang);
 
   const isProtectedAssetProjectSlug = (slug: string) => READ_ONLY_ASSET_PROJECTS.has(slug);
 
@@ -3295,20 +3287,13 @@ void prewarmInteractiveDetailAssets();
   ];
 
   const clearCarouselWheelState = () => {
-    Object.values(jukeboxWheelSnapTimeout).forEach((timer) => {
+    Object.values(carouselSnapTimeout).forEach((timer) => {
       if (timer) {
         clearTimeout(timer);
       }
     });
-    Object.values(focusRowSnapTimeout).forEach((timer) => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    });
-    jukeboxWheelSnapTimeout = {};
-    jukeboxTouchState = {};
-    focusRowSnapTimeout = {};
-    focusRowTouchState = {};
+    carouselSnapTimeout = {};
+    carouselTouchState = {};
   };
 
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
@@ -4538,7 +4523,7 @@ void prewarmInteractiveDetailAssets();
 
   const handleMenuScroll = (event: Event) => {
     const container = event.currentTarget as HTMLElement;
-    if (isJukeboxTemplate) {
+    if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
       if (container.scrollWidth <= container.clientWidth + 4) return;
       if (sectionSnapTimeout) {
         clearTimeout(sectionSnapTimeout);
@@ -4548,7 +4533,7 @@ void prewarmInteractiveDetailAssets();
         if (closestIndex >= 0) {
           centerSectionHorizontally(container, closestIndex, "smooth");
         }
-      }, 170);
+      }, activeTemplateCapabilities.sectionSnapDelayMs);
       return;
     }
     if (sectionFocusRaf) {
@@ -4562,7 +4547,7 @@ void prewarmInteractiveDetailAssets();
     }
     sectionSnapTimeout = setTimeout(() => {
       snapSectionToCenter(container);
-    }, 180);
+    }, activeTemplateCapabilities.sectionSnapDelayMs);
   };
 
   const syncCarousels = async () => {
@@ -4571,7 +4556,7 @@ void prewarmInteractiveDetailAssets();
     if (menuScroll) {
       applySectionFocus(menuScroll);
     }
-    if (isJukeboxTemplate || !activeProject) {
+    if (activeTemplateCapabilities.carousel.primaryAxis === "vertical" || !activeProject) {
       return;
     }
     const next = { ...carouselActive };
@@ -4613,6 +4598,7 @@ void prewarmInteractiveDetailAssets();
   };
 
   const shiftSection = (direction: number) => {
+    if (activeTemplateCapabilities.sectionSnapAxis !== "horizontal") return;
     const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
     if (!container) return;
     const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
@@ -5115,11 +5101,10 @@ void prewarmInteractiveDetailAssets();
     options: { source?: "wizard" | "project" } = {}
   ) => {
     if (!draft) return;
-    draft.meta.template = templateId;
-    const template = templateOptions.find((item) => item.id === templateId);
-    if (!template) return;
+    const resolvedTemplateId = resolveTemplateId(templateId);
+    draft.meta.template = resolvedTemplateId;
     if (options.source === "wizard") {
-      wizardShowcaseProject = await buildWizardShowcaseProject(templateId);
+      wizardShowcaseProject = await buildWizardShowcaseProject(resolvedTemplateId);
       syncWizardShowcaseVisibility();
     } else {
       wizardShowcaseProject = null;
@@ -5291,132 +5276,68 @@ void prewarmInteractiveDetailAssets();
     carouselActive = { ...carouselActive, [categoryId]: next };
   };
 
-  const queueFocusRowSnap = (categoryId: string, count: number) => {
+  const queueCarouselSnap = (categoryId: string, count: number) => {
     if (count <= 1) return;
-    if (focusRowSnapTimeout[categoryId]) {
-      clearTimeout(focusRowSnapTimeout[categoryId] ?? undefined);
+    if (carouselSnapTimeout[categoryId]) {
+      clearTimeout(carouselSnapTimeout[categoryId] ?? undefined);
     }
     const settleTimer = window.setTimeout(() => {
       const current = carouselActive[categoryId] ?? 0;
       const normalized = wrapCarouselIndex(Math.round(current), count);
       carouselActive = { ...carouselActive, [categoryId]: normalized };
-      focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: null };
-    }, FOCUS_ROWS_WHEEL_SETTLE_MS);
-    focusRowSnapTimeout = { ...focusRowSnapTimeout, [categoryId]: settleTimer };
+      carouselSnapTimeout = { ...carouselSnapTimeout, [categoryId]: null };
+    }, activeTemplateCapabilities.carousel.wheelSettleMs);
+    carouselSnapTimeout = { ...carouselSnapTimeout, [categoryId]: settleTimer };
   };
 
-  const applyFocusRowDelta = (categoryId: string, count: number, delta: number) => {
+  const applyCarouselDelta = (categoryId: string, count: number, delta: number) => {
     if (!delta || count <= 1) return;
     const current = carouselActive[categoryId] ?? 0;
-    const next = wrapCarouselIndex(current + delta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
+    const next = wrapCarouselIndex(
+      current + delta / activeTemplateCapabilities.carousel.wheelStepThreshold,
+      count
+    );
     carouselActive = { ...carouselActive, [categoryId]: next };
-    queueFocusRowSnap(categoryId, count);
-  };
-
-  const queueJukeboxSnap = (categoryId: string, count: number) => {
-    if (count <= 1) return;
-    if (jukeboxWheelSnapTimeout[categoryId]) {
-      clearTimeout(jukeboxWheelSnapTimeout[categoryId] ?? undefined);
-    }
-    const settleTimer = window.setTimeout(() => {
-      const current = carouselActive[categoryId] ?? 0;
-      const normalized = wrapCarouselIndex(Math.round(current), count);
-      carouselActive = { ...carouselActive, [categoryId]: normalized };
-      jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: null };
-    }, JUKEBOX_WHEEL_SETTLE_MS);
-    jukeboxWheelSnapTimeout = { ...jukeboxWheelSnapTimeout, [categoryId]: settleTimer };
-  };
-
-  const applyJukeboxDelta = (categoryId: string, count: number, delta: number) => {
-    if (!delta || count <= 1) return;
-    const current = carouselActive[categoryId] ?? 0;
-    const next = wrapCarouselIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
-    carouselActive = { ...carouselActive, [categoryId]: next };
-    queueJukeboxSnap(categoryId, count);
+    queueCarouselSnap(categoryId, count);
   };
 
   const handleCarouselWheel = (categoryId: string, event: WheelEvent) => {
-    if (isJukeboxTemplate) {
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      if (count <= 1) return;
-      const delta = normalizeJukeboxWheelDelta(event);
-      if (!delta) return;
-      applyJukeboxDelta(categoryId, count, delta);
-      return;
-    }
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+    const primaryAxis = activeTemplateCapabilities.carousel.primaryAxis;
+    const isPrimaryDelta =
+      primaryAxis === "vertical"
+        ? Math.abs(event.deltaY) > Math.abs(event.deltaX)
+        : Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!isPrimaryDelta) return;
     event.preventDefault();
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
     if (count <= 1) return;
-    const delta = normalizeFocusRowWheelDelta(event);
+    const delta = activeTemplateStrategy.normalizeWheelDelta(event);
     if (!delta) return;
-    applyFocusRowDelta(categoryId, count, delta);
+    applyCarouselDelta(categoryId, count, delta);
   };
 
   const handleCarouselTouchStart = (categoryId: string, event: TouchEvent) => {
     const touch = event.changedTouches[0];
     if (!touch) return;
-    if (isJukeboxTemplate) {
-      jukeboxTouchState = {
-        ...jukeboxTouchState,
-        [categoryId]: {
-          touchId: touch.identifier,
-          startX: touch.clientX,
-          startY: touch.clientY,
-          lastY: touch.clientY,
-          axis: "pending"
-        }
-      };
-      return;
-    }
-    focusRowTouchState = {
-      ...focusRowTouchState,
+    const lastPrimary =
+      activeTemplateCapabilities.carousel.primaryAxis === "vertical"
+        ? touch.clientY
+        : touch.clientX;
+    carouselTouchState = {
+      ...carouselTouchState,
       [categoryId]: {
         touchId: touch.identifier,
         startX: touch.clientX,
         startY: touch.clientY,
-        lastX: touch.clientX,
+        lastPrimary,
         axis: "pending"
       }
     };
   };
 
   const handleCarouselTouchMove = (categoryId: string, event: TouchEvent) => {
-    if (isJukeboxTemplate) {
-      const state = jukeboxTouchState[categoryId];
-      if (!state) return;
-      const category = activeProject?.categories.find((item) => item.id === categoryId);
-      const count = category?.items.length ?? 0;
-      if (count <= 1) return;
-      const trackedTouch = Array.from(event.touches).find(
-        (touch) => touch.identifier === state.touchId
-      );
-      if (!trackedTouch) return;
-
-      const totalDx = trackedTouch.clientX - state.startX;
-      const totalDy = trackedTouch.clientY - state.startY;
-      if (
-        state.axis === "pending" &&
-        Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= JUKEBOX_TOUCH_INTENT_THRESHOLD
-      ) {
-        state.axis = Math.abs(totalDy) >= Math.abs(totalDx) ? "vertical" : "horizontal";
-      }
-
-      if (state.axis !== "vertical") return;
-
-      event.preventDefault();
-      const deltaY = trackedTouch.clientY - state.lastY;
-      state.lastY = trackedTouch.clientY;
-      if (Math.abs(deltaY) < 0.2) return;
-      applyJukeboxDelta(categoryId, count, -deltaY * JUKEBOX_TOUCH_DELTA_SCALE);
-      return;
-    }
-
-    const state = focusRowTouchState[categoryId];
+    const state = carouselTouchState[categoryId];
     if (!state) return;
     const category = activeProject?.categories.find((item) => item.id === categoryId);
     const count = category?.items.length ?? 0;
@@ -5428,40 +5349,39 @@ void prewarmInteractiveDetailAssets();
 
     const totalDx = trackedTouch.clientX - state.startX;
     const totalDy = trackedTouch.clientY - state.startY;
+    const primaryAxis = activeTemplateCapabilities.carousel.primaryAxis;
+    const primaryMagnitude = primaryAxis === "vertical" ? Math.abs(totalDy) : Math.abs(totalDx);
+    const secondaryMagnitude = primaryAxis === "vertical" ? Math.abs(totalDx) : Math.abs(totalDy);
     if (
       state.axis === "pending" &&
-      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >= FOCUS_ROWS_TOUCH_INTENT_THRESHOLD
+      Math.max(Math.abs(totalDx), Math.abs(totalDy)) >=
+        activeTemplateCapabilities.carousel.touchIntentThreshold
     ) {
-      state.axis = Math.abs(totalDx) >= Math.abs(totalDy) ? "horizontal" : "vertical";
+      state.axis = primaryMagnitude >= secondaryMagnitude ? "primary" : "secondary";
     }
 
-    if (state.axis !== "horizontal") return;
+    if (state.axis !== "primary") return;
 
     event.preventDefault();
-    const deltaX = trackedTouch.clientX - state.lastX;
-    state.lastX = trackedTouch.clientX;
-    if (Math.abs(deltaX) < 0.2) return;
-    applyFocusRowDelta(categoryId, count, -deltaX * FOCUS_ROWS_TOUCH_DELTA_SCALE);
+    const currentPrimary = primaryAxis === "vertical" ? trackedTouch.clientY : trackedTouch.clientX;
+    const delta = currentPrimary - state.lastPrimary;
+    state.lastPrimary = currentPrimary;
+    if (Math.abs(delta) < 0.2) return;
+    applyCarouselDelta(
+      categoryId,
+      count,
+      -delta * activeTemplateCapabilities.carousel.touchDeltaScale
+    );
   };
 
   const handleCarouselTouchEnd = (categoryId: string, event: TouchEvent) => {
-    if (isJukeboxTemplate) {
-      const state = jukeboxTouchState[categoryId];
-      if (!state) return;
-      const ended = Array.from(event.changedTouches).some(
-        (touch) => touch.identifier === state.touchId
-      );
-      if (!ended) return;
-      jukeboxTouchState = { ...jukeboxTouchState, [categoryId]: null };
-      return;
-    }
-    const state = focusRowTouchState[categoryId];
+    const state = carouselTouchState[categoryId];
     if (!state) return;
     const ended = Array.from(event.changedTouches).some(
       (touch) => touch.identifier === state.touchId
     );
     if (!ended) return;
-    focusRowTouchState = { ...focusRowTouchState, [categoryId]: null };
+    carouselTouchState = { ...carouselTouchState, [categoryId]: null };
   };
 
   const openDish = (categoryId: string, itemId: string) => {
@@ -5998,15 +5918,13 @@ void prewarmInteractiveDetailAssets();
         {previewBackgrounds}
         {activeBackgroundIndex}
         {isBlankMenu}
-        {isJukeboxTemplate}
         {carouselActive}
         {deviceMode}
         {previewFontStack}
         {t}
         {textOf}
         {getLoadingLabel}
-        {getFocusRowsScrollHint}
-        {getJukeboxScrollHint}
+        {getTemplateScrollHint}
         {getCarouselImageSource}
         {buildResponsiveSrcSetFromMedia}
         {getMenuTerm}

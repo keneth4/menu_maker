@@ -289,6 +289,24 @@ Added in this phase:
 Validation:
 - `npm run test:perf` asserts export zip includes diagnostics and that no budget check is failing.
 
+## 14) Template System Readiness (Phase 8)
+
+Added in this phase:
+- capability matrix + strategy registry:
+  - `src/core/templates/registry.ts`
+- template options now derive from the capability matrix:
+  - `src/core/templates/templateOptions.ts`
+- preview shell rendering now uses strategy interface methods instead of hardcoded template branches:
+  - `src/ui/components/PreviewCanvas.svelte`
+- interaction handlers in app shell now use template capabilities (axis, thresholds, settle timing) instead of `focus-rows`/`jukebox` conditionals:
+  - `src/App.svelte`
+- fixture-backed template smoke path added for strategy validation:
+  - `public/projects/sample-jukebox-smoke/menu.json`
+
+Validation:
+- `src/core/templates/registry.test.ts` validates registry coverage and fixture paths.
+- `tests/e2e/app.spec.ts` includes a template fixture smoke test for the `jukebox` strategy shell.
+
 ---
 
 If this file drifts from implementation, prefer updating this README and then synchronizing planning docs so product, engineering, and refactor work stay aligned.

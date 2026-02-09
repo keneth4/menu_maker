@@ -231,6 +231,13 @@ Exit criteria:
 - Ensure adding new template does not require editing core UI shell.
 - Add at least one template smoke test fixture path.
 
+Status:
+- Implemented on this branch:
+  - capability matrix + strategy registry in `src/core/templates/registry.ts`,
+  - `PreviewCanvas` and app interaction handlers now consume template capabilities/strategy interfaces,
+  - template smoke fixture path added via `public/projects/sample-jukebox-smoke/menu.json`,
+  - e2e smoke coverage includes fixture-based jukebox strategy shell validation.
+
 Exit criteria:
 - extensibility achieved with low coupling,
 - existing template behavior unchanged.

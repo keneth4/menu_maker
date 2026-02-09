@@ -1,5 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { getTemplateCapabilities } from "../../src/core/templates/registry";
 import { createZipBlob, readZip } from "../../src/lib/zip";
 
 type ProjectFixture = {
@@ -94,6 +96,12 @@ const getProjectNameInput = (page: Page) =>
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
     .locator("input");
 
+const resolveTemplateSmokeFixturePath = (templateId: string) =>
+  path.resolve(
+    "public",
+    getTemplateCapabilities(templateId).smokeFixturePath.replace(/^\/+/, "")
+  );
+
 test("landing shows Menu Maker header", async ({ page }) => {
   await disableBridgeMode(page);
   await page.goto("/");
@@ -123,6 +131,15 @@ test("open project from ZIP file", async ({ page }, testInfo) => {
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
   await expect(getProjectNameInput(page)).toHaveValue("ZIP Smoke Project");
+});
+
+test("template smoke fixture path renders jukebox strategy shell", async ({ page }) => {
+  const fixturePath = resolveTemplateSmokeFixturePath("jukebox");
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+  await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+  await expect(page.locator(".section-nav")).toBeVisible();
 });
 
 test("save project and export static site create zip downloads", async ({ page }) => {

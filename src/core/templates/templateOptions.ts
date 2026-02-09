@@ -1,18 +1,15 @@
+import { templateCapabilityList } from "./registry";
+
 export type TemplateOption = {
   id: string;
   label: Record<string, string>;
   categories: Record<string, string[]>;
+  smokeFixturePath: string;
 };
 
-export const templateOptions: TemplateOption[] = [
-  {
-    id: "focus-rows",
-    label: { es: "Filas En Foco", en: "In Focus Rows" },
-    categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-  },
-  {
-    id: "jukebox",
-    label: { es: "Jukebox", en: "Jukebox" },
-    categories: { es: ["Cafe", "Brunch"], en: ["Cafe", "Brunch"] }
-  }
-];
+export const templateOptions: TemplateOption[] = templateCapabilityList.map((capability) => ({
+  id: capability.id,
+  label: capability.label,
+  categories: capability.categories,
+  smokeFixturePath: capability.smokeFixturePath
+}));

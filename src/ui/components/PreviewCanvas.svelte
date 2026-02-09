@@ -1,11 +1,11 @@
 <script lang="ts">
   import {
-    getCircularOffset,
-    getFocusRowCardStyle,
-    getFocusRowRenderItems,
-    getJukeboxCardStyle,
-    getJukeboxRenderItems
-  } from "../../core/templates/previewInteraction";
+    getTemplateCapabilities,
+    getTemplateStrategy,
+    resolveTemplateId,
+    type TemplateCapabilities,
+    type TemplateStrategy
+  } from "../../core/templates/registry";
   import type { MenuItem, MenuProject } from "../../lib/types";
 
   type PreviewBackground = {
@@ -22,7 +22,6 @@
   export let activeBackgroundIndex = 0;
   export let isBlankMenu = false;
   export let locale = "es";
-  export let isJukeboxTemplate = false;
   export let carouselActive: Record<string, number> = {};
   export let deviceMode: "mobile" | "desktop" = "desktop";
   export let previewFontStack = "";
@@ -31,8 +30,7 @@
   export let textOf: (value: Record<string, string> | undefined, fallback?: string) => string =
     () => "";
   export let getLoadingLabel: (locale: string) => string = () => "";
-  export let getFocusRowsScrollHint: (locale: string) => string = () => "";
-  export let getJukeboxScrollHint: (locale: string) => string = () => "";
+  export let getTemplateScrollHint: (locale: string, templateId: string) => string = () => "";
   export let getCarouselImageSource: (item: MenuItem) => string = () => "";
   export let buildResponsiveSrcSetFromMedia: (item: MenuItem) => string | undefined = () =>
     undefined;
@@ -49,12 +47,21 @@
   export let handleCarouselTouchMove: (categoryId: string, event: TouchEvent) => void = () => {};
   export let handleCarouselTouchEnd: (categoryId: string, event: TouchEvent) => void = () => {};
   export let openDish: (categoryId: string, itemId: string) => void = () => {};
+
+  let activeTemplateCapabilities: TemplateCapabilities = getTemplateCapabilities("focus-rows");
+  let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy("focus-rows");
+
+  $: {
+    const templateId = resolveTemplateId(activeProject?.meta.template);
+    activeTemplateCapabilities = getTemplateCapabilities(templateId);
+    activeTemplateStrategy = getTemplateStrategy(templateId);
+  }
 </script>
 
 <section class="preview-panel {layoutMode}">
   <section class="preview-shell {effectivePreview}">
     <section
-      class={`menu-preview template-${activeProject.meta.template || "focus-rows"} ${
+      class={`menu-preview template-${activeTemplateCapabilities.id} ${
         previewStartupLoading ? "is-loading" : ""
       }`}
       style={`--menu-font:${previewFontStack};`}
@@ -104,15 +111,15 @@
           </div>
         </header>
 
-        {#if !isJukeboxTemplate}
+        {#if activeTemplateCapabilities.showFocusRowsHint}
           <div class="focus-rows-hint" aria-hidden="true">
             <span class="focus-rows-hint__label">
-              {getFocusRowsScrollHint(locale)}
+              {getTemplateScrollHint(locale, activeTemplateCapabilities.id)}
             </span>
           </div>
         {/if}
 
-        {#if isJukeboxTemplate && activeProject.categories.length > 1}
+        {#if activeTemplateCapabilities.showSectionNav && activeProject.categories.length > 1}
           <div class="section-nav">
             <button
               class="section-nav__btn prev"
@@ -122,7 +129,9 @@
             >
               <span aria-hidden="true">‹</span>
             </button>
-            <span class="section-nav__label">{getJukeboxScrollHint(locale)}</span>
+            <span class="section-nav__label">
+              {getTemplateScrollHint(locale, activeTemplateCapabilities.id)}
+            </span>
             <button
               class="section-nav__btn next"
               type="button"
@@ -136,17 +145,16 @@
 
         <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
           {#each activeProject.categories as category}
-            {@const renderItems = isJukeboxTemplate
-              ? getJukeboxRenderItems(category.items)
-              : getFocusRowRenderItems(category.items)}
+            {@const renderItems = activeTemplateStrategy.getRenderItems(category.items)}
             {@const activeIndex = carouselActive[category.id] ?? 0}
-            {@const hideThreshold = Math.max(1.6, category.items.length / 2 - 0.25)}
             <section class="menu-section">
               <div class="menu-section__head">
                 <p class="menu-section__title">{textOf(category.name)}</p>
                 <span class="menu-section__count">{category.items.length} items</span>
               </div>
-              {#if deviceMode === "desktop" && category.items.length > 1 && !isJukeboxTemplate}
+              {#if deviceMode === "desktop" &&
+              category.items.length > 1 &&
+              activeTemplateCapabilities.showDesktopCarouselNav}
                 <div class="carousel-nav">
                   <button
                     class="carousel-nav__btn prev"
@@ -177,40 +185,19 @@
                 data-category-id={category.id}
               >
                 {#each renderItems as entry (entry.key)}
-                  {@const distance = Math.abs(
-                    getCircularOffset(activeIndex, entry.sourceIndex, category.items.length)
+                  {@const stateClass = activeTemplateStrategy.getCardStateClass(
+                    activeIndex,
+                    entry.sourceIndex,
+                    category.items.length
                   )}
-                  {@const stateClass = isJukeboxTemplate
-                    ? distance >= hideThreshold
-                      ? "is-hidden"
-                      : distance < 0.5
-                        ? "active"
-                        : distance < 1.25
-                          ? "near"
-                          : "far"
-                    : distance >= hideThreshold
-                      ? "is-hidden"
-                      : distance < 0.5
-                        ? "active"
-                        : distance < 1.5
-                          ? "near"
-                          : "far"}
                   <button
                     class={`carousel-card ${stateClass}`}
                     type="button"
-                    style={
-                      isJukeboxTemplate
-                        ? getJukeboxCardStyle(
-                            activeIndex,
-                            entry.sourceIndex,
-                            category.items.length
-                          )
-                        : getFocusRowCardStyle(
-                            activeIndex,
-                            entry.sourceIndex,
-                            category.items.length
-                          )
-                    }
+                    style={activeTemplateStrategy.getCardStyle(
+                      activeIndex,
+                      entry.sourceIndex,
+                      category.items.length
+                    )}
                     on:click={() => openDish(category.id, entry.item.id)}
                   >
                     <div class="carousel-media">

@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "slug": "sample-jukebox-smoke",
+    "name": "Sample Jukebox Smoke",
+    "restaurantName": {
+      "es": "Smoke Bistro",
+      "en": "Smoke Bistro"
+    },
+    "title": {
+      "es": "Menu de Prueba",
+      "en": "Smoke Menu"
+    },
+    "fontFamily": "Fraunces",
+    "fontSource": "",
+    "template": "jukebox",
+    "locales": ["es", "en"],
+    "defaultLocale": "es",
+    "currency": "USD",
+    "currencyPosition": "left"
+  },
+  "backgrounds": [],
+  "categories": [
+    {
+      "id": "cat-coffee",
+      "name": {
+        "es": "Cafe",
+        "en": "Coffee"
+      },
+      "items": [
+        {
+          "id": "item-americano",
+          "name": {
+            "es": "Americano",
+            "en": "Americano"
+          },
+          "description": {
+            "es": "Cafe tostado",
+            "en": "Roasted coffee"
+          },
+          "longDescription": {
+            "es": "Cafe tostado de origen mixto.",
+            "en": "Roasted coffee from mixed origins."
+          },
+          "price": {
+            "amount": 4,
+            "currency": "USD"
+          },
+          "allergens": [],
+          "vegan": true,
+          "media": {
+            "hero360": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "cat-bakery",
+      "name": {
+        "es": "Panaderia",
+        "en": "Bakery"
+      },
+      "items": [
+        {
+          "id": "item-croissant",
+          "name": {
+            "es": "Croissant",
+            "en": "Croissant"
+          },
+          "description": {
+            "es": "Hojaldre clasico",
+            "en": "Classic puff pastry"
+          },
+          "longDescription": {
+            "es": "Croissant de mantequilla artesanal.",
+            "en": "Artisanal butter croissant."
+          },
+          "price": {
+            "amount": 6,
+            "currency": "USD"
+          },
+          "allergens": [],
+          "vegan": false,
+          "media": {
+            "hero360": ""
+          }
+        }
+      ]
+    }
+  ],
+  "sound": {
+    "enabled": false,
+    "theme": "bar-amber",
+    "volume": 0.6,
+    "map": {}
+  }
+}
+
