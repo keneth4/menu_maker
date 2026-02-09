@@ -16,7 +16,6 @@ services:
     volumes:
       - ./:/app
       - menumaker_node_modules:/app/node_modules
-      - menumaker_projects:/app/public/projects
     networks:
       default:
         aliases:
@@ -48,4 +47,3 @@ services:
 
 volumes:
   menumaker_node_modules:
-  menumaker_projects:

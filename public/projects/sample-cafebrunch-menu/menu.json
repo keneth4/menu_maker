@@ -93,7 +93,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -139,7 +140,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/b&w-cookies.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/b&w-cookies.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -185,7 +187,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/all-berry-donut.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/all-berry-donut.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -231,7 +234,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/blue-berry-pancakes.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/blue-berry-pancakes.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -277,7 +281,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/caramel-pie.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/caramel-pie.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -323,7 +328,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/full-cheescake.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/full-cheescake.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -369,7 +375,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/raspberry-cheesecake-pie.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/raspberry-cheesecake-pie.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -415,7 +422,8 @@
           ],
           "vegan": true,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/ice-cream-sandwich.webp"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/ice-cream-sandwich.webp",
+            "rotationDirection": "ccw"
           }
         }
       ]
@@ -463,7 +471,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-bacon.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-bacon.gif",
+            "rotationDirection": "ccw"
           }
         },
         {
@@ -502,7 +511,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/jerk-chicken-sandwich.webp"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/jerk-chicken-sandwich.webp",
+            "rotationDirection": "ccw"
           }
         },
         {
@@ -541,7 +551,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-filete-de-pollo-empanizado.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/sandwich-filete-de-pollo-empanizado.gif",
+            "rotationDirection": "cw"
           }
         },
         {
@@ -573,7 +584,8 @@
           ],
           "vegan": false,
           "media": {
-            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/torta-de-jamon-de-pavo.gif"
+            "hero360": "/projects/sample-cafebrunch-menu/assets/dishes/torta-de-jamon-de-pavo.gif",
+            "rotationDirection": "cw"
           }
         }
       ]

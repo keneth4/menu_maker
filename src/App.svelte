@@ -35,6 +35,7 @@
   import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
   import { normalizeProject } from "./core/menu/normalization";
   import { formatMenuPrice } from "./core/menu/pricing";
+  import { applyWizardDemoRotationDirections } from "./core/menu/wizardDemoRotation";
   import { buildStartupAssetPlan, collectItemPrioritySources } from "./core/menu/startupAssets";
   import {
     INTERACTIVE_GIF_MAX_FRAMES,
@@ -782,8 +783,11 @@
       return cloneProject(templateDemoProjectCache);
     }
     if (!templateDemoProjectPromise) {
-      templateDemoProjectPromise = loadProject(TEMPLATE_DEMO_PROJECT_SLUG)
+      templateDemoProjectPromise = loadProject(TEMPLATE_DEMO_PROJECT_SLUG, {
+        cacheBust: "wizard-demo-rotation-v1"
+      })
         .then((value) => normalizeProject(value))
+        .then((value) => applyWizardDemoRotationDirections(value))
         .then((value) => {
           templateDemoProjectCache = cloneProject(value);
           return cloneProject(value);
@@ -5241,6 +5245,9 @@ void prewarmInteractiveDetailAssets();
     const resolvedTemplateId = resolveTemplateId(templateId);
     draft.meta.template = resolvedTemplateId;
     if (options.source === "wizard") {
+      // Reload demo data so wizard preview reflects latest demo rotation metadata updates.
+      templateDemoProjectCache = null;
+      templateDemoProjectPromise = null;
       wizardShowcaseProject = await buildWizardShowcaseProject(resolvedTemplateId);
       syncWizardShowcaseVisibility();
     } else {
