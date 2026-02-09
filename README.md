@@ -193,9 +193,8 @@ Export rules:
 - Main behavior is still concentrated in `src/App.svelte`.
 - Asset bridge contract is in `vite.config.ts`.
 - Zip utilities live in `src/lib/zip.ts`.
-- Template and roadmap strategy docs:
+- Template behavior reference doc:
   - `TEMPLATE_BEHAVIOR_GUIDE.md`
-  - `TEMPLATE_ROADMAP.md`
 
 ## 10) Future Development (Recommended)
 
