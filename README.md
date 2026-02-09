@@ -142,6 +142,22 @@ MenuMaker supports three runtime modes:
 - `bridge`: Vite dev server API under `/api/assets/*`,
 - `none`: no writable asset backend active.
 
+Project storage layout (served under `/projects/<slug>` from `public/projects/<slug>`):
+```text
+public/projects/
+  index.json
+  <slug>/
+    menu.json
+    assets/
+      backgrounds/
+      dishes/
+      sounds/
+```
+
+Repository policy:
+- keep `public/projects/index.json` and sample fixtures used by app/tests,
+- allow user-created project folders under `public/projects/*` to stay untracked.
+
 Bridge mode supports:
 - ping/list/file/upload/delete/mkdir/move/seed
 - save project metadata/index updates
