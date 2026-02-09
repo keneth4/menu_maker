@@ -24,7 +24,7 @@ describe("fit helpers", () => {
 
   it("builds centered ffmpeg contain+pad filter", () => {
     expect(buildCenteredContainPadFfmpegFilter(768, 768)).toBe(
-      "scale=768:768:force_original_aspect_ratio=decrease,pad=768:768:(ow-iw)/2:(oh-ih)/2:color=0x00000000"
+      "scale=768:768:force_original_aspect_ratio=decrease,pad=768:768:(ow-iw)/2:(oh-ih)/2:color=0x00000000,format=rgba"
     );
   });
 

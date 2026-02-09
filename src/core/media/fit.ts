@@ -64,7 +64,7 @@ export const buildCenteredContainPadFfmpegFilter = (
   const w = Math.max(1, Math.round(width));
   const h = Math.max(1, Math.round(height));
   const color = options.color ?? "0x00000000";
-  return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=${color}`;
+  return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=${color},format=rgba`;
 };
 
 export const buildCenteredCoverCropFfmpegFilter = (width: number, height: number) => {

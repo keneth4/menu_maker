@@ -7,6 +7,7 @@ const TINY_TRANSPARENT_GIF = Uint8Array.from(
   Buffer.from("R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==", "base64")
 );
 
+
 const makeFixtureProject = (slug: string): MenuProject => ({
   meta: {
     slug,
@@ -136,8 +137,84 @@ test("bridge export generates derived assets and keeps originals out of static e
   expect(menuEntry).toBeDefined();
   const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
 
-  expect(menu.backgrounds[0].src).toMatch(/^assets\/derived\/backgrounds\/.+-lg\.webp$/i);
+  expect(menu.backgrounds[0].src).toMatch(
+    /^assets\/derived\/backgrounds\/.+-lg\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
+  );
   expect(menu.backgrounds[0].originalSrc).toBeUndefined();
-  expect(menu.categories[0].items[0].media.hero360).toMatch(/^assets\/derived\/items\/.+-lg\.webp$/i);
+  expect(menu.categories[0].items[0].media.hero360).toMatch(
+    /^assets\/derived\/items\/.+-lg\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
+  );
   expect(menu.categories[0].items[0].media.originalHero360).toBeUndefined();
+
+  const mediumVariant = menu.categories[0].items[0].media.derived?.medium;
+  const largeVariant = menu.categories[0].items[0].media.derived?.large;
+  const asObject = (value: unknown) =>
+    typeof value === "string" ? { direct: value } : (value as Record<string, string> | undefined) ?? {};
+  const mediumSources = Object.values(asObject(mediumVariant));
+  const largeSources = Object.values(asObject(largeVariant));
+  expect(mediumSources.some((value) => /^assets\/derived\/items\/.+-md\./i.test(value))).toBeTruthy();
+  expect(largeSources.some((value) => /^assets\/derived\/items\/.+-lg\./i.test(value))).toBeTruthy();
+});
+
+test("bridge save zip keeps originals and derived assets", async ({ page, request }, testInfo) => {
+  test.setTimeout(240000);
+
+  const probe = await request.post("/api/assets/prepare-derived?project=ffmpeg-probe-save", {
+    data: {
+      project: {
+        meta: {
+          name: "probe",
+          locale: "es",
+          currency: "MXN",
+          currencyPosition: "left"
+        },
+        backgrounds: [],
+        categories: []
+      }
+    }
+  });
+  test.skip(
+    probe.status() === 503,
+    "ffmpeg not available in this environment, skipping ffmpeg integration check"
+  );
+  expect(probe.ok()).toBeTruthy();
+
+  const slug = `ffmpeg-save-${Date.now()}`;
+  const fixturePath = await writeBridgeFixtureZip(testInfo, slug);
+
+  await page.goto("/");
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
+  ]);
+  await chooser.setFiles(fixturePath);
+  const projectNameInput = page
+    .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
+    .locator("input");
+  await expect(projectNameInput).toHaveValue("FFmpeg Fixture", { timeout: 120000 });
+
+  const saveDownloadPromise = page.waitForEvent("download", { timeout: 180000 });
+  page.once("dialog", (dialog) => dialog.accept(`${slug}-save.zip`));
+  await page.getByRole("button", { name: /guardar proyecto|save project/i }).click();
+  const saveDownload = await saveDownloadPromise;
+  expect(saveDownload.suggestedFilename()).toMatch(/-save\.zip$/i);
+
+  const savePath = await saveDownload.path();
+  expect(savePath).toBeTruthy();
+  const zipBytes = await readFile(savePath!);
+  const zipBuffer = zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength);
+  const entries = readZip(zipBuffer);
+  const names = entries.map((entry) => entry.name);
+  const zipRoot = names.find((name) => name.endsWith("/menu.json"))?.split("/")[0] ?? slug;
+
+  expect(names.some((name) => name.startsWith(`${zipRoot}/assets/originals/`))).toBeTruthy();
+  expect(names.some((name) => name.startsWith(`${zipRoot}/assets/derived/`))).toBeTruthy();
+
+  const menuEntry = entries.find((entry) => entry.name === `${zipRoot}/menu.json`);
+  expect(menuEntry).toBeDefined();
+  const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
+  expect(menu.backgrounds[0].originalSrc).toMatch(/^assets\/originals\/backgrounds\/.+\.[a-z0-9]+$/i);
+  expect(menu.categories[0].items[0].media.originalHero360).toMatch(
+    /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
+  );
 });

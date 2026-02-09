@@ -124,3 +124,13 @@ Tracking checklist:
 - Increased ffmpeg command timeout budget to reduce false timeouts on large animated source assets.
 - Tuned ffmpeg derivation profile for throughput by capping animation FPS (`items: 24`, `backgrounds: 18`) and reducing libwebp compression level (`6 -> 4`) to avoid long-running export/import stalls.
 - Hardened bridge-derived processing so a single corrupt/unreadable source asset no longer aborts save/export; failed assets now log a warning and continue with the original reference.
+- Updated bridge fallback to materialize `originals/**` plus `derived/**` copy-variants when ffmpeg cannot decode an asset, so save/export packaging remains consistent and does not leak original-path references.
+- Disabled in-browser responsive resizing for `image/webp` hero assets during static export bundling to prevent animated-frame compositing artifacts in hosted exports.
+- Strengthened item-derivative profile for quality/perf parity: medium dish variants are now still-frame `webp` (lighter carousel), large variants remain animated for detail interaction, and alpha handling was tightened with `format=rgba` + `alpha_quality=100`.
+- Simplified interactive modal frame normalization to rely on browser-decoded complete frames and avoid manual `visibleRect` recomposition artifacts (ghost/onion edges).
+- Added e2e regression coverage for bridge save zips to assert originals + derived packaging contract after ffmpeg preprocessing/fallback (`tests/e2e/ffmpeg-derived-export.spec.ts`).
+- Updated derivative reuse rules and bumped active derivative profile IDs (`ffmpeg-v4-*`) to regenerate legacy/stale media once, ensuring projects pick up the latest sizing/alpha/perf profile fixes.
+- Fixed bridge derivative reuse staleness checks so existing derived assets are only reused when they are newer than originals; re-uploaded originals now force regeneration on the next derive run.
+- ZIP open flow in bridge mode now waits for `prepare-derived` during upload workflow (with progress), instead of deferring derivation silently in the background.
+- Assets tab now uses icon-based top/file actions and includes an in-panel progress bar that shows upload + derived-processing status for manual asset uploads.
+- Bumped dish derivative profile id to `ffmpeg-v6-item-contain-md-webp-lg-gif` so previously generated dish derivatives are reprocessed once under the latest pipeline.

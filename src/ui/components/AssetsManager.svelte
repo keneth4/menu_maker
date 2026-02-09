@@ -21,6 +21,9 @@
   export let uploadFolderOptions: { value: string; label: string }[] = [];
   export let needsAssets = false;
   export let fsError = "";
+  export let assetTaskVisible = false;
+  export let assetTaskStep = "";
+  export let assetTaskProgress = 0;
   export let assetMode: "filesystem" | "bridge" | "none" = "none";
   export let fsEntries: AssetEntry[] = [];
   export let treeRows: AssetTreeRow[] = [];
@@ -47,16 +50,33 @@
       <p>{t("rootTitle")}</p>
       <span>{rootLabel}</span>
     </div>
-    <div class="asset-actions">
-      <button type="button" on:click={createFolder} disabled={assetProjectReadOnly}>
-        {t("newFolder")}
+    <div class="asset-header-actions">
+      <button
+        type="button"
+        class="asset-icon-btn"
+        title={t("newFolder")}
+        aria-label={t("newFolder")}
+        on:click={createFolder}
+        disabled={assetProjectReadOnly}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l1.6 2h9.4A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11z" />
+          <path d="M12 10.5v5M9.5 13h5" />
+        </svg>
       </button>
       <button
         type="button"
+        class="asset-icon-btn"
+        title={t("uploadAssets")}
+        aria-label={t("uploadAssets")}
         disabled={assetProjectReadOnly}
         on:click={() => assetUploadInput?.click()}
       >
-        {t("uploadAssets")}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 15V6" />
+          <path d="M8.5 9.5 12 6l3.5 3.5" />
+          <path d="M4 17.5A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5V17" />
+        </svg>
       </button>
       <input
         class="sr-only"
@@ -68,6 +88,17 @@
       />
     </div>
   </div>
+  {#if assetTaskVisible}
+    <div class="asset-task" role="status" aria-live="polite">
+      <div class="asset-task__row">
+        <p>{assetTaskStep}</p>
+        <span>{Math.round(assetTaskProgress)}%</span>
+      </div>
+      <div class="asset-task__bar" aria-hidden="true">
+        <span style={`width:${Math.max(0, Math.min(100, assetTaskProgress))}%`}></span>
+      </div>
+    </div>
+  {/if}
   <div class="asset-drop">
     <label class="editor-field">
       <span>{t("uploadTo")}</span>
@@ -146,7 +177,7 @@
             </div>
             <p class="asset-meta">{row.entry.path}</p>
           </div>
-          <div class="asset-actions">
+          <div class="asset-row-actions">
             <button
               type="button"
               class="asset-icon-btn"
@@ -155,7 +186,10 @@
               disabled={assetProjectReadOnly}
               on:click={() => renameEntry(row.entry)}
             >
-              ✎
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 20h4l9.5-9.5a1.75 1.75 0 1 0-2.5-2.5L5.5 17.5 4 20z" />
+                <path d="m13.5 6.5 4 4" />
+              </svg>
             </button>
             <button
               type="button"
@@ -165,7 +199,12 @@
               disabled={assetProjectReadOnly}
               on:click={() => moveEntry(row.entry)}
             >
-              ⇄
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 8 3-3 3 3" />
+                <path d="M9 5v10" />
+                <path d="m18 16-3 3-3-3" />
+                <path d="M15 9v10" />
+              </svg>
             </button>
             <button
               type="button"
@@ -175,7 +214,12 @@
               disabled={assetProjectReadOnly}
               on:click={() => deleteEntry(row.entry)}
             >
-              ✕
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 7h14" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M7.5 7 8.5 19h7L16.5 7" />
+                <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />
+              </svg>
             </button>
           </div>
         </div>

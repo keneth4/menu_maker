@@ -7,10 +7,82 @@
       "cover": "/projects/sample-cafebrunch-menu/assets/backgrounds/backery-outside.gif"
     },
     {
-      "slug": "cafebrunch-menu",
+      "slug": "cafebrunch-menu-1",
       "name": "CafeBrunchMenu",
+      "template": "jukebox",
+      "cover": "/projects/cafebrunch-menu-1/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770651939562-save",
+      "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
+      "cover": "/projects/ffmpeg-save-1770651939562-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770652053261-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770652053261-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770652403499-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770652403499-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770652618805-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770652618805-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770655228315-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770655228315-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770655522337-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770655522337-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770655649114-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770655649114-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770655717202-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770655717202-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770656920221-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770656920221-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770657072842-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770657072842-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770660057420-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770660057420-save/assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
+    },
+    {
+      "slug": "ffmpeg-save-1770660267649-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770660267649-save/assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
     }
   ]
 }

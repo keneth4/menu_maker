@@ -15,6 +15,7 @@ export const getZipAssetEntries = (entries: ZipBinaryEntry[], menuEntryName: str
   const assetsPrefix = prefix ? `${prefix}assets/` : "assets/";
   return entries
     .filter((entry) => entry.name.startsWith(assetsPrefix))
+    .filter((entry) => !entry.name.endsWith("/"))
     .map((entry) => {
       const relative = entry.name.slice(assetsPrefix.length);
       const parts = relative.split("/").filter(Boolean);

@@ -16,6 +16,7 @@ describe("import zip helpers", () => {
   it("parses prefixed asset entries", () => {
     const entries = [
       { name: "demo/menu.json", data: new Uint8Array([1]) },
+      { name: "demo/assets/originals/backgrounds/", data: new Uint8Array() },
       { name: "demo/assets/items/a.webp", data: new Uint8Array([2]) },
       { name: "demo/assets/fonts/menu.woff2", data: new Uint8Array([3]) },
       { name: "menu.json", data: new Uint8Array([4]) }
@@ -23,13 +24,13 @@ describe("import zip helpers", () => {
 
     expect(getZipAssetEntries(entries, "demo/menu.json")).toEqual([
       {
-        entry: entries[1],
+        entry: entries[2],
         relative: "items/a.webp",
         name: "a.webp",
         targetPath: "items"
       },
       {
-        entry: entries[2],
+        entry: entries[3],
         relative: "fonts/menu.woff2",
         name: "menu.woff2",
         targetPath: "fonts"

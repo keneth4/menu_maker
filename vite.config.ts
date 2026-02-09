@@ -147,8 +147,11 @@ export default defineConfig({
           return `${baseStem}-${hashString(relativePath)}`;
         };
         const COMMAND_TIMEOUT_MS = 900000;
-        const ITEM_DERIVED_FPS = 24;
+        const ITEM_DERIVED_FPS = 18;
         const BACKGROUND_DERIVED_FPS = 18;
+        const DERIVED_FALLBACK_PROFILE_ID = "ffmpeg-v2-copy-fallback";
+        const BACKGROUND_DERIVED_PROFILE_ID = "ffmpeg-v4-background-cover-webp";
+        const ITEM_DERIVED_PROFILE_ID = "ffmpeg-v6-item-contain-md-webp-lg-gif";
         const runCommand = async (
           command: string,
           args: string[],
@@ -191,23 +194,56 @@ export default defineConfig({
             return true;
           }
         };
-        const fileExists = async (fullPath: string) => {
-          try {
-            await fs.access(fullPath);
-            return true;
-          } catch {
-            return false;
+        const areOutputsFresh = async (sourceFull: string, outputs: string[]) => {
+          if (!outputs.length) return false;
+          for (const outputFull of outputs) {
+            if (await isOutputStale(sourceFull, outputFull)) {
+              return false;
+            }
           }
+          return true;
         };
-        const resolveDerivedWebpRelative = async (
+        const normalizeExtension = (value: string) => {
+          const ext = value.toLowerCase();
+          return ext.startsWith(".") ? ext : `.${ext}`;
+        };
+        const extensionToDerivedFormat = (extension: string) => {
+          const key = normalizeExtension(extension).slice(1);
+          if (["webp", "gif", "png", "jpg", "jpeg", "webm", "mp4"].includes(key)) {
+            return key;
+          }
+          return null;
+        };
+        const buildDerivedVariant = (publicPath: string, extension: string) => {
+          const format = extensionToDerivedFormat(extension);
+          if (!format) return publicPath;
+          return { [format]: publicPath };
+        };
+        const resolveDerivedRelative = async (
           projectSlug: string,
-          value?: string | Record<string, string | undefined>
+          value?: string | Record<string, string | undefined>,
+          preferredFormats: string[] = ["webp", "gif", "png", "jpg", "jpeg", "webm", "mp4"]
         ) => {
           if (!value) return null;
-          const candidate = typeof value === "string" ? value : value.webp;
-          if (!candidate) return null;
-          const existing = await resolveExistingAssetSource(projectSlug, candidate);
-          return existing ? existing.relative : null;
+          const candidates: string[] = [];
+          if (typeof value === "string") {
+            candidates.push(value);
+          } else {
+            preferredFormats.forEach((format) => {
+              const source = value[format];
+              if (source) candidates.push(source);
+            });
+            Object.values(value).forEach((source) => {
+              if (source && !candidates.includes(source)) {
+                candidates.push(source);
+              }
+            });
+          }
+          for (const candidate of candidates) {
+            const existing = await resolveExistingAssetSource(projectSlug, candidate);
+            if (existing) return existing.relative;
+          }
+          return null;
         };
         let ffmpegAvailable: boolean | null = null;
         const ensureFfmpegAvailable = async () => {
@@ -233,7 +269,13 @@ export default defineConfig({
           }
           return toPublicAssetPath(projectSlug, targetRelative);
         };
-        const ensureWebpDerivative = async (
+        const ensureCopiedDerivativeFallback = async (sourceFull: string, outputFull: string) => {
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          if (await isOutputStale(sourceFull, outputFull)) {
+            await fs.copyFile(sourceFull, outputFull);
+          }
+        };
+        const ensureAnimatedWebpDerivative = async (
           sourceFull: string,
           outputFull: string,
           filter: string
@@ -256,6 +298,8 @@ export default defineConfig({
             "libwebp",
             "-quality",
             "78",
+            "-alpha_quality",
+            "100",
             "-compression_level",
             "4",
             "-loop",
@@ -263,6 +307,153 @@ export default defineConfig({
             outputFull
           ]);
           return true;
+        };
+        const ensureStillWebpDerivative = async (
+          sourceFull: string,
+          outputFull: string,
+          filter: string
+        ) => {
+          if (!(await isOutputStale(sourceFull, outputFull))) {
+            return false;
+          }
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          await runCommand("ffmpeg", [
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            sourceFull,
+            "-vf",
+            `select=eq(n\\,0),${filter}`,
+            "-frames:v",
+            "1",
+            "-an",
+            "-c:v",
+            "libwebp",
+            "-quality",
+            "84",
+            "-alpha_quality",
+            "100",
+            "-compression_level",
+            "5",
+            outputFull
+          ]);
+          return true;
+        };
+        const ensureAnimatedGifDerivative = async (
+          sourceFull: string,
+          outputFull: string,
+          filter: string
+        ) => {
+          if (!(await isOutputStale(sourceFull, outputFull))) {
+            return false;
+          }
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          await runCommand("ffmpeg", [
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            sourceFull,
+            "-filter_complex",
+            `${filter},split[a][b];[a]palettegen=reserve_transparent=1:stats_mode=single[p];[b][p]paletteuse=dither=sierra2_4a:alpha_threshold=128`,
+            "-gifflags",
+            "+transdiff",
+            "-loop",
+            "0",
+            outputFull
+          ]);
+          return true;
+        };
+        const buildFallbackBackgroundAsset = async (
+          projectSlug: string,
+          background: MediaAsset,
+          index: number
+        ) => {
+          const sourceRef = background.originalSrc || background.src;
+          if (!sourceRef) return background;
+          const source = await resolveExistingAssetSource(projectSlug, sourceRef);
+          if (!source) return background;
+          const extension = normalizeExtension(path.posix.extname(source.relative) || ".gif");
+          const sourceIsOriginal = source.relative.startsWith("originals/backgrounds/");
+          const stem = sourceIsOriginal
+            ? path.posix.basename(source.relative, extension)
+            : sanitizeAssetStem(source.relative, `background-${index + 1}`);
+          const originalRelative = sourceIsOriginal
+            ? source.relative
+            : `originals/backgrounds/${stem}${extension}`;
+          const mediumRelative = `derived/backgrounds/${stem}-md${extension}`;
+          const largeRelative = `derived/backgrounds/${stem}-lg${extension}`;
+          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
+          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const originalPublic = await ensureCopiedOriginal(
+            projectSlug,
+            source.full,
+            source.relative,
+            originalRelative
+          );
+          await ensureCopiedDerivativeFallback(source.full, mediumFull);
+          await ensureCopiedDerivativeFallback(source.full, largeFull);
+          const mediumPublic = toPublicAssetPath(projectSlug, mediumRelative);
+          const largePublic = toPublicAssetPath(projectSlug, largeRelative);
+          return {
+            ...background,
+            src: largePublic,
+            originalSrc: originalPublic,
+            derived: {
+              profileId: DERIVED_FALLBACK_PROFILE_ID,
+              medium: buildDerivedVariant(mediumPublic, extension),
+              large: buildDerivedVariant(largePublic, extension)
+            }
+          };
+        };
+        const buildFallbackDishAsset = async (projectSlug: string, item: MenuItem, index: number) => {
+          const sourceRef = item.media.originalHero360 || item.media.hero360;
+          if (!sourceRef) return item;
+          const source = await resolveExistingAssetSource(projectSlug, sourceRef);
+          if (!source) return item;
+          const extension = normalizeExtension(path.posix.extname(source.relative) || ".gif");
+          const sourceIsOriginal = source.relative.startsWith("originals/items/");
+          const stem = sourceIsOriginal
+            ? path.posix.basename(source.relative, extension)
+            : sanitizeAssetStem(source.relative, `dish-${index + 1}`);
+          const originalRelative = sourceIsOriginal
+            ? source.relative
+            : `originals/items/${stem}${extension}`;
+          const mediumRelative = `derived/items/${stem}-md${extension}`;
+          const largeRelative = `derived/items/${stem}-lg${extension}`;
+          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
+          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const originalPublic = await ensureCopiedOriginal(
+            projectSlug,
+            source.full,
+            source.relative,
+            originalRelative
+          );
+          await ensureCopiedDerivativeFallback(source.full, mediumFull);
+          await ensureCopiedDerivativeFallback(source.full, largeFull);
+          const mediumPublic = toPublicAssetPath(projectSlug, mediumRelative);
+          const largePublic = toPublicAssetPath(projectSlug, largeRelative);
+          return {
+            ...item,
+            media: {
+              ...item.media,
+              hero360: largePublic,
+              originalHero360: originalPublic,
+              responsive: {
+                small: mediumPublic,
+                medium: mediumPublic,
+                large: largePublic
+              },
+              derived: {
+                profileId: DERIVED_FALLBACK_PROFILE_ID,
+                medium: buildDerivedVariant(mediumPublic, extension),
+                large: buildDerivedVariant(largePublic, extension)
+              }
+            }
+          };
         };
         const deriveBackgroundAsset = async (
           projectSlug: string,
@@ -272,29 +463,56 @@ export default defineConfig({
           const existingOriginalRelative = background.originalSrc
             ? (await resolveExistingAssetSource(projectSlug, background.originalSrc))?.relative ?? null
             : null;
-          const existingMediumRelative = await resolveDerivedWebpRelative(
+          const existingMediumRelative = await resolveDerivedRelative(
             projectSlug,
             background.derived?.medium as string | Record<string, string | undefined> | undefined
           );
-          const existingLargeRelative = await resolveDerivedWebpRelative(
+          const existingLargeRelative = await resolveDerivedRelative(
             projectSlug,
             background.derived?.large as string | Record<string, string | undefined> | undefined
           );
-          if (existingOriginalRelative && existingMediumRelative && existingLargeRelative) {
-            return {
-              ...background,
-              src: toPublicAssetPath(projectSlug, existingLargeRelative),
-              originalSrc: toPublicAssetPath(projectSlug, existingOriginalRelative),
-              derived: {
-                profileId: "ffmpeg-v2-background-cover-webp",
-                medium: {
-                  webp: toPublicAssetPath(projectSlug, existingMediumRelative)
-                },
-                large: {
-                  webp: toPublicAssetPath(projectSlug, existingLargeRelative)
+          const existingProfileId = background.derived?.profileId ?? "";
+          const canReuseExistingSet =
+            existingProfileId === BACKGROUND_DERIVED_PROFILE_ID ||
+            existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
+          if (
+            canReuseExistingSet &&
+            existingOriginalRelative &&
+            existingMediumRelative &&
+            existingLargeRelative
+          ) {
+            const { full: existingOriginalFull } = await resolveAssetPath(
+              projectSlug,
+              existingOriginalRelative
+            );
+            const { full: existingMediumFull } = await resolveAssetPath(projectSlug, existingMediumRelative);
+            const { full: existingLargeFull } = await resolveAssetPath(projectSlug, existingLargeRelative);
+            if (
+              await areOutputsFresh(existingOriginalFull, [existingMediumFull, existingLargeFull])
+            ) {
+              const existingMediumExt = normalizeExtension(path.posix.extname(existingMediumRelative) || ".webp");
+              const existingLargeExt = normalizeExtension(path.posix.extname(existingLargeRelative) || ".webp");
+              const profileId =
+                existingProfileId === DERIVED_FALLBACK_PROFILE_ID
+                  ? DERIVED_FALLBACK_PROFILE_ID
+                  : BACKGROUND_DERIVED_PROFILE_ID;
+              return {
+                ...background,
+                src: toPublicAssetPath(projectSlug, existingLargeRelative),
+                originalSrc: toPublicAssetPath(projectSlug, existingOriginalRelative),
+                derived: {
+                  profileId,
+                  medium: buildDerivedVariant(
+                    toPublicAssetPath(projectSlug, existingMediumRelative),
+                    existingMediumExt
+                  ),
+                  large: buildDerivedVariant(
+                    toPublicAssetPath(projectSlug, existingLargeRelative),
+                    existingLargeExt
+                  )
                 }
-              }
-            };
+              };
+            }
           }
           const sourceRef = background.originalSrc || background.src;
           if (!sourceRef) return background;
@@ -314,20 +532,15 @@ export default defineConfig({
           const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
           const reusableProfile =
-            background.derived?.profileId === "ffmpeg-v2-background-cover-webp" ||
-            background.derived?.profileId === "ffmpeg-v1-background-cover";
-          if (
-            reusableProfile &&
-            (await fileExists(originalFull)) &&
-            (await fileExists(mediumFull)) &&
-            (await fileExists(largeFull))
-          ) {
+            background.derived?.profileId === BACKGROUND_DERIVED_PROFILE_ID ||
+            background.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
+          if (reusableProfile && (await areOutputsFresh(originalFull, [mediumFull, largeFull]))) {
             return {
               ...background,
               src: toPublicAssetPath(projectSlug, largeRelative),
               originalSrc: toPublicAssetPath(projectSlug, originalRelative),
               derived: {
-                profileId: "ffmpeg-v2-background-cover-webp",
+                profileId: BACKGROUND_DERIVED_PROFILE_ID,
                 medium: {
                   webp: toPublicAssetPath(projectSlug, mediumRelative)
                 },
@@ -343,12 +556,12 @@ export default defineConfig({
             source.relative,
             originalRelative
           );
-          await ensureWebpDerivative(
+          await ensureAnimatedWebpDerivative(
             source.full,
             mediumFull,
             `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1280, 720)}`
           );
-          await ensureWebpDerivative(
+          await ensureAnimatedWebpDerivative(
             source.full,
             largeFull,
             `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1920, 1080)}`
@@ -358,7 +571,7 @@ export default defineConfig({
             src: toPublicAssetPath(projectSlug, largeRelative),
             originalSrc: originalPublic,
             derived: {
-              profileId: "ffmpeg-v2-background-cover-webp",
+              profileId: BACKGROUND_DERIVED_PROFILE_ID,
               medium: {
                 webp: toPublicAssetPath(projectSlug, mediumRelative)
               },
@@ -372,37 +585,66 @@ export default defineConfig({
           const existingOriginalRelative = item.media.originalHero360
             ? (await resolveExistingAssetSource(projectSlug, item.media.originalHero360))?.relative ?? null
             : null;
-          const existingMediumRelative = await resolveDerivedWebpRelative(
+          const existingMediumRelative = await resolveDerivedRelative(
             projectSlug,
-            item.media.derived?.medium as string | Record<string, string | undefined> | undefined
+            item.media.derived?.medium as string | Record<string, string | undefined> | undefined,
+            ["webp", "gif", "png", "jpg", "jpeg", "webm", "mp4"]
           );
-          const existingLargeRelative = await resolveDerivedWebpRelative(
+          const existingLargeRelative = await resolveDerivedRelative(
             projectSlug,
-            item.media.derived?.large as string | Record<string, string | undefined> | undefined
+            item.media.derived?.large as string | Record<string, string | undefined> | undefined,
+            ["gif", "webp", "png", "jpg", "jpeg", "webm", "mp4"]
           );
-          if (existingOriginalRelative && existingMediumRelative && existingLargeRelative) {
-            return {
-              ...item,
-              media: {
-                ...item.media,
-                hero360: toPublicAssetPath(projectSlug, existingLargeRelative),
-                originalHero360: toPublicAssetPath(projectSlug, existingOriginalRelative),
-                responsive: {
-                  small: toPublicAssetPath(projectSlug, existingMediumRelative),
-                  medium: toPublicAssetPath(projectSlug, existingMediumRelative),
-                  large: toPublicAssetPath(projectSlug, existingLargeRelative)
-                },
-                derived: {
-                  profileId: "ffmpeg-v2-item-contain-webp",
-                  medium: {
-                    webp: toPublicAssetPath(projectSlug, existingMediumRelative)
+          const existingProfileId = item.media.derived?.profileId ?? "";
+          const canReuseExistingSet =
+            existingProfileId === ITEM_DERIVED_PROFILE_ID ||
+            existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
+          if (
+            canReuseExistingSet &&
+            existingOriginalRelative &&
+            existingMediumRelative &&
+            existingLargeRelative
+          ) {
+            const { full: existingOriginalFull } = await resolveAssetPath(
+              projectSlug,
+              existingOriginalRelative
+            );
+            const { full: existingMediumFull } = await resolveAssetPath(projectSlug, existingMediumRelative);
+            const { full: existingLargeFull } = await resolveAssetPath(projectSlug, existingLargeRelative);
+            if (
+              await areOutputsFresh(existingOriginalFull, [existingMediumFull, existingLargeFull])
+            ) {
+              const existingMediumExt = normalizeExtension(path.posix.extname(existingMediumRelative) || ".webp");
+              const existingLargeExt = normalizeExtension(path.posix.extname(existingLargeRelative) || ".gif");
+              const profileId =
+                existingProfileId === DERIVED_FALLBACK_PROFILE_ID
+                  ? DERIVED_FALLBACK_PROFILE_ID
+                  : ITEM_DERIVED_PROFILE_ID;
+              return {
+                ...item,
+                media: {
+                  ...item.media,
+                  hero360: toPublicAssetPath(projectSlug, existingLargeRelative),
+                  originalHero360: toPublicAssetPath(projectSlug, existingOriginalRelative),
+                  responsive: {
+                    small: toPublicAssetPath(projectSlug, existingMediumRelative),
+                    medium: toPublicAssetPath(projectSlug, existingMediumRelative),
+                    large: toPublicAssetPath(projectSlug, existingMediumRelative)
                   },
-                  large: {
-                    webp: toPublicAssetPath(projectSlug, existingLargeRelative)
+                  derived: {
+                    profileId,
+                    medium: buildDerivedVariant(
+                      toPublicAssetPath(projectSlug, existingMediumRelative),
+                      existingMediumExt
+                    ),
+                    large: buildDerivedVariant(
+                      toPublicAssetPath(projectSlug, existingLargeRelative),
+                      existingLargeExt
+                    )
                   }
                 }
-              }
-            };
+              };
+            }
           }
           const sourceRef = item.media.originalHero360 || item.media.hero360;
           if (!sourceRef) return item;
@@ -417,39 +659,37 @@ export default defineConfig({
             ? source.relative
             : `originals/items/${stem}${extension}`;
           const mediumWebpRelative = `derived/items/${stem}-md.webp`;
-          const largeWebpRelative = `derived/items/${stem}-lg.webp`;
+          const largeGifRelative = `derived/items/${stem}-lg.gif`;
           const containMd = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(512, 512)}`;
           const containLg = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(768, 768)}`;
           const { full: mediumWebpFull } = await resolveAssetPath(projectSlug, mediumWebpRelative);
-          const { full: largeWebpFull } = await resolveAssetPath(projectSlug, largeWebpRelative);
+          const { full: largeGifFull } = await resolveAssetPath(projectSlug, largeGifRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
           const reusableProfile =
-            item.media.derived?.profileId === "ffmpeg-v2-item-contain-webp" ||
-            item.media.derived?.profileId === "ffmpeg-v1-item-contain";
+            item.media.derived?.profileId === ITEM_DERIVED_PROFILE_ID ||
+            item.media.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
           if (
             reusableProfile &&
-            (await fileExists(originalFull)) &&
-            (await fileExists(mediumWebpFull)) &&
-            (await fileExists(largeWebpFull))
+            (await areOutputsFresh(originalFull, [mediumWebpFull, largeGifFull]))
           ) {
             return {
               ...item,
               media: {
                 ...item.media,
-                hero360: toPublicAssetPath(projectSlug, largeWebpRelative),
+                hero360: toPublicAssetPath(projectSlug, largeGifRelative),
                 originalHero360: toPublicAssetPath(projectSlug, originalRelative),
                 responsive: {
                   small: toPublicAssetPath(projectSlug, mediumWebpRelative),
                   medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                  large: toPublicAssetPath(projectSlug, largeWebpRelative)
+                  large: toPublicAssetPath(projectSlug, mediumWebpRelative)
                 },
                 derived: {
-                  profileId: "ffmpeg-v2-item-contain-webp",
+                  profileId: ITEM_DERIVED_PROFILE_ID,
                   medium: {
                     webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
                   },
                   large: {
-                    webp: toPublicAssetPath(projectSlug, largeWebpRelative)
+                    gif: toPublicAssetPath(projectSlug, largeGifRelative)
                   }
                 }
               }
@@ -461,26 +701,26 @@ export default defineConfig({
             source.relative,
             originalRelative
           );
-          await ensureWebpDerivative(source.full, mediumWebpFull, containMd);
-          await ensureWebpDerivative(source.full, largeWebpFull, containLg);
+          await ensureStillWebpDerivative(source.full, mediumWebpFull, containMd);
+          await ensureAnimatedGifDerivative(source.full, largeGifFull, containLg);
           return {
             ...item,
             media: {
               ...item.media,
-              hero360: toPublicAssetPath(projectSlug, largeWebpRelative),
+              hero360: toPublicAssetPath(projectSlug, largeGifRelative),
               originalHero360: originalPublic,
               responsive: {
                 small: toPublicAssetPath(projectSlug, mediumWebpRelative),
                 medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                large: toPublicAssetPath(projectSlug, largeWebpRelative)
+                large: toPublicAssetPath(projectSlug, mediumWebpRelative)
               },
               derived: {
-                profileId: "ffmpeg-v2-item-contain-webp",
+                profileId: ITEM_DERIVED_PROFILE_ID,
                 medium: {
                   webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
                 },
                 large: {
-                  webp: toPublicAssetPath(projectSlug, largeWebpRelative)
+                  gif: toPublicAssetPath(projectSlug, largeGifRelative)
                 }
               }
             }
@@ -496,7 +736,15 @@ export default defineConfig({
             } catch (error) {
               const sourceRef = background.originalSrc || background.src || `background-${index + 1}`;
               console.warn(`[prepare-derived] background derive failed for "${sourceRef}"`, error);
-              nextBackgrounds.push(background);
+              try {
+                nextBackgrounds.push(await buildFallbackBackgroundAsset(projectSlug, background, index));
+              } catch (fallbackError) {
+                console.warn(
+                  `[prepare-derived] background fallback failed for "${sourceRef}"`,
+                  fallbackError
+                );
+                nextBackgrounds.push(background);
+              }
             }
           }
           prepared.backgrounds = nextBackgrounds;
@@ -511,7 +759,12 @@ export default defineConfig({
               } catch (error) {
                 const sourceRef = item.media.originalHero360 || item.media.hero360 || `item-${index + 1}`;
                 console.warn(`[prepare-derived] dish derive failed for "${sourceRef}"`, error);
-                nextItems.push(item);
+                try {
+                  nextItems.push(await buildFallbackDishAsset(projectSlug, item, index));
+                } catch (fallbackError) {
+                  console.warn(`[prepare-derived] dish fallback failed for "${sourceRef}"`, fallbackError);
+                  nextItems.push(item);
+                }
               }
             }
             nextCategories[categoryIndex].items = nextItems;

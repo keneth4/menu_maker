@@ -137,6 +137,11 @@
   let workflowProgress = 0;
   let workflowPulseTimer: ReturnType<typeof setInterval> | null = null;
   let workflowResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let assetTaskVisible = false;
+  let assetTaskStep = "";
+  let assetTaskProgress = 0;
+  let assetTaskPulseTimer: ReturnType<typeof setInterval> | null = null;
+  let assetTaskResetTimer: ReturnType<typeof setTimeout> | null = null;
   let bridgeDeriveTask: Promise<MenuProject> | null = null;
   let bridgeDeriveTaskSlug = "";
   let bridgeDeriveTaskSignature = "";
@@ -584,6 +589,14 @@
     clearCarouselWheelState();
     clearWorkflowPulse();
     clearWorkflowReset();
+    if (assetTaskPulseTimer) {
+      clearInterval(assetTaskPulseTimer);
+      assetTaskPulseTimer = null;
+    }
+    if (assetTaskResetTimer) {
+      clearTimeout(assetTaskResetTimer);
+      assetTaskResetTimer = null;
+    }
     if (typeof window !== "undefined") {
       window.removeEventListener("keydown", handleDesktopPreviewKeydown);
     }
@@ -784,6 +797,17 @@
       initCarouselIndices(project);
       if (assetMode === "bridge") {
         await refreshBridgeEntries();
+        if (!isProtectedAssetProjectSlug(slug)) {
+          void queueBridgeDerivedPreparation(slug, cloneProject(project), {
+            applyIfUnchanged: true
+          })
+            .then(async () => {
+              await refreshBridgeEntries();
+            })
+            .catch((error) => {
+              console.warn("Bridge derived preparation failed while opening project", error);
+            });
+        }
       }
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Error desconocido";
@@ -1030,6 +1054,68 @@
     workflowMode = null;
     workflowStep = "";
     workflowProgress = 0;
+  };
+
+  const clearAssetTaskPulse = () => {
+    if (!assetTaskPulseTimer) return;
+    clearInterval(assetTaskPulseTimer);
+    assetTaskPulseTimer = null;
+  };
+
+  const clearAssetTaskReset = () => {
+    if (!assetTaskResetTimer) return;
+    clearTimeout(assetTaskResetTimer);
+    assetTaskResetTimer = null;
+  };
+
+  const startAssetTask = (stepKey: UiKey, percent = 4) => {
+    clearAssetTaskPulse();
+    clearAssetTaskReset();
+    assetTaskVisible = true;
+    assetTaskStep = t(stepKey);
+    assetTaskProgress = Math.max(1, Math.min(99, percent));
+  };
+
+  const updateAssetTask = (stepKey: UiKey, percent: number) => {
+    assetTaskStep = t(stepKey);
+    assetTaskProgress = Math.max(assetTaskProgress, Math.max(1, Math.min(99, percent)));
+  };
+
+  const pulseAssetTask = (
+    targetPercent: number,
+    stepKey: UiKey,
+    options: { cadenceMs?: number; tickIncrement?: number } = {}
+  ) => {
+    const cadenceMs = options.cadenceMs ?? 220;
+    const tickIncrement = options.tickIncrement ?? 0.12;
+    updateAssetTask(stepKey, assetTaskProgress);
+    clearAssetTaskPulse();
+    assetTaskPulseTimer = setInterval(() => {
+      if (!assetTaskVisible) return;
+      if (assetTaskProgress >= targetPercent) return;
+      assetTaskProgress = Math.min(targetPercent, assetTaskProgress + tickIncrement);
+    }, cadenceMs);
+  };
+
+  const finishAssetTask = (stepKey: UiKey) => {
+    clearAssetTaskPulse();
+    clearAssetTaskReset();
+    assetTaskStep = t(stepKey);
+    assetTaskProgress = 100;
+    assetTaskResetTimer = setTimeout(() => {
+      assetTaskVisible = false;
+      assetTaskStep = "";
+      assetTaskProgress = 0;
+      assetTaskResetTimer = null;
+    }, 1200);
+  };
+
+  const failAssetTask = () => {
+    clearAssetTaskPulse();
+    clearAssetTaskReset();
+    assetTaskVisible = false;
+    assetTaskStep = "";
+    assetTaskProgress = 0;
   };
 
   const buildDeriveSignature = (value: MenuProject) => {
@@ -4364,39 +4450,9 @@ void prewarmInteractiveDetailAssets();
           height: visibleRect.height
         };
       }
-      const fullWidth = frame.codedWidth || frame.displayWidth || visibleRect?.width || 0;
-      const fullHeight = frame.codedHeight || frame.displayHeight || visibleRect?.height || 0;
-        if (!visibleRect || !fullWidth || !fullHeight) {
-          return createImageBitmap(frame);
-        }
-        const sameBounds =
-          Math.round(visibleRect.x) === 0 &&
-          Math.round(visibleRect.y) === 0 &&
-          Math.round(visibleRect.width) === Math.round(fullWidth) &&
-          Math.round(visibleRect.height) === Math.round(fullHeight);
-        if (sameBounds) {
-          return createImageBitmap(frame);
-        }
-        const offscreen = document.createElement("canvas");
-        offscreen.width = fullWidth;
-        offscreen.height = fullHeight;
-        const offCtx = offscreen.getContext("2d");
-        if (!offCtx) {
-          return createImageBitmap(frame);
-        }
-        offCtx.clearRect(0, 0, fullWidth, fullHeight);
-        offCtx.drawImage(
-          frame,
-          0,
-          0,
-          visibleRect.width,
-          visibleRect.height,
-          visibleRect.x,
-          visibleRect.y,
-          visibleRect.width,
-          visibleRect.height
-        );
-        return createImageBitmap(offscreen);
+      // Keep browser-provided decoded frame composition. Manual visibleRect reconstruction
+      // can introduce ghosted edges with animated webp/gif delta frames.
+      return createImageBitmap(frame);
       };
 
       for (const frameIndex of decodeIndices) {
@@ -4786,7 +4842,12 @@ void prewarmInteractiveDetailAssets();
             clearWorkflowPulse();
             updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
           }
-          updateWorkflow("progressUploadApply", 95);
+          pulseWorkflow(95, "progressUploadDerive", { tickIncrement: 0.08 });
+          preparedProject = await queueBridgeDerivedPreparation(slug, preparedProject, {
+            applyIfUnchanged: false
+          });
+          clearWorkflowPulse();
+          updateWorkflow("progressUploadApply", 96);
           needsAssets = false;
         } else {
           needsAssets = true;
@@ -4796,11 +4857,6 @@ void prewarmInteractiveDetailAssets();
         if (assetMode === "bridge") {
           await refreshBridgeEntries();
           finishWorkflow("progressUploadDone");
-          void queueBridgeDerivedPreparation(slug, preparedProject, { applyIfUnchanged: true }).catch(
-            (error) => {
-              console.warn("Background derived preparation failed", error);
-            }
-          );
         }
       } else {
         const text = await file.text();
@@ -5205,7 +5261,7 @@ void prewarmInteractiveDetailAssets();
   };
 
   const isResponsiveImageMime = (mime: string) =>
-    ["image/jpeg", "image/png", "image/webp"].includes(mime.toLowerCase());
+    ["image/jpeg", "image/png"].includes(mime.toLowerCase());
 
   const withVariantSuffix = (path: string, suffix: string) => {
     const slash = path.lastIndexOf("/");
@@ -5460,21 +5516,31 @@ void prewarmInteractiveDetailAssets();
     const target = uploadTargetPath;
     const uploads = Array.from(files);
     fsError = "";
+    startAssetTask("progressUploadAssets", 4);
     if (assetMode === "filesystem") {
       if (!rootHandle) {
+        failAssetTask();
         fsError = t("errNoFolder");
         return;
       }
       const destination = await getDirectoryHandleByFsPath(rootHandle, target, true);
-      for (const file of uploads) {
+      const totalUploads = Math.max(1, uploads.length);
+      for (let index = 0; index < uploads.length; index += 1) {
+        const file = uploads[index];
+        updateAssetTask("progressUploadAssets", 5 + (60 * index) / totalUploads);
         await writeFileToDirectory(file, destination, file.name);
       }
+      updateAssetTask("progressUploadAssets", 72);
       await refreshRootEntries();
+      finishAssetTask("progressUploadDone");
       return;
     }
     if (assetMode === "bridge") {
       try {
-        for (const file of uploads) {
+        const totalUploads = Math.max(1, uploads.length);
+        for (let index = 0; index < uploads.length; index += 1) {
+          const file = uploads[index];
+          updateAssetTask("progressUploadAssets", 6 + (62 * index) / totalUploads);
           const dataUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || ""));
@@ -5482,13 +5548,27 @@ void prewarmInteractiveDetailAssets();
             reader.readAsDataURL(file);
           });
           await bridgeRequest("upload", { path: target, name: file.name, data: dataUrl });
+          updateAssetTask("progressUploadAssets", 6 + (62 * (index + 1)) / totalUploads);
         }
+        updateAssetTask("progressUploadAssets", 72);
         await refreshBridgeEntries();
+        if (draft && !isProtectedAssetProjectSlug(getProjectSlug())) {
+          pulseAssetTask(95, "progressUploadDerive", { tickIncrement: 0.08 });
+          await queueBridgeDerivedPreparation(getProjectSlug(), cloneProject(draft), {
+            applyIfUnchanged: true
+          });
+          clearAssetTaskPulse();
+          updateAssetTask("progressUploadApply", 98);
+          await refreshBridgeEntries();
+        }
+        finishAssetTask("progressUploadDone");
       } catch (error) {
+        failAssetTask();
         fsError = error instanceof Error ? error.message : t("errOpenFolder");
       }
       return;
     }
+    failAssetTask();
     fsError = t("errNoFolder");
   };
 
@@ -6322,6 +6402,9 @@ void prewarmInteractiveDetailAssets();
               {uploadFolderOptions}
               {needsAssets}
               {fsError}
+              {assetTaskVisible}
+              {assetTaskStep}
+              {assetTaskProgress}
               {assetMode}
               {fsEntries}
               {treeRows}
