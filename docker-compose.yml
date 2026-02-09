@@ -1,0 +1,51 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /app
+    command: >
+      sh -c "if [ ! -f node_modules/.container-ready ]; then npm ci && touch node_modules/.container-ready; fi &&
+      npm run dev -- --host 0.0.0.0 --port ${VITE_PORT:-5173}"
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "1"
+      CHOKIDAR_INTERVAL: "300"
+    volumes:
+      - ./:/app
+      - menumaker_node_modules:/app/node_modules
+      - menumaker_projects:/app/public/projects
+    networks:
+      default:
+        aliases:
+          - menumaker-dev
+
+  preview:
+    profiles: ["preview"]
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "${PREVIEW_PORT:-4173}:4173"
+
+  e2e:
+    profiles: ["e2e"]
+    image: mcr.microsoft.com/playwright:${PLAYWRIGHT_DOCKER_TAG:-v1.58.1-jammy}
+    working_dir: /app
+    depends_on:
+      - app
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - >
+        if [ ! -f node_modules/.container-ready ]; then npm ci && touch node_modules/.container-ready; fi &&
+        PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://menumaker-dev:5173
+        npm run test:e2e -- --grep "save project and export static site create zip downloads"
+    volumes:
+      - ./:/app
+      - menumaker_node_modules:/app/node_modules
+
+volumes:
+  menumaker_node_modules:
+  menumaker_projects:

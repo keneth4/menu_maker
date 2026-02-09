@@ -5,6 +5,9 @@ import path from "node:path";
 import { normalizeProjectSlug } from "./src/infrastructure/bridge/pathing";
 
 export default defineConfig({
+  server: {
+    allowedHosts: ["menumaker-dev"]
+  },
   plugins: [
     svelte(),
     {
