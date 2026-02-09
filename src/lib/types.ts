@@ -10,6 +10,8 @@ export type MediaAsset = {
   src: string;
   type: "gif" | "webm" | "mp4" | "image";
   alt?: string;
+  originalSrc?: string;
+  derived?: DerivedMediaMap;
 };
 
 export type AllergenEntry = {
@@ -31,13 +33,25 @@ export type MenuItem = {
   vegan?: boolean;
   media: {
     hero360?: string;
+    originalHero360?: string;
+    rotationDirection?: "cw" | "ccw";
     gallery?: string[];
     responsive?: {
       small?: string;
       medium?: string;
       large?: string;
     };
+    derived?: DerivedMediaMap;
   };
+};
+
+export type DerivedMediaVariant = string | Record<string, string | undefined>;
+
+export type DerivedMediaMap = {
+  profileId?: string;
+  small?: DerivedMediaVariant;
+  medium?: DerivedMediaVariant;
+  large?: DerivedMediaVariant;
 };
 
 export type MenuCategory = {
@@ -65,6 +79,8 @@ export type MenuProject = {
     name: string;
     restaurantName?: LocalizedText;
     title?: LocalizedText;
+    identityMode?: "text" | "logo";
+    logoSrc?: string;
     fontFamily?: string;
     fontSource?: string;
     template: string;

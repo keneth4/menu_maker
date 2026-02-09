@@ -12,3 +12,6 @@ public/projects/*
 !public/projects/sample-cafebrunch-menu/**
 !public/projects/sample-jukebox-smoke/
 !public/projects/sample-jukebox-smoke/**
+
+# macOS Finder metadata (keep as last rule so later un-ignores do not re-include it)
+**/.DS_Store

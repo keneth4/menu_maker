@@ -9,15 +9,15 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 - `DONE`: phase exit criteria completed
 
 ## Current phase
-- Active phase: `Phase 0 - Preview/Export parity foundation`
+- Active phase: `Phase 1 - Data model + normalization (logo + rotation metadata)`
 - Started: `2026-02-09`
 - Status: `IN_PROGRESS`
 
 ## Phase board
 | Phase | Name | Status | Notes |
 | --- | --- | --- | --- |
-| 0 | Preview/Export parity foundation | IN_PROGRESS | Contract + tracker + drift inventory created. Shared runtime extraction/test gate pending. |
-| 1 | Data model + normalization (logo + rotation metadata) | PENDING | Depends on Phase 0 contract/tests; includes derivative metadata defaults/migrations. |
+| 0 | Preview/Export parity foundation | DONE | Contract, drift inventory, extraction slice, shared helpers, parity e2e, and required gate path completed. |
+| 1 | Data model + normalization (logo + rotation metadata) | IN_PROGRESS | Schema + normalization defaults/migrations implemented; remaining integration updates pending. |
 | 2 | Editor/Wizard UX updates | PENDING | Depends on Phase 1 schema defaults. |
 | 3 | Modal + rotation behavior update | PENDING | Remove modal direction toggle and use dish config. |
 | 4 | Image loading optimization | PENDING | Startup/detail load policy + derived-only runtime source usage. |
@@ -28,9 +28,25 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 - [x] Create a phase tracker with status board.
 - [x] Create a parity contract document with acceptance criteria.
 - [x] Build drift inventory from current duplicated preview/export runtime logic.
-- [ ] Define the first extraction slice into shared runtime module(s).
-- [ ] Add parity e2e spec for preview vs exported-site behavior.
-- [ ] Wire parity spec as a required gate before feature phases merge.
+- [x] Define the first extraction slice into shared runtime module(s).
+- [x] Implement shared helper module(s) and consume from preview + export builders.
+- [x] Add parity e2e spec for preview vs exported-site behavior.
+- [x] Wire parity spec as a required gate before feature phases merge.
+
+First extraction slice selected:
+- `PHASE0_EXTRACTION_SLICE_01.md`
+- Focus: shared image source policy (`srcset`, carousel source, detail source, derivative fallback order).
+
+Implemented:
+- New shared module: `src/export-runtime/imageSources.ts`
+- Preview now consumes shared helpers via `src/App.svelte`.
+- Export runtime helper block is now generated from shared policy via `buildExportRuntimeImageSourceHelpers()`.
+- Unit coverage added in `src/export-runtime/imageSources.test.ts`.
+- Parity e2e added: `tests/e2e/parity-image-sources.spec.ts`.
+
+Current parity run command:
+- `npm run test:e2e -- tests/e2e/parity-image-sources.spec.ts`
+- Required gate command: `npm run test:e2e -- tests/e2e/parity-image-sources.spec.ts`
 
 ## Asset derivative requirement (added 2026-02-09)
 Upload/import processing must generate fixed-size derived assets and keep originals.
@@ -46,7 +62,7 @@ Contract:
 - Preferred derived delivery format is animated `webp` (optional gif fallback profile).
 
 Tracking checklist:
-- [ ] Schema + normalization for originals/derived metadata and profile versioning.
+- [x] Schema + normalization for originals/derived metadata and profile versioning.
 - [ ] Bridge/import-time processing pipeline for animated and transparent assets (`ffmpeg`).
 - [ ] Ensure `ffmpeg` is available in local + container execution paths.
 - [ ] Preview/export source selection switched to derived variants.
@@ -73,3 +89,9 @@ Tracking checklist:
 - Added references in `SAFE_FIRST_REFACTOR_PLAN.md` to tracker and parity contract docs.
 - Added prioritized preview/export drift inventory for parity extraction planning.
 - Added asset-derivative requirement and packaging rules to roadmap tracking.
+- Selected first Phase-0 extraction slice and documented scope/acceptance criteria.
+- Implemented extraction slice 01 (shared image source policy) and validated with targeted tests + build.
+- Added and validated parity e2e spec for shared image source policy (preview vs exported runtime).
+- Wired parity spec as explicit required gate command path in phase gates.
+- Closed Phase 0 and moved active work to Phase 1.
+- Implemented Phase 1 schema + normalization defaults for identity/logo, dish rotation, and original/derived metadata fields.

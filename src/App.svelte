@@ -50,6 +50,12 @@
     type TemplateStrategy
   } from "./core/templates/registry";
   import { templateOptions } from "./core/templates/templateOptions";
+  import {
+    buildExportRuntimeImageSourceHelpers,
+    buildResponsiveSrcSetForMenuItem,
+    getCarouselImageSourceForMenuItem,
+    getDetailImageSourceForMenuItem
+  } from "./export-runtime/imageSources";
   import { createBridgeAssetClient } from "./infrastructure/bridge/client";
   import {
     normalizeAssetPath,
@@ -802,6 +808,8 @@
     showcase.meta.defaultLocale = draft.meta.defaultLocale;
     showcase.meta.currency = draft.meta.currency;
     showcase.meta.currencyPosition = draft.meta.currencyPosition;
+    showcase.meta.identityMode = draft.meta.identityMode;
+    showcase.meta.logoSrc = draft.meta.logoSrc;
     showcase.meta.fontFamily = draft.meta.fontFamily;
     showcase.meta.fontSource = draft.meta.fontSource;
     return showcase;
@@ -813,6 +821,8 @@
       name: "Nuevo proyecto",
       restaurantName: { es: "", en: "" },
       title: { es: "", en: "" },
+      identityMode: "text",
+      logoSrc: "",
       fontFamily: "Fraunces",
       fontSource: "",
       template: "focus-rows",
@@ -918,9 +928,13 @@
     if (draft.meta.fontSource) {
       draft.meta.fontSource = updatePath(draft.meta.fontSource);
     }
+    if (draft.meta.logoSrc) {
+      draft.meta.logoSrc = updatePath(draft.meta.logoSrc);
+    }
     draft.backgrounds = draft.backgrounds.map((bg) => ({
       ...bg,
-      src: bg.src ? updatePath(bg.src) : bg.src
+      src: bg.src ? updatePath(bg.src) : bg.src,
+      originalSrc: bg.originalSrc ? updatePath(bg.originalSrc) : bg.originalSrc
     }));
     draft.categories = draft.categories.map((category) => ({
       ...category,
@@ -928,7 +942,10 @@
         ...item,
         media: {
           ...item.media,
-          hero360: item.media.hero360 ? updatePath(item.media.hero360) : item.media.hero360
+          hero360: item.media.hero360 ? updatePath(item.media.hero360) : item.media.hero360,
+          originalHero360: item.media.originalHero360
+            ? updatePath(item.media.originalHero360)
+            : item.media.originalHero360
         }
       }))
     }));
@@ -951,9 +968,13 @@
     if (data.meta.fontSource) {
       data.meta.fontSource = mapImportedAssetPath(data.meta.fontSource, slug);
     }
+    if (data.meta.logoSrc) {
+      data.meta.logoSrc = mapImportedAssetPath(data.meta.logoSrc, slug);
+    }
     data.backgrounds = data.backgrounds.map((bg) => ({
       ...bg,
-      src: bg.src ? mapImportedAssetPath(bg.src, slug) : bg.src
+      src: bg.src ? mapImportedAssetPath(bg.src, slug) : bg.src,
+      originalSrc: bg.originalSrc ? mapImportedAssetPath(bg.originalSrc, slug) : bg.originalSrc
     }));
     data.categories = data.categories.map((category) => ({
       ...category,
@@ -961,7 +982,10 @@
         ...item,
         media: {
           ...item.media,
-          hero360: item.media.hero360 ? mapImportedAssetPath(item.media.hero360, slug) : item.media.hero360
+          hero360: item.media.hero360 ? mapImportedAssetPath(item.media.hero360, slug) : item.media.hero360,
+          originalHero360: item.media.originalHero360
+            ? mapImportedAssetPath(item.media.originalHero360, slug)
+            : item.media.originalHero360
         }
       }))
     }));
@@ -1262,38 +1286,7 @@ const normalizeFocusRowWheelDelta = (event) => {
   return Math.max(-FOCUS_ROWS_WHEEL_DELTA_CAP, Math.min(FOCUS_ROWS_WHEEL_DELTA_CAP, scaled));
 };
 
-const responsiveWidths = { small: 480, medium: 960, large: 1440 };
-const buildSrcSet = (item) => {
-  const responsive = item?.media?.responsive;
-  if (!responsive) return "";
-  const ordered = [
-    { src: responsive.small, width: responsiveWidths.small },
-    { src: responsive.medium, width: responsiveWidths.medium },
-    { src: responsive.large, width: responsiveWidths.large }
-  ].filter((entry) => entry.src);
-  if (ordered.length === 0) return "";
-  const unique = new Map();
-  ordered.forEach((entry) => {
-    if (!unique.has(entry.src)) {
-      unique.set(entry.src, entry.width);
-    }
-  });
-  return Array.from(unique.entries())
-    .map(([src, width]) => src + " " + width + "w")
-    .join(", ");
-};
-const getCarouselImageSrc = (item) =>
-  item?.media?.responsive?.medium ||
-  item?.media?.responsive?.large ||
-  item?.media?.responsive?.small ||
-  item?.media?.hero360 ||
-  "";
-const getDetailImageSrc = (item) =>
-  item?.media?.responsive?.large ||
-  item?.media?.responsive?.medium ||
-  item?.media?.responsive?.small ||
-  item?.media?.hero360 ||
-  "";
+${buildExportRuntimeImageSourceHelpers()}
 const decodeMaybe = (value) => {
   try {
     return decodeURIComponent(value);
@@ -3296,39 +3289,14 @@ void prewarmInteractiveDetailAssets();
     carouselTouchState = {};
   };
 
-  const buildResponsiveSrcSetFromMedia = (item: MenuItem) => {
-    const responsive = item.media.responsive;
-    if (!responsive) return undefined;
-    const ordered = [
-      { src: responsive.small, width: RESPONSIVE_IMAGE_WIDTHS.small },
-      { src: responsive.medium, width: RESPONSIVE_IMAGE_WIDTHS.medium },
-      { src: responsive.large, width: RESPONSIVE_IMAGE_WIDTHS.large }
-    ].filter((entry): entry is { src: string; width: number } => Boolean(entry.src));
-    if (ordered.length === 0) return undefined;
-    const unique = new Map<string, number>();
-    ordered.forEach((entry) => {
-      if (!unique.has(entry.src)) {
-        unique.set(entry.src, entry.width);
-      }
-    });
-    return Array.from(unique.entries())
-      .map(([src, width]) => `${src} ${width}w`)
-      .join(", ");
-  };
+  const buildResponsiveSrcSetFromMedia = (item: MenuItem) =>
+    buildResponsiveSrcSetForMenuItem(item);
 
   const getCarouselImageSource = (item: MenuItem) =>
-    item.media.responsive?.medium ||
-    item.media.responsive?.large ||
-    item.media.responsive?.small ||
-    item.media.hero360 ||
-    "";
+    getCarouselImageSourceForMenuItem(item);
 
   const getDetailImageSource = (item: MenuItem) =>
-    item.media.responsive?.large ||
-    item.media.responsive?.medium ||
-    item.media.responsive?.small ||
-    item.media.hero360 ||
-    "";
+    getDetailImageSourceForMenuItem(item);
 
   type InteractiveDetailAsset = {
     source: string;
@@ -5176,7 +5144,9 @@ void prewarmInteractiveDetailAssets();
       allergens: [],
       vegan: false,
       media: {
-        hero360: ""
+        hero360: "",
+        originalHero360: "",
+        rotationDirection: "ccw"
       }
     };
     category.items = [...category.items, newDish];
@@ -5223,7 +5193,9 @@ void prewarmInteractiveDetailAssets();
       allergens: [],
       vegan: false,
       media: {
-        hero360: ""
+        hero360: "",
+        originalHero360: "",
+        rotationDirection: "ccw"
       }
     };
     category.items = [...category.items, newDish];

@@ -49,10 +49,16 @@ describe("normalizeProject", () => {
     expect(normalized.meta.locales).toEqual(["es", "en"]);
     expect(normalized.meta.title).toEqual({ es: "", en: "" });
     expect(normalized.meta.restaurantName).toEqual({ es: "", en: "" });
+    expect(normalized.meta.identityMode).toBe("text");
+    expect(normalized.meta.logoSrc).toBe("");
     expect(normalized.meta.fontFamily).toBe("Fraunces");
     expect(normalized.meta.fontSource).toBe("");
     expect(normalized.meta.currencyPosition).toBe("left");
     expect(normalized.meta.template).toBe("focus-rows");
+    expect(normalized.categories[0].items[0].media.originalHero360).toBe(
+      "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
+    );
+    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
 
     const allergens = normalized.categories[0].items[0].allergens ?? [];
     expect(allergens).toHaveLength(2);
@@ -70,6 +76,18 @@ describe("normalizeProject", () => {
     project.meta.template = "";
     const normalized = normalizeProject(project);
     expect(normalized.meta.template).toBe("focus-rows");
+  });
+
+  it("normalizes identity and rotation settings from invalid values", () => {
+    const project = buildProjectFixture();
+    (project.meta as { identityMode?: string }).identityMode = "brand-image";
+    (project.meta as { logoSrc?: string }).logoSrc = "   /projects/demo/assets/logo.webp   ";
+    (project.categories[0].items[0].media as { rotationDirection?: string }).rotationDirection =
+      "reverse";
+    const normalized = normalizeProject(project);
+    expect(normalized.meta.identityMode).toBe("text");
+    expect(normalized.meta.logoSrc).toBe("/projects/demo/assets/logo.webp");
+    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
   });
 });
 

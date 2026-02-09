@@ -209,10 +209,11 @@ Status:
 1. `npm run build`
 2. `npm test`
 3. `npm run test:e2e` (or documented fallback smoke if CI browsers unavailable)
-4. Static export validation:
+4. `npm run test:e2e -- tests/e2e/parity-image-sources.spec.ts` (preview vs exported runtime parity spec)
+5. Static export validation:
    - unzip and verify required files,
    - verify `menu.json` paths and responsive entries.
-5. Manual parity checklist:
+6. Manual parity checklist:
    - wizard progress logic,
    - assets CRUD (bridge and/or filesystem mode),
    - modal media interactions,
@@ -238,10 +239,11 @@ Exit criteria:
 - no known high-severity preview/export behavior drift remains open.
 
 Status:
-- In progress.
+- Completed.
 
 Phase-0 extension for derivative requirement:
 - Include parity assertions that preview and exported site resolve the same derivative variant classes (`background md/lg`, `dish md/lg`) for identical viewport conditions.
+- First extraction slice selected: shared image source policy (`PHASE0_EXTRACTION_SLICE_01.md`).
 
 ## Phase 1: Refactor scaffolding + test stabilization
 - Introduce target folder structure (without behavior changes).

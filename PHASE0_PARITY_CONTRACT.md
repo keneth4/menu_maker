@@ -33,14 +33,19 @@ Ensure the in-editor preview and exported static site behave the same for all hi
   - modal interactive media setup/teardown,
   - keyboard/event wiring.
 - Prioritized hotspot inventory is tracked in `PHASE_STATUS_TRACKER.md` (`Drift inventory (2026-02-09)` section).
+- Selected first extraction slice is tracked in `PHASE0_EXTRACTION_SLICE_01.md`.
 
 ## Phase 0 execution checklist
 - [x] Define and publish parity contract.
 - [x] Inventory duplicated preview/export runtime logic with priority labels.
-- [ ] Select first shared runtime extraction slice with lowest break risk.
-- [ ] Implement shared helper module(s) and consume from preview + export builders.
-- [ ] Add parity e2e spec comparing preview and exported runtime against same fixture.
-- [ ] Add parity spec to required CI/local gate list.
+- [x] Select first shared runtime extraction slice with lowest break risk.
+- [x] Implement shared helper module(s) and consume from preview + export builders.
+- [x] Add parity e2e spec comparing preview and exported runtime against same fixture.
+- [x] Add parity spec to required CI/local gate list.
+
+Implemented parity e2e:
+- `tests/e2e/parity-image-sources.spec.ts`
+- Required local gate command: `npm run test:e2e -- tests/e2e/parity-image-sources.spec.ts`
 
 ## Exit criteria
 - Contract is approved and tracked.
