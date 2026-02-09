@@ -4,6 +4,7 @@ dist
 coverage
 playwright-report
 playwright/.cache
+test-results/
 .DS_Store
 public/projects/*
 !public/projects/index.json
