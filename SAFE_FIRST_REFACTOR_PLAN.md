@@ -29,6 +29,10 @@ The refactor is explicitly designed to support containerized execution and faste
 5. One high-coupling subsystem per phase; no multi-axis refactors.
 6. Every phase ends with measurable validation gates.
 
+## Active execution notes
+- Phase status board: `PHASE_STATUS_TRACKER.md`
+- Phase-0 parity contract/checklist: `PHASE0_PARITY_CONTRACT.md`
+
 ## Target architecture (future-proof)
 
 ## A) Layered boundaries
@@ -149,6 +153,26 @@ Status:
    - template navigation parity.
 
 ## Phase roadmap
+
+## Phase 0: Preview/Export parity foundation
+- Define a strict parity contract (preview vs exported static site) for:
+  - template navigation and snapping behavior,
+  - dish modal open/close and media behavior,
+  - dish rotation direction behavior,
+  - keyboard controls (`Arrow*`, `Escape`),
+  - image source selection (`carousel` vs `detail`),
+  - locale and currency rendering output.
+- Build and track a drift inventory of duplicated runtime logic between app preview and export runtime.
+- Introduce parity-focused tests that validate preview behavior against exported site behavior using shared fixtures.
+- Add a hard parity gate to required validation for feature phases.
+
+Exit criteria:
+- parity contract is documented and versioned,
+- parity test coverage exists for critical interaction flows,
+- no known high-severity preview/export behavior drift remains open.
+
+Status:
+- In progress.
 
 ## Phase 1: Refactor scaffolding + test stabilization
 - Introduce target folder structure (without behavior changes).
