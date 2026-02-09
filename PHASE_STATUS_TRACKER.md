@@ -18,10 +18,10 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | --- | --- | --- | --- |
 | 0 | Preview/Export parity foundation | DONE | Contract, drift inventory, extraction slice, shared helpers, parity e2e, and required gate path completed. |
 | 1 | Data model + normalization (logo + rotation metadata) | DONE | Schema + normalization + save-zip/export packaging wiring completed for logo + rotation metadata paths. |
-| 2 | Editor/Wizard UX updates | DONE | Added identity mode selector + logo source control and dish rotation direction radios in edit/wizard flows. |
+| 2 | Editor/Wizard UX updates | DONE | Added identity mode selector + logo source control and dish rotation direction toggle in edit/wizard flows. |
 | 3 | Modal + rotation behavior update | DONE | Removed modal direction toggle and now use dish-level `rotationDirection` in preview + export runtime. |
 | 4 | Image loading optimization | IN_PROGRESS | Startup/detail load policy + derived-only runtime source usage. |
-| 5 | Desktop keyboard controls | PENDING | Arrow navigation + `Escape` close modal. |
+| 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
 | 6 | Validation + docs sync | PENDING | Full gates + README and docs updates. |
 
 ## Phase 0 checklist
@@ -100,3 +100,5 @@ Tracking checklist:
 - Added editor + wizard controls for identity mode/logo source and dish rotation direction metadata.
 - Removed modal rotate-toggle UI and switched rotation behavior to dish-level `rotationDirection` in preview + exported runtime.
 - Updated static export asset collection/rewrite to include logo asset paths.
+- Added desktop keyboard controls (`Arrow*` navigation + `Escape` close) in preview and exported runtime.
+- Corrected cw/ccw mapping behavior and switched direction control to a compact toggle below the 360 source input.

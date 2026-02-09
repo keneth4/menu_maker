@@ -531,6 +531,7 @@
       };
       window.addEventListener("resize", handleViewportChange);
       window.addEventListener("orientationchange", handleViewportChange);
+      window.addEventListener("keydown", handleDesktopPreviewKeydown);
 
       try {
         bridgeAvailable = await bridgeClient.ping();
@@ -563,6 +564,9 @@
     teardownInteractiveDetailMedia();
     clearBackgroundRotation();
     clearCarouselWheelState();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("keydown", handleDesktopPreviewKeydown);
+    }
     if (sectionFocusRaf) {
       cancelAnimationFrame(sectionFocusRaf);
       sectionFocusRaf = null;
@@ -2622,10 +2626,101 @@ const shiftSection = (direction) => {
   if (!container) return;
   const sections = Array.from(container.querySelectorAll(".menu-section"));
   if (sections.length <= 1) return;
-  const current = getClosestHorizontalSectionIndex(container);
+  const current = isJukeboxTemplate()
+    ? getClosestHorizontalSectionIndex(container)
+    : getClosestSectionIndex(container);
   if (current < 0) return;
   const next = (current + direction + sections.length) % sections.length;
-  centerSectionHorizontally(container, next, "smooth");
+  if (isJukeboxTemplate()) {
+    centerSectionHorizontally(container, next, "smooth");
+    return;
+  }
+  centerSection(container, next, "smooth");
+  applySectionFocus(container);
+};
+
+const isEditableKeyboardTarget = (target) => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='']")
+  );
+};
+
+const getActiveSectionCategoryId = () => {
+  if (!DATA.categories.length) return null;
+  const container = app.querySelector(".menu-scroll");
+  if (!container) return DATA.categories[0]?.id || null;
+  const index = isJukeboxTemplate()
+    ? getClosestHorizontalSectionIndex(container)
+    : getClosestSectionIndex(container);
+  if (index < 0) return DATA.categories[0]?.id || null;
+  return DATA.categories[index]?.id || DATA.categories[0]?.id || null;
+};
+
+const handleKeyboardNavigation = (event) => {
+  if (event.defaultPrevented) return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (isEditableKeyboardTarget(event.target)) return;
+
+  if (event.key === "Escape") {
+    if (modal?.classList.contains("open")) {
+      event.preventDefault();
+      closeModal();
+    }
+    return;
+  }
+
+  if (!window.matchMedia("(min-width: 900px)").matches) return;
+  if (modal?.classList.contains("open")) return;
+
+  const categoryId = getActiveSectionCategoryId();
+  if (!categoryId) return;
+
+  if (isJukeboxTemplate()) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      shiftSection(-1);
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      shiftSection(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      shiftCarousel(categoryId, -1);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      shiftCarousel(categoryId, 1);
+    }
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    shiftSection(-1);
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    shiftSection(1);
+    return;
+  }
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    shiftCarousel(categoryId, -1);
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    shiftCarousel(categoryId, 1);
+  }
 };
 
 const bindSectionNav = () => {
@@ -2988,6 +3083,7 @@ modal?.addEventListener("dragstart", (event) => {
     event.preventDefault();
   }
 });
+window.addEventListener("keydown", handleKeyboardNavigation);
 
 render();
 void preloadStartupAssets();
@@ -4545,15 +4641,109 @@ void prewarmInteractiveDetailAssets();
   };
 
   const shiftSection = (direction: number) => {
-    if (activeTemplateCapabilities.sectionSnapAxis !== "horizontal") return;
     const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
     if (!container) return;
     const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
     if (sections.length <= 1) return;
-    const current = getClosestHorizontalSectionIndex(container);
+    const current =
+      activeTemplateCapabilities.sectionSnapAxis === "horizontal"
+        ? getClosestHorizontalSectionIndex(container)
+        : getClosestSectionIndex(container);
     if (current < 0) return;
     const next = (current + direction + sections.length) % sections.length;
-    centerSectionHorizontally(container, next, "smooth");
+    if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
+      centerSectionHorizontally(container, next, "smooth");
+      return;
+    }
+    centerSection(container, next, "smooth");
+    applySectionFocus(container);
+  };
+
+  const isKeyboardEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return Boolean(
+      target.closest(
+        "input, textarea, select, [contenteditable='true'], [contenteditable='']"
+      )
+    );
+  };
+
+  const getActiveSectionCategoryId = () => {
+    if (!activeProject?.categories.length) return null;
+    const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
+    if (!container) return activeProject.categories[0]?.id ?? null;
+    const index =
+      activeTemplateCapabilities.sectionSnapAxis === "horizontal"
+        ? getClosestHorizontalSectionIndex(container)
+        : getClosestSectionIndex(container);
+    if (index < 0) return activeProject.categories[0]?.id ?? null;
+    return activeProject.categories[index]?.id ?? activeProject.categories[0]?.id ?? null;
+  };
+
+  const handleDesktopPreviewKeydown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (isKeyboardEditableTarget(event.target)) return;
+
+    if (event.key === "Escape") {
+      if (activeItem) {
+        event.preventDefault();
+        closeDish();
+      }
+      return;
+    }
+
+    if (deviceMode !== "desktop") return;
+    if (activeItem || !activeProject || activeProject.categories.length === 0) return;
+
+    const activeCategoryId = getActiveSectionCategoryId();
+    if (!activeCategoryId) return;
+
+    if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        shiftSection(-1);
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        shiftSection(1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        shiftCarousel(activeCategoryId, -1);
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        shiftCarousel(activeCategoryId, 1);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      shiftSection(-1);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      shiftSection(1);
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      shiftCarousel(activeCategoryId, -1);
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      shiftCarousel(activeCategoryId, 1);
+    }
   };
 
   const initCarouselIndices = (value: MenuProject) => {
