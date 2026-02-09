@@ -543,6 +543,15 @@ body {
   color: rgba(251, 191, 36, 0.75);
 }
 
+.menu-logo {
+  display: block;
+  margin: 0 auto 8px;
+  width: auto;
+  max-width: min(220px, 62vw);
+  max-height: 70px;
+  object-fit: contain;
+}
+
 .menu-title {
   margin-top: 6px;
   font-size: clamp(1.2rem, 1.6vw, 1.8rem);
@@ -1661,6 +1670,19 @@ body {
   width: 100%;
 }
 
+.edit-item__rotation {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.editor-toggle-direction {
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
 .asset-manager {
   margin-top: 16px;
   display: grid;
@@ -2207,6 +2229,40 @@ body {
   width: 18px;
   height: 18px;
   accent-color: #fbbf24;
+}
+
+.editor-radio-group {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-radio-group--inline {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.editor-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.editor-radio input[type="radio"] {
+  margin: 0;
+  accent-color: #fbbf24;
+}
+
+.editor-radio__icon {
+  display: inline-block;
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .allergen-checklist {

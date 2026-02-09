@@ -4,9 +4,7 @@
 
   export let dish: MenuItem;
   export let interactiveEnabled = false;
-  export let detailRotateDirection: 1 | -1 = -1;
   export let detailRotateHint = "";
-  export let detailRotateToggleHint = "";
   export let modalMediaHost: HTMLDivElement | null = null;
   export let modalMediaImage: HTMLImageElement | null = null;
 
@@ -21,7 +19,6 @@
 
   const dispatch = createEventDispatcher<{
     close: void;
-    toggleRotate: void;
   }>();
 </script>
 
@@ -34,15 +31,6 @@
     <div class="dish-modal__media" bind:this={modalMediaHost}>
       {#if interactiveEnabled}
         <p class="dish-modal__media-note">{detailRotateHint}</p>
-        <button
-          class={`dish-modal__media-toggle ${detailRotateDirection === -1 ? "is-reversed" : ""}`}
-          type="button"
-          title={detailRotateToggleHint}
-          aria-label={detailRotateToggleHint}
-          on:click|stopPropagation={() => dispatch("toggleRotate")}
-        >
-          <span aria-hidden="true">⇄</span>
-        </button>
       {/if}
       <img
         bind:this={modalMediaImage}

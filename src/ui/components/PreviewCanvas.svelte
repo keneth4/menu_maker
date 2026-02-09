@@ -95,7 +95,14 @@
       {:else}
         <header class="menu-topbar">
           <div class="menu-title-block">
-            {#if textOf(activeProject.meta.restaurantName)}
+            {#if activeProject.meta.identityMode === "logo" && activeProject.meta.logoSrc}
+              <img
+                class="menu-logo"
+                src={activeProject.meta.logoSrc}
+                alt={textOf(activeProject.meta.restaurantName, t("restaurantFallback"))}
+                decoding="async"
+              />
+            {:else if textOf(activeProject.meta.restaurantName)}
               <p class="menu-eyebrow">{textOf(activeProject.meta.restaurantName)}</p>
             {/if}
             <h1 class="menu-title">

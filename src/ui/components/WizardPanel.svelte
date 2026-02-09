@@ -45,6 +45,12 @@
   export let removeWizardCategory: (id: string) => void = () => {};
   export let addWizardDish: () => void = () => {};
   export let removeWizardDish: () => void = () => {};
+  export let setIdentityMode: (mode: "text" | "logo") => void = () => {};
+  export let setLogoSrc: (src: string) => void = () => {};
+  export let setItemRotationDirection: (
+    item: MenuItem,
+    direction: "cw" | "ccw"
+  ) => void = () => {};
   export let handleLocalizedInput: (
     localized: Record<string, string>,
     lang: string,
@@ -60,6 +66,20 @@
   export let goPrevStep: () => void = () => {};
   export let goNextStep: () => void = () => {};
   export let exportStaticSite: () => Promise<void> | void = () => {};
+
+  const handleLogoSrcEvent = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setLogoSrc(target.value);
+  };
+
+  const getItemRotationDirection = (item: MenuItem) =>
+    item.media.rotationDirection === "cw" ? "cw" : "ccw";
+
+  const toggleItemRotationDirection = (item: MenuItem) => {
+    const current = getItemRotationDirection(item);
+    setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
+  };
 </script>
 
 <section class="wizard">
@@ -127,6 +147,58 @@
         <p class="text-xs text-slate-400">{t("wizardAssetsHint")}</p>
       {/if}
       <div class="wizard-block">
+        {#if draft}
+          <div class="wizard-item">
+            <label class="editor-field">
+              <span>{t("identityMode")}</span>
+              <div class="editor-radio-group editor-radio-group--inline">
+                <label class="editor-radio">
+                  <input
+                    type="radio"
+                    name="identity-mode-wizard"
+                    checked={(draft.meta.identityMode ?? "text") === "text"}
+                    on:change={() => setIdentityMode("text")}
+                  />
+                  <span>{t("identityModeText")}</span>
+                </label>
+                <label class="editor-radio">
+                  <input
+                    type="radio"
+                    name="identity-mode-wizard"
+                    checked={draft.meta.identityMode === "logo"}
+                    on:change={() => setIdentityMode("logo")}
+                  />
+                  <span>{t("identityModeLogo")}</span>
+                </label>
+              </div>
+            </label>
+            {#if draft.meta.identityMode === "logo"}
+              <label class="editor-field">
+                <span>{t("logoAsset")}</span>
+                {#if assetOptions.length}
+                  <select
+                    class="editor-select"
+                    value={draft.meta.logoSrc ?? ""}
+                    on:change={handleLogoSrcEvent}
+                  >
+                    <option value=""></option>
+                    {#each assetOptions as path}
+                      <option value={path}>{path}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <input
+                    type="text"
+                    class="editor-input"
+                    value={draft.meta.logoSrc ?? ""}
+                    list="asset-files"
+                    on:input={handleLogoSrcEvent}
+                  />
+                {/if}
+              </label>
+            {/if}
+          </div>
+        {/if}
         <button class="editor-outline" type="button" on:click={addBackground}>
           {t("wizardAddBg")}
         </button>
@@ -296,6 +368,23 @@
                 bind:value={wizardItem.media.hero360}
                 list="asset-files"
               />
+              <div class="edit-item__rotation">
+                <button
+                  class="editor-outline editor-toggle-direction"
+                  type="button"
+                  on:click={() => toggleItemRotationDirection(wizardItem)}
+                >
+                  <span class="editor-radio__icon" aria-hidden="true">
+                    {getItemRotationDirection(wizardItem) === "cw" ? "↻" : "↺"}
+                  </span>
+                  <span>
+                    {getItemRotationDirection(wizardItem) === "cw"
+                      ? t("rotationClockwise")
+                      : t("rotationCounterclockwise")}
+                  </span>
+                </button>
+                <small class="editor-hint">{t("rotationChooseHint")}</small>
+              </div>
             </label>
           {/if}
         </div>

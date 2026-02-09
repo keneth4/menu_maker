@@ -9,7 +9,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 - `DONE`: phase exit criteria completed
 
 ## Current phase
-- Active phase: `Phase 1 - Data model + normalization (logo + rotation metadata)`
+- Active phase: `Phase 4 - Image loading optimization`
 - Started: `2026-02-09`
 - Status: `IN_PROGRESS`
 
@@ -17,10 +17,10 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | Phase | Name | Status | Notes |
 | --- | --- | --- | --- |
 | 0 | Preview/Export parity foundation | DONE | Contract, drift inventory, extraction slice, shared helpers, parity e2e, and required gate path completed. |
-| 1 | Data model + normalization (logo + rotation metadata) | IN_PROGRESS | Schema + normalization defaults/migrations implemented; remaining integration updates pending. |
-| 2 | Editor/Wizard UX updates | PENDING | Depends on Phase 1 schema defaults. |
-| 3 | Modal + rotation behavior update | PENDING | Remove modal direction toggle and use dish config. |
-| 4 | Image loading optimization | PENDING | Startup/detail load policy + derived-only runtime source usage. |
+| 1 | Data model + normalization (logo + rotation metadata) | DONE | Schema + normalization + save-zip/export packaging wiring completed for logo + rotation metadata paths. |
+| 2 | Editor/Wizard UX updates | DONE | Added identity mode selector + logo source control and dish rotation direction radios in edit/wizard flows. |
+| 3 | Modal + rotation behavior update | DONE | Removed modal direction toggle and now use dish-level `rotationDirection` in preview + export runtime. |
+| 4 | Image loading optimization | IN_PROGRESS | Startup/detail load policy + derived-only runtime source usage. |
 | 5 | Desktop keyboard controls | PENDING | Arrow navigation + `Escape` close modal. |
 | 6 | Validation + docs sync | PENDING | Full gates + README and docs updates. |
 
@@ -65,8 +65,8 @@ Tracking checklist:
 - [x] Schema + normalization for originals/derived metadata and profile versioning.
 - [ ] Bridge/import-time processing pipeline for animated and transparent assets (`ffmpeg`).
 - [ ] Ensure `ffmpeg` is available in local + container execution paths.
-- [ ] Preview/export source selection switched to derived variants.
-- [ ] Save packaging includes originals + derived.
+- [x] Preview/export source selection switched to derived variants.
+- [x] Save packaging includes originals + derived.
 - [ ] Export packaging includes derived only + rewrite validation.
 - [ ] Test coverage for animated-alpha inputs and packaging contracts.
 
@@ -95,3 +95,8 @@ Tracking checklist:
 - Wired parity spec as explicit required gate command path in phase gates.
 - Closed Phase 0 and moved active work to Phase 1.
 - Implemented Phase 1 schema + normalization defaults for identity/logo, dish rotation, and original/derived metadata fields.
+- Implemented Phase 1 save-zip asset collection + rewriting for logo/original/derived/responsive paths, with tests.
+- Implemented identity/logo parity in preview + export runtime topbar rendering.
+- Added editor + wizard controls for identity mode/logo source and dish rotation direction metadata.
+- Removed modal rotate-toggle UI and switched rotation behavior to dish-level `rotationDirection` in preview + exported runtime.
+- Updated static export asset collection/rewrite to include logo asset paths.

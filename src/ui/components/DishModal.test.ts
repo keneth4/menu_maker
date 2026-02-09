@@ -14,14 +14,12 @@ const dish: MenuItem = {
 };
 
 describe("DishModal", () => {
-  it("emits close and rotate events", async () => {
+  it("emits close event and renders allergens", async () => {
     const { component } = render(DishModal, {
       props: {
         dish,
         interactiveEnabled: true,
-        detailRotateDirection: -1,
         detailRotateHint: "drag",
-        detailRotateToggleHint: "toggle",
         textOf: (value: Record<string, string> | undefined) => value?.es ?? "",
         getDetailImageSource: () => "/projects/demo/assets/tostada.webp",
         buildResponsiveSrcSetFromMedia: () => undefined,
@@ -32,14 +30,10 @@ describe("DishModal", () => {
     });
 
     const close = vi.fn();
-    const toggleRotate = vi.fn();
     component.$on("close", close);
-    component.$on("toggleRotate", toggleRotate);
 
-    await fireEvent.click(screen.getByRole("button", { name: "toggle" }));
     await fireEvent.click(screen.getByRole("button", { name: "✕" }));
 
-    expect(toggleRotate).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/Nueces/)).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-import type { MenuProject } from "../../lib/types";
+import type { DerivedMediaMap, DerivedMediaVariant, MenuProject } from "../../lib/types";
 
 export type ZipBinaryEntry = {
   name: string;
@@ -19,6 +19,9 @@ export const collectProjectAssetPaths = (
   if (project.meta.fontSource) {
     assets.add(project.meta.fontSource);
   }
+  if (project.meta.logoSrc) {
+    assets.add(project.meta.logoSrc);
+  }
   project.backgrounds.forEach((bg) => {
     if (bg.src) assets.add(bg.src);
   });
@@ -27,6 +30,59 @@ export const collectProjectAssetPaths = (
       if (item.media.hero360) assets.add(item.media.hero360);
     });
   });
+  return Array.from(assets)
+    .map((path) => normalizePath(path))
+    .filter((path) => path && !path.startsWith("http"));
+};
+
+const collectDerivedVariantPaths = (assets: Set<string>, value?: DerivedMediaVariant) => {
+  if (!value) return;
+  if (typeof value === "string") {
+    assets.add(value);
+    return;
+  }
+  if (typeof value === "object") {
+    Object.values(value).forEach((source) => {
+      if (source) assets.add(source);
+    });
+  }
+};
+
+const collectDerivedPaths = (assets: Set<string>, derived?: DerivedMediaMap) => {
+  if (!derived) return;
+  collectDerivedVariantPaths(assets, derived.small);
+  collectDerivedVariantPaths(assets, derived.medium);
+  collectDerivedVariantPaths(assets, derived.large);
+};
+
+export const collectSaveProjectAssetPaths = (
+  project: MenuProject,
+  normalizePath: (value: string) => string
+) => {
+  const assets = new Set<string>();
+  if (project.meta.fontSource) assets.add(project.meta.fontSource);
+  if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
+
+  project.backgrounds.forEach((bg) => {
+    if (bg.src) assets.add(bg.src);
+    if (bg.originalSrc) assets.add(bg.originalSrc);
+    collectDerivedPaths(assets, bg.derived);
+  });
+
+  project.categories.forEach((category) => {
+    category.items.forEach((item) => {
+      if (item.media.hero360) assets.add(item.media.hero360);
+      if (item.media.originalHero360) assets.add(item.media.originalHero360);
+      item.media.gallery?.forEach((entry) => {
+        if (entry) assets.add(entry);
+      });
+      if (item.media.responsive?.small) assets.add(item.media.responsive.small);
+      if (item.media.responsive?.medium) assets.add(item.media.responsive.medium);
+      if (item.media.responsive?.large) assets.add(item.media.responsive.large);
+      collectDerivedPaths(assets, item.media.derived);
+    });
+  });
+
   return Array.from(assets)
     .map((path) => normalizePath(path))
     .filter((path) => path && !path.startsWith("http"));
@@ -61,30 +117,72 @@ export const rewriteProjectForSaveZip = (
   normalizePath: (value: string) => string
 ): MenuProject => {
   const exportProject = JSON.parse(JSON.stringify(project)) as MenuProject;
+  const sourceToRelative = new Map<string, string>(
+    assetPairs.map((pair) => [pair.sourcePath, `assets/${pair.relativePath}`])
+  );
+  const rewriteSource = (value?: string) => {
+    if (!value) return value;
+    const normalized = normalizePath(value);
+    return sourceToRelative.get(normalized) ?? value;
+  };
+  const rewriteDerivedVariant = (value?: DerivedMediaVariant) => {
+    if (!value) return value;
+    if (typeof value === "string") {
+      return rewriteSource(value) ?? value;
+    }
+    const next: Record<string, string> = {};
+    Object.entries(value).forEach(([format, source]) => {
+      if (!source) return;
+      next[format] = rewriteSource(source) ?? source;
+    });
+    return Object.keys(next).length ? next : value;
+  };
+  const rewriteDerived = (value?: DerivedMediaMap) => {
+    if (!value) return value;
+    return {
+      ...(value.profileId ? { profileId: value.profileId } : {}),
+      ...(value.small ? { small: rewriteDerivedVariant(value.small) } : {}),
+      ...(value.medium ? { medium: rewriteDerivedVariant(value.medium) } : {}),
+      ...(value.large ? { large: rewriteDerivedVariant(value.large) } : {})
+    };
+  };
+  const rewriteResponsive = (value?: { small?: string; medium?: string; large?: string }) => {
+    if (!value) return value;
+    return {
+      ...(value.small ? { small: rewriteSource(value.small) ?? value.small } : {}),
+      ...(value.medium ? { medium: rewriteSource(value.medium) ?? value.medium } : {}),
+      ...(value.large ? { large: rewriteSource(value.large) ?? value.large } : {})
+    };
+  };
 
   if (exportProject.meta.fontSource) {
-    const normalized = normalizePath(exportProject.meta.fontSource);
-    const pair = assetPairs.find((item) => item.sourcePath === normalized);
-    if (pair) {
-      exportProject.meta.fontSource = `assets/${pair.relativePath}`;
-    }
+    exportProject.meta.fontSource =
+      rewriteSource(exportProject.meta.fontSource) ?? exportProject.meta.fontSource;
+  }
+  if (exportProject.meta.logoSrc) {
+    exportProject.meta.logoSrc = rewriteSource(exportProject.meta.logoSrc) ?? exportProject.meta.logoSrc;
   }
 
   exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
-    const normalized = normalizePath(bg.src || "");
-    const pair = assetPairs.find((item) => item.sourcePath === normalized);
-    return { ...bg, src: pair ? `assets/${pair.relativePath}` : bg.src };
+    return {
+      ...bg,
+      src: rewriteSource(bg.src) ?? bg.src,
+      originalSrc: rewriteSource(bg.originalSrc) ?? bg.originalSrc,
+      derived: rewriteDerived(bg.derived)
+    };
   });
   exportProject.categories = exportProject.categories.map((category) => ({
     ...category,
     items: category.items.map((item) => {
-      const hero = normalizePath(item.media.hero360 || "");
-      const pair = assetPairs.find((p) => p.sourcePath === hero);
       const media = {
         ...item.media,
-        hero360: pair ? `assets/${pair.relativePath}` : item.media.hero360
+        hero360: rewriteSource(item.media.hero360) ?? item.media.hero360,
+        originalHero360:
+          rewriteSource(item.media.originalHero360) ?? item.media.originalHero360,
+        gallery: item.media.gallery?.map((entry) => rewriteSource(entry) ?? entry),
+        responsive: rewriteResponsive(item.media.responsive),
+        derived: rewriteDerived(item.media.derived)
       };
-      delete (media as { responsive?: unknown }).responsive;
       return {
         ...item,
         media
@@ -104,7 +202,7 @@ export const buildProjectZipEntries = async (options: {
 }) => {
   const { project, slug, normalizePath, readAssetBytes, onMissingAsset } = options;
   const encoder = new TextEncoder();
-  const assets = collectProjectAssetPaths(project, normalizePath);
+  const assets = collectSaveProjectAssetPaths(project, normalizePath);
   const assetPairs = buildProjectAssetPairs(slug, assets, normalizePath);
   const exportProject = rewriteProjectForSaveZip(project, assetPairs, normalizePath);
   const entries: ZipBinaryEntry[] = [];

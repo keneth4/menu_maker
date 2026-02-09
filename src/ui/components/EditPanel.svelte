@@ -16,6 +16,7 @@
   export let selectedItemId = "";
   export let selectedCategory: MenuCategory | null = null;
   export let selectedItem: MenuItem | null = null;
+  export let assetOptions: string[] = [];
   export let commonAllergenCatalog: CommonAllergen[] = [];
 
   export let cycleEditLang: () => void = () => {};
@@ -55,6 +56,26 @@
   export let handleCustomAllergensInput: (item: MenuItem, lang: string, event: Event) => void =
     () => {};
   export let handleVeganToggle: (item: MenuItem, event: Event) => void = () => {};
+  export let setIdentityMode: (mode: "text" | "logo") => void = () => {};
+  export let setLogoSrc: (src: string) => void = () => {};
+  export let setItemRotationDirection: (
+    item: MenuItem,
+    direction: "cw" | "ccw"
+  ) => void = () => {};
+
+  const handleLogoSrcEvent = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setLogoSrc(target.value);
+  };
+
+  const getItemRotationDirection = (item: MenuItem) =>
+    item.media.rotationDirection === "cw" ? "cw" : "ccw";
+
+  const toggleItemRotationDirection = (item: MenuItem) => {
+    const current = getItemRotationDirection(item);
+    setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
+  };
 </script>
 
 {#if deviceMode === "mobile" && previewMode === "full"}
@@ -101,6 +122,57 @@
     <p class="edit-hierarchy">{t("editHierarchyHint")}</p>
 
     {#if editPanel === "identity"}
+      <div class="edit-block">
+        <p class="edit-block__title">{t("identityMode")}</p>
+        <div class="editor-radio-group editor-radio-group--inline">
+          <label class="editor-radio">
+            <input
+              type="radio"
+              name="identity-mode-edit"
+              checked={(draft.meta.identityMode ?? "text") === "text"}
+              on:change={() => setIdentityMode("text")}
+            />
+            <span>{t("identityModeText")}</span>
+          </label>
+          <label class="editor-radio">
+            <input
+              type="radio"
+              name="identity-mode-edit"
+              checked={draft.meta.identityMode === "logo"}
+              on:change={() => setIdentityMode("logo")}
+            />
+            <span>{t("identityModeLogo")}</span>
+          </label>
+        </div>
+      </div>
+      {#if draft.meta.identityMode === "logo"}
+        <div class="edit-block">
+          <p class="edit-block__title">{t("logoAsset")}</p>
+          <label class="editor-field">
+            <span>{t("wizardSrc")}</span>
+            {#if assetOptions.length}
+              <select
+                class="editor-select"
+                value={draft.meta.logoSrc ?? ""}
+                on:change={handleLogoSrcEvent}
+              >
+                <option value=""></option>
+                {#each assetOptions as path}
+                  <option value={path}>{path}</option>
+                {/each}
+              </select>
+            {:else}
+              <input
+                type="text"
+                class="editor-input"
+                value={draft.meta.logoSrc ?? ""}
+                list="asset-files"
+                on:input={handleLogoSrcEvent}
+              />
+            {/if}
+          </label>
+        </div>
+      {/if}
       <div class="edit-block">
         <p class="edit-block__title">{t("restaurantName")}</p>
         <label class="editor-field">
@@ -244,6 +316,23 @@
                     bind:value={selectedItem.media.hero360}
                     list="asset-files"
                   />
+                  <div class="edit-item__rotation">
+                    <button
+                      class="editor-outline editor-toggle-direction"
+                      type="button"
+                      on:click={() => toggleItemRotationDirection(selectedItem)}
+                    >
+                      <span class="editor-radio__icon" aria-hidden="true">
+                        {getItemRotationDirection(selectedItem) === "cw" ? "↻" : "↺"}
+                      </span>
+                      <span>
+                        {getItemRotationDirection(selectedItem) === "cw"
+                          ? t("rotationClockwise")
+                          : t("rotationCounterclockwise")}
+                      </span>
+                    </button>
+                    <small class="editor-hint">{t("rotationChooseHint")}</small>
+                  </div>
                 </label>
               </div>
               <div class="edit-item__content">

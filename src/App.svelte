@@ -128,8 +128,6 @@
   let modalMediaCleanup: (() => void) | null = null;
   let modalMediaToken = 0;
   let detailRotateDirection: 1 | -1 = -1;
-  let detailRotateSource = "";
-  const detailRotateDirectionBySource = new Map<string, 1 | -1>();
   const DEBUG_INTERACTIVE_CENTER =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).has("debugRotate");
@@ -1171,8 +1169,6 @@ const interactiveDetailBytesCache = new Map();
 const interactiveDetailBytesPending = new Map();
 const interactiveDetailCenterOffsetCache = new Map();
 let detailRotateDirection = -1;
-let detailRotateSource = "";
-const detailRotateDirectionBySource = new Map();
 const jukeboxWheelState = new Map();
 const focusRowWheelState = new Map();
 
@@ -1330,15 +1326,7 @@ const getDetailRotateHint = () => {
   const isTouch = window.matchMedia("(pointer: coarse)").matches;
   return getInstructionCopy(isTouch ? "rotateHintTouch" : "rotateHintMouse");
 };
-const getDetailRotateToggleHint = () => {
-  return getInstructionCopy("rotateToggle");
-};
-const toggleDetailRotateDirection = () => {
-  detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
-  if (detailRotateSource) {
-    detailRotateDirectionBySource.set(detailRotateSource, detailRotateDirection);
-  }
-};
+const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "cw" ? -1 : 1);
 const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
   const readForegroundCenterFromBitmap = (bitmap) => {
     const maxSize = 140;
@@ -2397,6 +2385,9 @@ const render = () => {
     DATA.meta.title?.[locale] ??
     DATA.meta.title?.[DATA.meta.defaultLocale] ??
     "";
+  const identityMode = DATA.meta.identityMode === "logo" ? "logo" : "text";
+  const logoSrc = (DATA.meta.logoSrc || "").trim();
+  const logoAlt = (restaurantName || menuTitle || "Restaurant").replace(/"/g, "&quot;");
   const templateClass = "template-" + (DATA.meta.template || "focus-rows");
   ensureFont();
   app.innerHTML = \`
@@ -2419,7 +2410,9 @@ const render = () => {
       <div class="menu-overlay"></div>
       <header class="menu-topbar">
         <div class="menu-title-block">
-          <p class="menu-eyebrow">\${restaurantName}</p>
+          \${identityMode === "logo" && logoSrc
+            ? '<img class="menu-logo" src="' + logoSrc + '" alt="' + logoAlt + '" decoding="async" />'
+            : (restaurantName ? '<p class="menu-eyebrow">' + restaurantName + "</p>" : "")}
           <h1 class="menu-title">\${menuTitle || "Menu"}</h1>
         </div>
         <div class="menu-lang">
@@ -2851,17 +2844,14 @@ const bindCards = () => {
       const longDesc = textOf(dish.longDescription);
       const allergens = getAllergenValues(dish).join(", ");
       const asset = getInteractiveDetailAsset(dish);
-      detailRotateSource = asset?.source || "";
-      detailRotateDirection = detailRotateSource
-        ? detailRotateDirectionBySource.get(detailRotateSource) || -1
-        : -1;
+      detailRotateDirection = getDishRotateDirection(dish);
       modalContent.innerHTML = \`
         <div class="dish-modal__header">
           <p class="dish-modal__title">\${textOf(dish.name)}</p>
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
-          \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p><button class=\\\"dish-modal__media-toggle\\\" id=\\\"modal-rotate-toggle\\\" type=\\\"button\\\" title=\\\"" + getDetailRotateToggleHint() + "\\\" aria-label=\\\"" + getDetailRotateToggleHint() + "\\\"><span aria-hidden=\\\"true\\\">⇄</span></button>" : ""}
+          \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p>" : ""}
           <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
         <div class="dish-modal__content">
@@ -2877,15 +2867,6 @@ const bindCards = () => {
       modal.classList.add("open");
       if (asset && supportsInteractiveMedia()) {
         void setupInteractiveModalMedia(asset);
-      }
-      const toggleButton = modal.querySelector("#modal-rotate-toggle");
-      if (toggleButton) {
-        toggleButton.classList.toggle("is-reversed", detailRotateDirection === -1);
-        toggleButton.addEventListener("click", (event) => {
-          event.stopPropagation();
-          toggleDetailRotateDirection();
-          toggleButton.classList.toggle("is-reversed", detailRotateDirection === -1);
-        });
       }
       modal.querySelector("#modal-close")?.addEventListener("click", closeModal);
     });
@@ -2994,7 +2975,7 @@ const bindSectionFocus = () => {
 
 const closeModal = () => {
   teardownInteractiveModalMedia();
-  detailRotateSource = "";
+  detailRotateDirection = -1;
   modal.classList.remove("open");
 };
 
@@ -3139,6 +3120,13 @@ void prewarmInteractiveDetailAssets();
         const mapped = sourceToExportPath.get(normalized);
         if (mapped) {
           exportProject.meta.fontSource = mapped;
+        }
+      }
+      if (exportProject.meta.logoSrc) {
+        const normalized = normalizePath(exportProject.meta.logoSrc);
+        const mapped = sourceToExportPath.get(normalized);
+        if (mapped) {
+          exportProject.meta.logoSrc = mapped;
         }
       }
 
@@ -3355,15 +3343,6 @@ void prewarmInteractiveDetailAssets();
   const getDetailRotateHint = (lang: string) => {
     const key = deviceMode === "mobile" ? "rotateHintTouch" : "rotateHintMouse";
     return getInstructionCopy(key, lang);
-  };
-
-  const getDetailRotateToggleHint = (lang: string) => getInstructionCopy("rotateToggle", lang);
-
-  const toggleDetailRotateDirection = () => {
-    detailRotateDirection = detailRotateDirection === 1 ? -1 : 1;
-    if (detailRotateSource) {
-      detailRotateDirectionBySource.set(detailRotateSource, detailRotateDirection);
-    }
   };
 
   const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
@@ -5360,18 +5339,15 @@ void prewarmInteractiveDetailAssets();
     activeItem = { category: categoryId, itemId };
     void tick().then(() => {
       const dish = resolveActiveDish();
+      detailRotateDirection = getDishRotateDirection(dish);
       const asset = getInteractiveDetailAsset(dish);
-      detailRotateSource = asset?.source || "";
-      detailRotateDirection = detailRotateSource
-        ? detailRotateDirectionBySource.get(detailRotateSource) ?? -1
-        : -1;
       void setupInteractiveDetailMedia(asset);
     });
   };
 
   const closeDish = () => {
     teardownInteractiveDetailMedia();
-    detailRotateSource = "";
+    detailRotateDirection = -1;
     activeItem = null;
   };
 
@@ -5545,6 +5521,27 @@ void prewarmInteractiveDetailAssets();
     if (!draft) return;
     const input = event.currentTarget as HTMLInputElement;
     draft.meta.fontSource = input.value;
+    touchDraft();
+  };
+
+  const setIdentityMode = (mode: "text" | "logo") => {
+    if (!draft) return;
+    draft.meta.identityMode = mode;
+    touchDraft();
+  };
+
+  const setLogoSrc = (src: string) => {
+    if (!draft) return;
+    draft.meta.logoSrc = src;
+    touchDraft();
+  };
+
+  const getDishRotateDirection = (item: MenuItem | null): 1 | -1 =>
+    item?.media.rotationDirection === "cw" ? -1 : 1;
+
+  const setItemRotationDirection = (item: MenuItem, direction: "cw" | "ccw") => {
+    if (item.media.rotationDirection === direction) return;
+    item.media.rotationDirection = direction;
     touchDraft();
   };
 
@@ -5821,6 +5818,7 @@ void prewarmInteractiveDetailAssets();
               bind:selectedItemId
               {selectedCategory}
               {selectedItem}
+              {assetOptions}
               {commonAllergenCatalog}
               {cycleEditLang}
               {ensureRestaurantName}
@@ -5842,6 +5840,9 @@ void prewarmInteractiveDetailAssets();
               {getCustomAllergensInput}
               {handleCustomAllergensInput}
               {handleVeganToggle}
+              {setIdentityMode}
+              {setLogoSrc}
+              {setItemRotationDirection}
             />
           {:else}
             <WizardPanel
@@ -5870,6 +5871,9 @@ void prewarmInteractiveDetailAssets();
               {removeWizardCategory}
               {addWizardDish}
               {removeWizardDish}
+              {setIdentityMode}
+              {setLogoSrc}
+              {setItemRotationDirection}
               {handleLocalizedInput}
               {handleDescriptionInput}
               {getLocalizedValue}
@@ -5923,9 +5927,7 @@ void prewarmInteractiveDetailAssets();
     <DishModal
       {dish}
       interactiveEnabled={Boolean(interactiveAsset && supportsInteractiveMedia())}
-      {detailRotateDirection}
       detailRotateHint={getDetailRotateHint(locale)}
-      detailRotateToggleHint={getDetailRotateToggleHint(locale)}
       bind:modalMediaHost
       bind:modalMediaImage
       {textOf}
@@ -5935,7 +5937,6 @@ void prewarmInteractiveDetailAssets();
       {getMenuTerm}
       {formatPrice}
       on:close={closeDish}
-      on:toggleRotate={toggleDetailRotateDirection}
     />
   {/if}
 {/if}
