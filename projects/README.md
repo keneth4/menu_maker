@@ -1,9 +1,9 @@
-# Estructura de proyectos
+# Estructura de proyectos (`public/projects`)
 
 Cada proyecto vive en una carpeta propia y contiene su configuracion y assets.
 
 ```
-projects/
+public/projects/
   <slug>/
     menu.json
     assets/
@@ -12,6 +12,7 @@ projects/
       sounds/
 ```
 
-Durante desarrollo, estos archivos se sirven desde `public/projects/<slug>`.
-El objetivo final es que el editor pueda leer y escribir estas carpetas de
-forma local, y exportar un ZIP estatico por proyecto.
+Durante desarrollo y pruebas en contenedor, estos archivos se sirven desde
+`/projects/<slug>` (mapeados desde `public/projects/<slug>`).
+El editor puede leer/escribir assets via modo `filesystem` o `bridge` y
+exportar un ZIP estatico por proyecto.

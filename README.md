@@ -112,7 +112,7 @@ Core shape (`menu.json`):
 - `meta`: slug, name, restaurant/title localized text, template, locales, currency, font config.
 - `backgrounds[]`: media assets for rotating background.
 - `categories[]`: localized category name + dish list.
-- `items[]`: localized name/description/longDescription, price, allergens, vegan flag, media.
+- `categories[].items[]`: localized name/description/longDescription, price, allergens, vegan flag, media.
 - `sound`: scaffold exists for future sound behavior.
 
 ## 5) Template Behavior (Implemented)
@@ -190,25 +190,29 @@ Export rules:
 
 ## 9) Current Technical Notes
 
-- Main behavior is still concentrated in `src/App.svelte`.
-- Asset bridge contract is in `vite.config.ts`.
-- Zip utilities live in `src/lib/zip.ts`.
-- Template behavior reference doc:
-  - `TEMPLATE_BEHAVIOR_GUIDE.md`
+- UI shell/orchestration is still concentrated in `src/App.svelte` (componentized but still monolithic).
+- Template capability matrix + strategy interface are in `src/core/templates/registry.ts`.
+- Domain logic modules are in `src/core/menu/*`.
+- Import/export use-cases are in `src/application/export/*`.
+- Bridge/filesystem adapters are in `src/infrastructure/*`.
+- Bridge API contract remains in `vite.config.ts` (`/api/assets/*`).
+- Zip primitives remain in `src/lib/zip.ts`.
+- Template behavior reference doc: `TEMPLATE_BEHAVIOR_GUIDE.md`.
 
-## 10) Future Development (Recommended)
+## 10) Next Development Priorities
 
-Short-term refactor direction:
-- split `src/App.svelte` into focused feature modules/components,
-- isolate asset operations behind adapters/services,
-- isolate import/export logic from UI concerns,
-- expand automated tests beyond current smoke checks.
+Completed in Phases 1-8:
+- UI decomposition into focused Svelte components,
+- asset and pathing adapters in infrastructure modules,
+- import/export use-case extraction and static export diagnostics,
+- expanded test coverage (unit + e2e smoke + perf export check),
+- template capability matrix + strategy-driven preview/interaction wiring.
 
-Product direction opportunities:
-- template capability matrix and explicit constraints per template,
-- stronger wizard recommendations based on menu size/use case,
-- deeper accessibility and reduced-motion parity,
-- richer performance reporting in export pipeline.
+Open product and engineering priorities:
+- stronger wizard recommendations by menu size/use case,
+- accessibility hardening and reduced-motion parity across templates,
+- continue reducing `src/App.svelte` orchestration weight into additional modules/stores,
+- template expansion using the strategy registry (next template implementation path).
 
 ## 11) Local Development
 
@@ -269,6 +273,7 @@ This keeps the bridge API contract stable under container dev:
 2. Verify bridge: `curl "http://127.0.0.1:5173/api/assets/ping?project=manual-smoke"`
 3. Run export flow against containerized server:
    `PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run test:e2e -- --grep "save project and export static site create zip downloads"`
+   - If local Playwright runtime mismatches Node, use `npm run test:perf` instead.
 4. `docker compose down`
 
 ## 13) Performance Hardening (Phase 7)

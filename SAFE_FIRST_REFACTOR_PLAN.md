@@ -9,19 +9,17 @@ Refactor MenuMaker into a future-proof architecture while keeping runtime behavi
 
 The refactor is explicitly designed to support containerized execution and faster, asset-rich exported static sites.
 
-## Current baseline (verified on this branch)
-- Most behavior remains concentrated in `src/App.svelte` (~7.8k lines).
-- Bridge API and filesystem concerns are coupled inside `vite.config.ts` + UI state logic.
-- Export runtime (`buildExportScript`) is generated inline from `src/App.svelte`.
-- `npm run build` passes.
-- `npm test` passes (Vitest isolated from Playwright e2e specs).
-- `npm run test:e2e` passes with baseline smoke coverage for:
-  - landing,
-  - create project,
-  - open json,
-  - open zip,
-  - save/export downloads.
-- No first-class container files exist yet (`Dockerfile`, `docker-compose` not present).
+## Current baseline (post-Phase-8 snapshot)
+- App behavior orchestration is still concentrated in `src/App.svelte` (~6k lines), but major logic is now extracted to `core`, `application`, `infrastructure`, and `ui` modules.
+- Bridge API contract remains stable in `vite.config.ts` with adapter usage in `src/infrastructure/bridge/*`.
+- Export runtime builder (`buildExportScript`) is still generated inline from `src/App.svelte` (known remaining extraction item).
+- Containerized workflows are implemented (`Dockerfile.dev`, `Dockerfile.prod`, `docker-compose.yml`, `scripts/container-smoke.sh`).
+- Export diagnostics and budgets are implemented (`asset-manifest.json`, `export-report.json`, `npm run test:perf`).
+- Template capability matrix and strategy interface are implemented (`src/core/templates/registry.ts`).
+- Validation status:
+  - `npm run build` passes,
+  - `npm test` passes,
+  - `npm run test:e2e` and `npm run test:perf` are available for smoke/perf validation.
 
 ## Non-negotiable guardrails
 1. Behavior parity first, architecture second.
@@ -161,6 +159,9 @@ Exit criteria:
 - green build + unit + e2e smoke,
 - no user-visible behavior changes.
 
+Status:
+- Completed.
+
 ## Phase 2: Domain extraction (`core`)
 - Move `normalizeProject`, localization helpers, currency formatting, allergen helpers into pure modules.
 - Add unit tests for schema normalization and locale fallback rules.
@@ -168,6 +169,9 @@ Exit criteria:
 Exit criteria:
 - no UI regression,
 - pure-domain tests cover migration/defaulting paths.
+
+Status:
+- Completed.
 
 ## Phase 3: Infrastructure adapters
 - Extract bridge client and filesystem operations into adapter interfaces.
@@ -178,6 +182,9 @@ Exit criteria:
 - asset workflows parity in both modes,
 - same bridge semantics from UI perspective.
 
+Status:
+- Completed.
+
 ## Phase 4: Import/export isolation
 - Move zip read/write and static export assembly to `application/export` + `infrastructure/*`.
 - Extract export runtime builder from `App.svelte`.
@@ -186,6 +193,12 @@ Exit criteria:
 Exit criteria:
 - exported zip file set unchanged (unless versioned),
 - import compatibility retained for stored zip entries.
+
+Status:
+- Mostly completed:
+  - import/export helpers and diagnostics are extracted to `src/application/export/*`,
+  - zip/project import helpers are extracted to `src/application/projects/*`,
+  - remaining deferred item: exported runtime script builder is still inline in `src/App.svelte`.
 
 ## Phase 5: UI decomposition (Svelte)
 - Decompose `App.svelte` into:
@@ -202,6 +215,9 @@ Exit criteria:
 - behavior parity checklist passes,
 - component boundaries align with stores/use-cases.
 
+Status:
+- Completed.
+
 ## Phase 6: Containerization enablement
 - Add Dockerfiles + compose + volume mapping for `public/projects`.
 - Document local container workflows for dev/build/test.
@@ -210,6 +226,9 @@ Exit criteria:
 Exit criteria:
 - app works in container with same core behaviors,
 - parity checklist still passes.
+
+Status:
+- Completed.
 
 ## Phase 7: Performance hardening (export + runtime)
 - Implement export diagnostics manifest/report.
