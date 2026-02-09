@@ -216,6 +216,12 @@ Exit criteria:
 - Add performance thresholds in CI checks.
 - Tune startup preload strategy and runtime rendering hot paths.
 
+Status:
+- Implemented on this branch:
+  - export now emits `asset-manifest.json` and `export-report.json`,
+  - startup preloading now uses blocking-first + deferred warmup strategy,
+  - `npm run test:perf` validates export diagnostics and budget checks through e2e export flow.
+
 Exit criteria:
 - budget targets met or explicitly baselined with approved exceptions,
 - no regression in interaction quality.

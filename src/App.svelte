@@ -11,6 +11,15 @@
     buildProjectZipEntries,
     collectProjectAssetPaths
   } from "./application/export/projectZip";
+  import {
+    type ExportAssetManifestEntry,
+    buildExportDiagnostics,
+    buildExportDiagnosticsEntries
+  } from "./application/export/diagnostics";
+  import {
+    evaluateExportBudgets,
+    measureGzipBytes
+  } from "./application/export/performanceBudget";
   import { buildStaticShellEntries } from "./application/export/staticShell";
   import {
     findMenuJsonEntry,
@@ -26,6 +35,7 @@
   import { getLocalizedValue, normalizeLocaleCode } from "./core/menu/localization";
   import { normalizeProject } from "./core/menu/normalization";
   import { formatMenuPrice } from "./core/menu/pricing";
+  import { buildStartupAssetPlan, collectItemPrioritySources } from "./core/menu/startupAssets";
   import {
     FOCUS_ROWS_TOUCH_DELTA_SCALE,
     FOCUS_ROWS_TOUCH_INTENT_THRESHOLD,
@@ -2207,19 +2217,67 @@ const getAssetDisclaimer = () => getInstructionCopy("assetDisclaimer");
 const getJukeboxHint = () => getInstructionCopy("jukeboxHint");
 const getFocusRowsHint = () => getInstructionCopy("focusRowsHint");
 const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
-const collectStartupSources = () => {
-  const urls = new Set();
+const STARTUP_BLOCKING_BACKGROUND_LIMIT = 1;
+const STARTUP_BLOCKING_ITEM_LIMIT = 6;
+const collectStartupItemPrioritySources = () => {
+  const rows = DATA.categories.map((category) =>
+    category.items
+      .map((item) => (getCarouselImageSrc(item) || "").trim())
+      .filter((src) => src.length > 0)
+  );
+  const ordered = [];
+  let depth = 0;
+  while (true) {
+    let foundAtDepth = false;
+    rows.forEach((row) => {
+      const src = row[depth];
+      if (!src) return;
+      ordered.push(src);
+      foundAtDepth = true;
+    });
+    if (!foundAtDepth) break;
+    depth += 1;
+  }
+  const deduped = [];
+  const seen = new Set();
+  ordered.forEach((src) => {
+    if (seen.has(src)) return;
+    seen.add(src);
+    deduped.push(src);
+  });
+  return deduped;
+};
+const buildStartupSourcePlan = () => {
+  const backgroundSources = [];
+  const backgroundSeen = new Set();
   backgrounds.forEach((bg) => {
     const src = (bg?.src || "").trim();
-    if (src) urls.add(src);
+    if (!src || backgroundSeen.has(src)) return;
+    backgroundSeen.add(src);
+    backgroundSources.push(src);
   });
-  DATA.categories.forEach((category) => {
-    category.items.forEach((item) => {
-      const src = (getCarouselImageSrc(item) || "").trim();
-      if (src) urls.add(src);
-    });
+  const itemSources = collectStartupItemPrioritySources();
+  const blocking = [];
+  const blockingSet = new Set();
+  backgroundSources.slice(0, STARTUP_BLOCKING_BACKGROUND_LIMIT).forEach((src) => {
+    if (blockingSet.has(src)) return;
+    blockingSet.add(src);
+    blocking.push(src);
   });
-  return Array.from(urls);
+  itemSources.slice(0, STARTUP_BLOCKING_ITEM_LIMIT).forEach((src) => {
+    if (blockingSet.has(src)) return;
+    blockingSet.add(src);
+    blocking.push(src);
+  });
+  const all = [];
+  const seen = new Set();
+  [...backgroundSources, ...itemSources].forEach((src) => {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    all.push(src);
+  });
+  const deferred = all.filter((src) => !blockingSet.has(src));
+  return { blocking, deferred };
 };
 const preloadImageAsset = (src) =>
   new Promise((resolve) => {
@@ -2236,6 +2294,33 @@ const preloadImageAsset = (src) =>
       resolve();
     }
   });
+const preloadImageBatch = async (sources, onProgress, concurrency = 4) => {
+  if (!sources.length) return;
+  const queue = sources.slice();
+  const workers = Math.max(1, Math.min(concurrency, queue.length));
+  let loaded = 0;
+  const runWorker = async () => {
+    while (queue.length > 0) {
+      const source = queue.shift();
+      if (!source) continue;
+      await preloadImageAsset(source);
+      loaded += 1;
+      onProgress?.(loaded, sources.length);
+    }
+  };
+  await Promise.all(Array.from({ length: workers }, () => runWorker()));
+};
+const preloadDeferredAssets = (sources) => {
+  if (!sources.length) return;
+  const run = () => {
+    void preloadImageBatch(sources, null, 3);
+  };
+  if ("requestIdleCallback" in window && typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => run(), { timeout: 900 });
+    return;
+  }
+  window.setTimeout(run, 120);
+};
 const syncStartupUi = () => {
   const preview = app.querySelector(".menu-preview");
   const loader = app.querySelector(".menu-startup-loader");
@@ -2248,31 +2333,31 @@ const syncStartupUi = () => {
 };
 const preloadStartupAssets = async () => {
   const token = ++startupToken;
-  const sources = collectStartupSources();
-  if (sources.length === 0) {
+  const plan = buildStartupSourcePlan();
+  if (plan.blocking.length === 0) {
     startupProgress = 100;
     startupLoading = false;
     syncStartupUi();
+    preloadDeferredAssets(plan.deferred);
     return;
   }
   startupLoading = true;
   startupProgress = 0;
   syncStartupUi();
-  let loaded = 0;
-  await Promise.all(
-    sources.map((src) =>
-      preloadImageAsset(src).finally(() => {
-        if (token !== startupToken) return;
-        loaded += 1;
-        startupProgress = Math.round((loaded / sources.length) * 100);
-        syncStartupUi();
-      })
-    )
+  await preloadImageBatch(
+    plan.blocking,
+    (loaded, total) => {
+      if (token !== startupToken) return;
+      startupProgress = Math.round((loaded / total) * 100);
+      syncStartupUi();
+    },
+    4
   );
   if (token !== startupToken) return;
   startupProgress = 100;
   startupLoading = false;
   syncStartupUi();
+  preloadDeferredAssets(plan.deferred);
 };
 
 const buildCarousel = (category) => {
@@ -2296,11 +2381,12 @@ const buildCarousel = (category) => {
       : ""}
     <div class="menu-carousel \${category.items.length <= 1 ? "single" : ""}" data-category-id="\${category.id}">
       \${entries
-        .map(
-          (entry) => \`
+        .map((entry) => {
+          const srcSet = buildSrcSet(entry.item);
+          return \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
-                <img src="\${getCarouselImageSrc(entry.item)}" \${buildSrcSet(entry.item) ? 'srcset="' + buildSrcSet(entry.item) + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
+                <img src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -2310,8 +2396,8 @@ const buildCarousel = (category) => {
                 <p class="carousel-desc">\${textOf(entry.item.description)}</p>
               </div>
             </button>
-          \`
-        )
+          \`;
+        })
         .join("")}
     </div>
   \`;
@@ -2981,7 +3067,15 @@ void prewarmInteractiveDetailAssets();
       const assets = collectProjectAssetPaths(draft, normalizePath);
       const assetPairs = buildProjectAssetPairs(slug, assets, normalizePath);
       const entries: { name: string; data: Uint8Array }[] = [];
+      const manifestEntries: ExportAssetManifestEntry[] = [];
+      const missingSourcePaths = new Set<string>();
       const heroSources = new Set<string>();
+      const backgroundSources = new Set(
+        draft.backgrounds
+          .map((bg) => normalizePath(bg.src || ""))
+          .filter((source) => source.length > 0)
+      );
+      const fontSource = normalizePath(draft.meta.fontSource || "");
       draft.categories.forEach((category) => {
         category.items.forEach((item) => {
           const hero = normalizePath(item.media.hero360 || "");
@@ -2990,26 +3084,61 @@ void prewarmInteractiveDetailAssets();
       });
       const sourceToExportPath = new Map<string, string>();
       const sourceToResponsive = new Map<string, ResponsiveMediaPaths>();
+      const getSourceRole = (sourcePath: string): ExportAssetManifestEntry["role"] => {
+        if (fontSource && sourcePath === fontSource) return "font";
+        if (backgroundSources.has(sourcePath)) return "background";
+        if (heroSources.has(sourcePath)) return "hero";
+        return "other";
+      };
 
       for (const pair of assetPairs) {
         try {
           const exportPath = `assets/${pair.relativePath}`;
           const data = await readAssetBytes(slug, pair.sourcePath);
-          if (!data) continue;
+          if (!data) {
+            missingSourcePaths.add(pair.sourcePath);
+            continue;
+          }
           const mime = getMimeType(exportPath).toLowerCase();
           const shouldResize = heroSources.has(pair.sourcePath) && isResponsiveImageMime(mime);
           if (shouldResize) {
             const responsive = await createResponsiveImageVariants(exportPath, data, mime);
             if (responsive) {
-              responsive.entries.forEach((entry) => entries.push(entry));
+              const responsiveVariantByPath = new Map<string, "small" | "medium" | "large">([
+                [responsive.paths.small, "small"],
+                [responsive.paths.medium, "medium"],
+                [responsive.paths.large, "large"]
+              ]);
+              responsive.entries.forEach((entry) => {
+                entries.push(entry);
+                manifestEntries.push({
+                  outputPath: entry.name,
+                  sourcePath: pair.sourcePath,
+                  role: getSourceRole(pair.sourcePath),
+                  mime,
+                  bytes: entry.data.byteLength,
+                  responsiveVariant: responsiveVariantByPath.get(entry.name) ?? null,
+                  firstView: false
+                });
+              });
               sourceToExportPath.set(pair.sourcePath, responsive.paths.large);
               sourceToResponsive.set(pair.sourcePath, responsive.paths);
               continue;
             }
           }
           entries.push({ name: exportPath, data });
+          manifestEntries.push({
+            outputPath: exportPath,
+            sourcePath: pair.sourcePath,
+            role: getSourceRole(pair.sourcePath),
+            mime,
+            bytes: data.byteLength,
+            responsiveVariant: null,
+            firstView: false
+          });
           sourceToExportPath.set(pair.sourcePath, exportPath);
         } catch (error) {
+          missingSourcePaths.add(pair.sourcePath);
           console.warn("Missing asset", pair.sourcePath, error);
         }
       }
@@ -3050,17 +3179,65 @@ void prewarmInteractiveDetailAssets();
         })
       }));
 
-      const encoder = new TextEncoder();
       const exportVersion = String(Date.now());
       const menuData = JSON.stringify(exportProject, null, 2);
+      const stylesCss = buildExportStyles();
+      const appJs = buildExportScript(exportProject);
       const shellEntries = buildStaticShellEntries({
         menuJson: menuData,
-        stylesCss: buildExportStyles(),
-        appJs: buildExportScript(exportProject),
+        stylesCss,
+        appJs,
         exportVersion,
         faviconIco: fromBase64(FAVICON_ICO_BASE64)
       });
       entries.push(...shellEntries);
+      shellEntries.forEach((entry) => {
+        manifestEntries.push({
+          outputPath: entry.name,
+          sourcePath: null,
+          role: "shell",
+          mime: getMimeType(entry.name),
+          bytes: entry.data.byteLength,
+          responsiveVariant: null,
+          firstView: false
+        });
+      });
+
+      const startupPlan = buildStartupAssetPlan({
+        backgroundSources: exportProject.backgrounds.map((bg) => bg.src || ""),
+        itemSources: collectItemPrioritySources(exportProject, getCarouselImageSource),
+        blockingBackgroundLimit: 1,
+        blockingItemLimit: 6
+      });
+      const firstViewSources = new Set(startupPlan.blocking);
+      manifestEntries.forEach((entry) => {
+        if (firstViewSources.has(entry.outputPath)) {
+          entry.firstView = true;
+        }
+      });
+
+      const firstViewImageBytes = manifestEntries
+        .filter((entry) => entry.firstView && entry.mime.startsWith("image/"))
+        .reduce((sum, entry) => sum + entry.bytes, 0);
+      const budgets = evaluateExportBudgets({
+        jsGzipBytes: await measureGzipBytes(appJs),
+        cssGzipBytes: await measureGzipBytes(stylesCss),
+        firstViewImageBytes
+      });
+      const diagnostics = buildExportDiagnostics({
+        slug,
+        generatedAt: new Date().toISOString(),
+        manifestEntries,
+        referencedSourcePaths: assetPairs.map((pair) => pair.sourcePath),
+        missingSourcePaths: Array.from(missingSourcePaths),
+        heroSourceCount: heroSources.size,
+        responsiveHeroSourceCount: sourceToResponsive.size,
+        budgets
+      });
+      entries.push(...buildExportDiagnosticsEntries(diagnostics));
+      if (!budgets.passed) {
+        console.warn("Export performance budgets exceeded", diagnostics.report.budgets.checks);
+      }
 
       const blob = createZipBlob(entries);
       const url = URL.createObjectURL(blob);
@@ -4020,55 +4197,80 @@ void prewarmInteractiveDetailAssets();
       }
     });
 
-  const collectPreviewStartupSources = (data: MenuProject) => {
-    const urls = new Set<string>();
-    data.backgrounds.forEach((bg) => {
-      const src = (bg.src || "").trim();
-      if (src) {
-        urls.add(src);
+  const preloadImageAssetBatch = async (
+    sources: string[],
+    onProgress: ((loaded: number, total: number) => void) | null,
+    concurrency = 4
+  ) => {
+    if (sources.length === 0) return;
+    const queue = [...sources];
+    const workers = Math.max(1, Math.min(concurrency, queue.length));
+    let loaded = 0;
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const source = queue.shift();
+        if (!source) continue;
+        await preloadImageAsset(source);
+        loaded += 1;
+        onProgress?.(loaded, sources.length);
       }
-    });
-    data.categories.forEach((category) => {
-      category.items.forEach((item) => {
-        const src = getCarouselImageSource(item).trim();
-        if (src) {
-          urls.add(src);
-        }
-      });
-    });
-    return Array.from(urls);
+    };
+    await Promise.all(Array.from({ length: workers }, () => runWorker()));
   };
 
-  const preloadPreviewStartupAssets = async (sources: string[]) => {
+  const preloadDeferredPreviewAssets = (sources: string[]) => {
+    if (!sources.length) return;
+    const run = () => {
+      void preloadImageAssetBatch(sources, null, 3);
+    };
+    if ("requestIdleCallback" in window) {
+      (window as Window & { requestIdleCallback?: (cb: IdleRequestCallback, options?: IdleRequestOptions) => number }).requestIdleCallback?.(
+        () => run(),
+        { timeout: 900 }
+      );
+      return;
+    }
+    window.setTimeout(run, 120);
+  };
+
+  const collectPreviewStartupPlan = (data: MenuProject) =>
+    buildStartupAssetPlan({
+      backgroundSources: data.backgrounds.map((bg) => bg.src || ""),
+      itemSources: collectItemPrioritySources(data, getCarouselImageSource),
+      blockingBackgroundLimit: 1,
+      blockingItemLimit: 6
+    });
+
+  const preloadPreviewStartupAssets = async (plan: { blocking: string[]; deferred: string[] }) => {
     const token = ++previewStartupToken;
-    if (sources.length === 0) {
+    if (plan.blocking.length === 0) {
       previewStartupProgress = 100;
       previewStartupLoading = false;
+      preloadDeferredPreviewAssets(plan.deferred);
       return;
     }
     previewStartupLoading = true;
     previewStartupProgress = 0;
-    let loaded = 0;
-    await Promise.all(
-      sources.map((src) =>
-        preloadImageAsset(src).finally(() => {
-          if (token !== previewStartupToken) return;
-          loaded += 1;
-          previewStartupProgress = Math.round((loaded / sources.length) * 100);
-        })
-      )
+    await preloadImageAssetBatch(
+      plan.blocking,
+      (loaded, total) => {
+        if (token !== previewStartupToken) return;
+        previewStartupProgress = Math.round((loaded / total) * 100);
+      },
+      4
     );
     if (token !== previewStartupToken) return;
     previewStartupProgress = 100;
     previewStartupLoading = false;
+    preloadDeferredPreviewAssets(plan.deferred);
   };
 
   $: if (activeProject && typeof window !== "undefined") {
-    const sources = collectPreviewStartupSources(activeProject);
-    const signature = sources.join("|");
+    const startupPlan = collectPreviewStartupPlan(activeProject);
+    const signature = startupPlan.all.join("|");
     if (signature !== previewStartupSignature) {
       previewStartupSignature = signature;
-      void preloadPreviewStartupAssets(sources);
+      void preloadPreviewStartupAssets(startupPlan);
     }
   } else {
     previewStartupSignature = "";
@@ -4547,9 +4749,19 @@ void prewarmInteractiveDetailAssets();
     if (["png", "gif", "webp", "jpg", "jpeg", "svg"].includes(ext)) {
       return `image/${ext === "jpg" ? "jpeg" : ext}`;
     }
+    if (ext === "ico") return "image/x-icon";
     if (["mp4", "webm"].includes(ext)) {
       return `video/${ext}`;
     }
+    if (ext === "css") return "text/css";
+    if (ext === "js") return "application/javascript";
+    if (ext === "json") return "application/json";
+    if (ext === "html") return "text/html";
+    if (ext === "txt") return "text/plain";
+    if (ext === "woff2") return "font/woff2";
+    if (ext === "woff") return "font/woff";
+    if (ext === "ttf") return "font/ttf";
+    if (ext === "otf") return "font/otf";
     return "application/octet-stream";
   };
 

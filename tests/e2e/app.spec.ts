@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { writeFile } from "node:fs/promises";
-import { createZipBlob } from "../../src/lib/zip";
+import { readFile, writeFile } from "node:fs/promises";
+import { createZipBlob, readZip } from "../../src/lib/zip";
 
 type ProjectFixture = {
   meta: {
@@ -140,4 +140,22 @@ test("save project and export static site create zip downloads", async ({ page }
   await page.getByRole("button", { name: /exportar sitio|export site/i }).click();
   const exportDownload = await exportDownloadPromise;
   expect(exportDownload.suggestedFilename()).toMatch(/-export\.zip$/i);
+
+  const exportPath = await exportDownload.path();
+  expect(exportPath).toBeTruthy();
+  const exportZip = await readFile(exportPath!);
+  const exportBuffer = exportZip.buffer.slice(
+    exportZip.byteOffset,
+    exportZip.byteOffset + exportZip.byteLength
+  );
+  const exportEntries = readZip(exportBuffer);
+  const names = exportEntries.map((entry) => entry.name);
+  expect(names).toContain("asset-manifest.json");
+  expect(names).toContain("export-report.json");
+  const reportEntry = exportEntries.find((entry) => entry.name === "export-report.json");
+  expect(reportEntry).toBeDefined();
+  const report = JSON.parse(new TextDecoder().decode(reportEntry!.data)) as {
+    budgets: { checks: Array<{ status: string }> };
+  };
+  expect(report.budgets.checks.filter((check) => check.status === "fail")).toEqual([]);
 });

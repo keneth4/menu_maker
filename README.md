@@ -167,6 +167,8 @@ Creates `<slug>-export.zip` containing:
 - `app.js`
 - `menu.json`
 - `assets/...`
+- `asset-manifest.json`
+- `export-report.json`
 - `favicon.ico`
 - `serve.command` and `serve.bat`
 - `README.txt`
@@ -174,6 +176,8 @@ Creates `<slug>-export.zip` containing:
 Export rules:
 - hero images can be auto-generated into responsive variants (`small`, `medium`, `large`),
 - exported app script inlines interaction runtime and menu payload,
+- startup preload uses a blocking first-view set plus deferred warmup for remaining assets,
+- export diagnostics include deterministic manifest + budget report data,
 - output expects serving over local HTTP (not direct `file://` open).
 
 ## 8) Import Rules and Constraints
@@ -218,6 +222,7 @@ Commands:
 - `npm run build`
 - `npm run test`
 - `npm run test:e2e`
+- `npm run test:perf` (export budget check via e2e export flow; falls back to container smoke if local Node is below Playwright minimum)
 
 ## 12) Container Workflows (Phase 6)
 
@@ -266,6 +271,23 @@ This keeps the bridge API contract stable under container dev:
 3. Run export flow against containerized server:
    `PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run test:e2e -- --grep "save project and export static site create zip downloads"`
 4. `docker compose down`
+
+## 13) Performance Hardening (Phase 7)
+
+Added in this phase:
+- deterministic export diagnostics files:
+  - `asset-manifest.json` (all exported files with sizes, mime, role, first-view flag),
+  - `export-report.json` (counts/bytes/missing assets/responsive coverage + budget checks).
+- export budget evaluation for:
+  - Export JS gzip (`<= 95 KB` target),
+  - Export CSS gzip (`<= 12 KB` target),
+  - first-view image payload (`<= 1.2 MB` target).
+- startup preload strategy update:
+  - block on first-view asset subset,
+  - defer non-critical asset warmup to idle/background.
+
+Validation:
+- `npm run test:perf` asserts export zip includes diagnostics and that no budget check is failing.
 
 ---
 
