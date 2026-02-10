@@ -49,14 +49,15 @@ describe("image source policy", () => {
     expect(buildResponsiveSrcSetForMenuItem(item)).toBe("legacy-sm.webp 480w, shared.webp 960w");
   });
 
-  it("prefers medium for carousel and large for detail", () => {
+  it("prefers medium for carousel and original for detail when available", () => {
     const item = withDerivedMedia(createMenuItem(), {
       medium: "derived-md.webp",
       large: "derived-lg.webp"
     });
+    item.media.originalHero360 = "original-detail.gif";
 
     expect(getCarouselImageSourceForMenuItem(item)).toBe("derived-md.webp");
-    expect(getDetailImageSourceForMenuItem(item)).toBe("derived-lg.webp");
+    expect(getDetailImageSourceForMenuItem(item)).toBe("original-detail.gif");
   });
 
   it("supports overriding derived format preference", () => {

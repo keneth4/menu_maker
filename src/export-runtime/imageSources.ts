@@ -83,6 +83,7 @@ const getLegacyResponsiveSource = (item: MenuItem, variant: ResponsiveVariant) =
   normalizeSource(item.media.responsive?.[variant]);
 
 const getHeroSource = (item: MenuItem) => normalizeSource(item.media.hero360);
+const getOriginalHeroSource = (item: MenuItem) => normalizeSource(item.media.originalHero360);
 
 const pickImageSourceByVariantOrder = (
   item: MenuItem,
@@ -135,6 +136,8 @@ export const getDetailImageSourceForMenuItem = (
   item: MenuItem,
   options: ImageSourcePolicyOptions = {}
 ) => {
+  const originalHero = getOriginalHeroSource(item);
+  if (originalHero) return originalHero;
   const preferredFormats = normalizeFormatPreference(options.preferredDerivedFormats);
   return pickImageSourceByVariantOrder(item, DETAIL_VARIANT_PRIORITY, preferredFormats);
 };
@@ -179,6 +182,8 @@ export const buildExportRuntimeImageSourceHelpers = (
     `};`,
     `const readLegacyResponsiveSource = (item, variant) =>`,
     `  normalizeImageSource(item?.media?.responsive?.[variant]);`,
+    `const readOriginalHeroSource = (item) =>`,
+    `  normalizeImageSource(item?.media?.originalHero360);`,
     `const pickPrioritySource = (item, priority) => {`,
     `  for (const variant of priority) {`,
     `    const source = readDerivedVariantSource(item, variant) || readLegacyResponsiveSource(item, variant);`,
@@ -199,6 +204,7 @@ export const buildExportRuntimeImageSourceHelpers = (
     `  return Array.from(unique.entries()).map(([src, width]) => src + " " + width + "w").join(", ");`,
     `};`,
     `const getCarouselImageSrc = (item) => pickPrioritySource(item, CAROUSEL_VARIANT_PRIORITY);`,
-    `const getDetailImageSrc = (item) => pickPrioritySource(item, DETAIL_VARIANT_PRIORITY);`
+    `const getDetailImageSrc = (item) =>`,
+    `  readOriginalHeroSource(item) || pickPrioritySource(item, DETAIL_VARIANT_PRIORITY);`
   ].join("\n");
 };

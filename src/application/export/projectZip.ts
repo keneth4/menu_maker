@@ -83,6 +83,7 @@ export const collectExportProjectAssetPaths = (
 
   project.categories.forEach((category) => {
     category.items.forEach((item) => {
+      if (item.media.originalHero360) assets.add(item.media.originalHero360);
       const derivedSources = new Set<string>();
       collectDerivedPaths(derivedSources, item.media.derived);
       if (derivedSources.size > 0) {

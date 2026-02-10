@@ -150,6 +150,9 @@ export const uiCopy = {
     errOpenProject: "No se pudo abrir el archivo",
     errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
     errOpenFolder: "No se pudo abrir la carpeta.",
+    errAssetScope: "Solo puedes gestionar archivos dentro de originals/backgrounds y originals/items.",
+    errAssetRootProtected:
+      "Las carpetas base originals/backgrounds y originals/items no se pueden mover, renombrar ni borrar.",
     errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
     errZipMissing: "El zip no contiene menu.json.",
     errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
@@ -314,6 +317,9 @@ export const uiCopy = {
     errOpenProject: "Unable to open the file",
     errNoFolder: "Your browser doesn't support local folder access.",
     errOpenFolder: "Unable to open the folder.",
+    errAssetScope: "You can only manage files inside originals/backgrounds and originals/items.",
+    errAssetRootProtected:
+      "Base folders originals/backgrounds and originals/items cannot be moved, renamed, or deleted.",
     errMoveFolder: "Your browser doesn't support moving files by folder.",
     errZipMissing: "The zip file doesn't contain menu.json.",
     errZipCompression: "The zip uses unsupported compression. Use a stored zip.",

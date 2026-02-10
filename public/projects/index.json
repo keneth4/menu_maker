@@ -83,6 +83,12 @@
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
       "cover": "/projects/ffmpeg-save-1770660267649-save/assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
+    },
+    {
+      "slug": "ffmpeg-save-1770685405044-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770685405044-save/assets/derived/backgrounds/backery-outside-md.webp"
     }
   ]
 }

@@ -248,7 +248,75 @@
     TEMPLATE_DEMO_PROJECT_SLUG,
     "demo"
   ]);
+  const USER_MANAGED_ASSET_ROOTS = ["originals/backgrounds", "originals/items"] as const;
   const bridgeClient = createBridgeAssetClient(fetch);
+
+  const normalizeAssetFolderPath = (value: string) =>
+    value
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+  const hasUnsafeAssetPathSegment = (value: string) =>
+    normalizeAssetFolderPath(value)
+      .split("/")
+      .filter(Boolean)
+      .some((segment) => segment === "." || segment === "..");
+
+  const joinAssetFolderPath = (base: string, child: string) =>
+    normalizeAssetFolderPath(`${normalizeAssetFolderPath(base)}/${normalizeAssetFolderPath(child)}`);
+
+  const mapLegacyAssetRelativeToManaged = (value: string) => {
+    const relative = normalizeAssetFolderPath(value);
+    if (!relative) return "";
+    if (
+      relative.startsWith("originals/backgrounds/") ||
+      relative === "originals/backgrounds" ||
+      relative.startsWith("originals/items/") ||
+      relative === "originals/items" ||
+      relative.startsWith("derived/")
+    ) {
+      return relative;
+    }
+    if (relative.startsWith("backgrounds/") || relative === "backgrounds") {
+      return joinAssetFolderPath("originals/backgrounds", relative.slice("backgrounds".length));
+    }
+    if (relative.startsWith("items/") || relative === "items") {
+      return joinAssetFolderPath("originals/items", relative.slice("items".length));
+    }
+    if (relative.startsWith("dishes/") || relative === "dishes") {
+      return joinAssetFolderPath("originals/items", relative.slice("dishes".length));
+    }
+    return relative;
+  };
+
+  const isManagedAssetRelativePath = (value: string) => {
+    const normalized = normalizeAssetFolderPath(value);
+    if (!normalized || hasUnsafeAssetPathSegment(normalized)) return false;
+    return USER_MANAGED_ASSET_ROOTS.some(
+      (root) => normalized === root || normalized.startsWith(`${root}/`)
+    );
+  };
+  const isLockedManagedAssetRoot = (value: string) => {
+    const normalized = normalizeAssetFolderPath(value);
+    return USER_MANAGED_ASSET_ROOTS.some((root) => normalized === root);
+  };
+
+  const toAssetRelativeForUi = (value: string) => {
+    const normalized = normalizeAssetFolderPath(value);
+    const projectMatch = normalized.match(/^projects\/[^/]+\/assets\/(.+)$/);
+    if (projectMatch) {
+      return normalizeAssetFolderPath(projectMatch[1]);
+    }
+    if (normalized.startsWith("assets/")) {
+      return normalizeAssetFolderPath(normalized.slice("assets/".length));
+    }
+    return normalized;
+  };
+
+  const isManagedAssetSourcePath = (value: string) =>
+    isManagedAssetRelativePath(mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(value)));
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -337,11 +405,13 @@
     projectAssets = [...backgrounds, ...dishes, ...fonts];
   }
 
-  $: assetOptions = rootFiles.length
-    ? rootFiles
-    : editorTab === "wizard" && wizardDemoPreview
-      ? []
-      : projectAssets.map((asset) => asset.src).filter(Boolean);
+  $: assetOptions = (
+    rootFiles.length
+      ? rootFiles
+      : editorTab === "wizard" && wizardDemoPreview
+        ? []
+        : projectAssets.map((asset) => asset.src).filter(Boolean)
+  ).filter((path) => isManagedAssetSourcePath(path));
   $: rootLabel = rootHandle
     ? rootHandle.name
     : bridgeAvailable
@@ -430,20 +500,30 @@
   };
 
   $: {
-    const folders = fsEntries
+    const folderSet = new Set<string>(USER_MANAGED_ASSET_ROOTS);
+    fsEntries
       .filter((entry) => entry.kind === "directory")
-      .map((entry) => {
-        const depth = entry.path.split("/").filter(Boolean).length;
-        const prefix = depth > 1 ? `${"—".repeat(depth - 1)} ` : "";
-        return { value: entry.path, label: `${prefix}${entry.path}` };
+      .map((entry) => mapLegacyAssetRelativeToManaged(entry.path))
+      .filter((path) => isManagedAssetRelativePath(path))
+      .forEach((path) => {
+        folderSet.add(path);
+      });
+    const folders = Array.from(folderSet)
+      .map((path) => {
+        const depth = path.split("/").filter(Boolean).length;
+        const prefix = depth > 2 ? `${"—".repeat(depth - 2)} ` : "";
+        return { value: path, label: `${prefix}${path}` };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-    uploadFolderOptions = [{ value: "", label: "/" }, ...folders];
+    uploadFolderOptions = folders;
     if (
       uploadTargetPath &&
       !uploadFolderOptions.some((option) => option.value === uploadTargetPath)
     ) {
-      uploadTargetPath = "";
+      uploadTargetPath = USER_MANAGED_ASSET_ROOTS[0];
+    }
+    if (!uploadTargetPath && uploadFolderOptions.length > 0) {
+      uploadTargetPath = uploadFolderOptions[0].value;
     }
   }
 
@@ -1192,11 +1272,13 @@
     if (!value) return value;
     const normalized = value.replace(/^\/+/, "");
     if (normalized.startsWith("assets/")) {
-      return `/projects/${slug}/${normalized}`;
+      const relative = mapLegacyAssetRelativeToManaged(normalized.slice("assets/".length));
+      return `/projects/${slug}/assets/${relative}`;
     }
     const match = normalized.match(/^projects\/[^/]+\/(assets\/.*)$/);
     if (match) {
-      return `/projects/${slug}/${match[1]}`;
+      const relative = mapLegacyAssetRelativeToManaged(match[1].slice("assets/".length));
+      return `/projects/${slug}/assets/${relative}`;
     }
     return value;
   };
@@ -1565,6 +1647,7 @@ const getInteractiveAssetMime = (source) => {
 };
 const getInteractiveDetailAsset = (item) => {
   const candidates = [
+    item?.media?.originalHero360,
     item?.media?.hero360,
     item?.media?.responsive?.large,
     item?.media?.responsive?.medium,
@@ -3200,7 +3283,7 @@ const bindCards = () => {
         </div>
         <div class="dish-modal__media">
           \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p>" : ""}
-          <img src="\${getDetailImageSrc(dish)}" \${buildSrcSet(dish) ? 'srcset="' + buildSrcSet(dish) + '"' : ""} sizes="(max-width: 720px) 90vw, 440px" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
+          <img src="\${getDetailImageSrc(dish)}" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
         <div class="dish-modal__content">
           <div class="dish-modal__text">
@@ -3585,8 +3668,8 @@ void prewarmInteractiveDetailAssets();
           const hero = normalizePath(item.media.hero360 || "");
           const mappedHero = sourceToExportPath.get(hero);
           const responsive = sourceToResponsive.get(hero);
-          const { originalHero360: _originalHero360, responsive: _responsive, derived: _derived, ...mediaBase } =
-            item.media;
+          const mappedOriginalHero = getMappedSource(item.media.originalHero360);
+          const { responsive: _responsive, derived: _derived, ...mediaBase } = item.media;
           const mappedFromDerived = pickMappedDerivedSource(item.media.derived);
           const rewrittenDerived = rewriteDerived(item.media.derived);
           const rewrittenResponsive = responsive ?? rewriteResponsive(item.media.responsive);
@@ -3598,6 +3681,9 @@ void prewarmInteractiveDetailAssets();
               pickMappedResponsiveSource(rewrittenResponsive) ??
               item.media.hero360
           };
+          if (mappedOriginalHero) {
+            nextMedia.originalHero360 = mappedOriginalHero;
+          }
           if (rewrittenResponsive) nextMedia.responsive = rewrittenResponsive;
           if (rewrittenDerived) nextMedia.derived = rewrittenDerived;
           return {
@@ -3781,6 +3867,7 @@ void prewarmInteractiveDetailAssets();
   const getInteractiveDetailAsset = (item: MenuItem | null): InteractiveDetailAsset | null => {
     if (!item) return null;
     const candidates = [
+      item.media.originalHero360,
       item.media.hero360,
       item.media.responsive?.large,
       item.media.responsive?.medium,
@@ -4824,7 +4911,19 @@ void prewarmInteractiveDetailAssets();
           for (let assetIndex = 0; assetIndex < assetEntries.length; assetIndex += 1) {
             const assetEntry = assetEntries[assetIndex];
             updateWorkflowAssetStep("upload", assetIndex, totalAssets, 22, 86);
-            const { name, targetPath, entry } = assetEntry;
+            const { entry } = assetEntry;
+            const mappedRelative = mapLegacyAssetRelativeToManaged(assetEntry.relative);
+            if (!mappedRelative || mappedRelative.startsWith("derived/")) {
+              updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
+              continue;
+            }
+            if (!isManagedAssetRelativePath(mappedRelative)) {
+              updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
+              continue;
+            }
+            const mappedParts = mappedRelative.split("/").filter(Boolean);
+            const name = mappedParts.pop() ?? "";
+            const targetPath = mappedParts.join("/");
             if (!name) {
               updateWorkflowAssetStep("upload", assetIndex + 1, totalAssets, 22, 86);
               continue;
@@ -5153,12 +5252,22 @@ void prewarmInteractiveDetailAssets();
 
   const refreshRootEntries = async () => {
     if (!rootHandle) return;
+    for (const root of USER_MANAGED_ASSET_ROOTS) {
+      await getDirectoryHandleByFsPath(rootHandle, root, true);
+    }
     const entries = await listFilesystemEntries(rootHandle);
-    fsEntries = entries.map((entry) => ({
+    const visibleEntries = entries.filter((entry) =>
+      isManagedAssetRelativePath(mapLegacyAssetRelativeToManaged(entry.path))
+    );
+    fsEntries = visibleEntries.map((entry) => ({
       ...entry,
+      path: mapLegacyAssetRelativeToManaged(entry.path),
       source: "filesystem" as const
     }));
-    rootFiles = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
+    rootFiles = visibleEntries
+      .filter((entry) => entry.kind === "file")
+      .map((entry) => mapLegacyAssetRelativeToManaged(entry.path))
+      .filter((entry) => isManagedAssetRelativePath(entry));
   };
 
   const getProjectSlug = () => draft?.meta.slug || activeSlug || "nuevo-proyecto";
@@ -5185,7 +5294,13 @@ void prewarmInteractiveDetailAssets();
     const slug = getProjectSlug();
     bridgeProjectSlug = slug;
     try {
-      const entries = (await bridgeClient.list(slug)).map((entry) => {
+      const entries = (await bridgeClient.list(slug))
+        .map((entry) => ({
+          ...entry,
+          path: mapLegacyAssetRelativeToManaged(entry.path)
+        }))
+        .filter((entry) => isManagedAssetRelativePath(entry.path))
+        .map((entry) => {
         const name = entry.path.split("/").filter(Boolean).pop() ?? entry.path;
         return {
           id: entry.path,
@@ -5196,7 +5311,7 @@ void prewarmInteractiveDetailAssets();
           parent: null,
           source: "bridge" as const
         };
-      });
+        });
       fsEntries = entries;
       const prefix = `/projects/${slug}/assets/`;
       rootFiles = entries
@@ -5368,15 +5483,24 @@ void prewarmInteractiveDetailAssets();
     if (!ensureAssetProjectWritable()) return;
     const name = window.prompt(t("promptNewFolder"));
     if (!name) return;
+    const baseFolder = uploadTargetPath || USER_MANAGED_ASSET_ROOTS[0];
+    const requestedPath = mapLegacyAssetRelativeToManaged(name);
+    const targetPath = isManagedAssetRelativePath(requestedPath)
+      ? requestedPath
+      : joinAssetFolderPath(baseFolder, requestedPath);
+    if (!isManagedAssetRelativePath(targetPath)) {
+      fsError = t("errAssetScope");
+      return;
+    }
     if (assetMode === "filesystem") {
       if (!rootHandle) return;
-      await getDirectoryHandleByFsPath(rootHandle, name, true);
+      await getDirectoryHandleByFsPath(rootHandle, targetPath, true);
       await refreshRootEntries();
       return;
     }
     if (assetMode === "bridge") {
       try {
-        await bridgeRequest("mkdir", { path: name });
+        await bridgeRequest("mkdir", { path: targetPath });
         await refreshBridgeEntries();
       } catch (error) {
         fsError = error instanceof Error ? error.message : t("errOpenFolder");
@@ -5386,6 +5510,10 @@ void prewarmInteractiveDetailAssets();
 
   const renameEntry = async (entry: (typeof fsEntries)[number]) => {
     if (!ensureAssetProjectWritable()) return;
+    if (isLockedManagedAssetRoot(entry.path)) {
+      fsError = t("errAssetRootProtected");
+      return;
+    }
     const newName = window.prompt(t("promptRename"), entry.name);
     if (!newName || newName === entry.name) return;
     if (assetMode === "filesystem") {
@@ -5416,6 +5544,9 @@ void prewarmInteractiveDetailAssets();
     targetPath: string
   ) => {
     const plan = planEntryMove(entry.kind, entry.name, targetPath);
+    if (!isManagedAssetRelativePath(plan.destinationPath)) {
+      throw new Error(t("errAssetScope"));
+    }
     if (assetMode === "filesystem") {
       if (!rootHandle || !entry.parent || !entry.handle) return;
       if (entry.kind === "file") {
@@ -5444,6 +5575,10 @@ void prewarmInteractiveDetailAssets();
 
   const moveEntry = async (entry: (typeof fsEntries)[number]) => {
     if (!ensureAssetProjectWritable()) return;
+    if (isLockedManagedAssetRoot(entry.path)) {
+      fsError = t("errAssetRootProtected");
+      return;
+    }
     const target = window.prompt(t("promptMoveTo"), entry.path);
     if (!target) return;
     try {
@@ -5460,6 +5595,10 @@ void prewarmInteractiveDetailAssets();
 
   const deleteEntry = async (entry: (typeof fsEntries)[number]) => {
     if (!ensureAssetProjectWritable()) return;
+    if (isLockedManagedAssetRoot(entry.path)) {
+      fsError = t("errAssetRootProtected");
+      return;
+    }
     if (assetMode === "filesystem") {
       if (!entry.parent) return;
       await entry.parent.removeEntry(entry.name, { recursive: entry.kind === "directory" });
@@ -5479,6 +5618,10 @@ void prewarmInteractiveDetailAssets();
   const bulkDelete = async () => {
     if (!ensureAssetProjectWritable()) return;
     const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
+    if (targets.some((entry) => isLockedManagedAssetRoot(entry.path))) {
+      fsError = t("errAssetRootProtected");
+      return;
+    }
     for (const entry of targets) {
       if (assetMode === "filesystem") {
         if (!entry.parent) continue;
@@ -5500,8 +5643,17 @@ void prewarmInteractiveDetailAssets();
     const target = window.prompt(t("promptMoveTo"), "");
     if (!target) return;
     const targets = fsEntries.filter((entry) => selectedAssetIds.includes(entry.id));
-    for (const entry of targets) {
-      await moveEntryToPath(entry, target);
+    if (targets.some((entry) => isLockedManagedAssetRoot(entry.path))) {
+      fsError = t("errAssetRootProtected");
+      return;
+    }
+    try {
+      for (const entry of targets) {
+        await moveEntryToPath(entry, target);
+      }
+    } catch (error) {
+      fsError = error instanceof Error ? error.message : t("errOpenFolder");
+      return;
     }
     selectedAssetIds = [];
     if (assetMode === "filesystem") {
@@ -5513,7 +5665,11 @@ void prewarmInteractiveDetailAssets();
 
   const uploadAssets = async (files: FileList | File[]) => {
     if (!ensureAssetProjectWritable()) return;
-    const target = uploadTargetPath;
+    const target = uploadTargetPath || USER_MANAGED_ASSET_ROOTS[0];
+    if (!isManagedAssetRelativePath(target)) {
+      fsError = t("errAssetScope");
+      return;
+    }
     const uploads = Array.from(files);
     fsError = "";
     startAssetTask("progressUploadAssets", 4);
@@ -6549,7 +6705,6 @@ void prewarmInteractiveDetailAssets();
       bind:modalMediaImage
       {textOf}
       {getDetailImageSource}
-      {buildResponsiveSrcSetFromMedia}
       {getAllergenValues}
       {getMenuTerm}
       {formatPrice}

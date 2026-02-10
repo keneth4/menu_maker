@@ -1468,6 +1468,29 @@ body {
   object-fit: contain;
 }
 
+.dish-modal__media-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.dish-modal__media-loading span {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #2dd4bf;
+  animation: dish-media-spin 780ms linear infinite;
+}
+
+@keyframes dish-media-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .dish-modal__media img.is-hidden {
   opacity: 0;
   pointer-events: none;

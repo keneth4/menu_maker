@@ -4,8 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  buildCenteredContainPadFfmpegFilter,
-  buildCenteredCoverCropFfmpegFilter
+  buildCenteredContainPadFfmpegFilter
 } from "./src/core/media/fit";
 import type { MenuItem, MediaAsset, MenuProject } from "./src/lib/types";
 import { normalizeProjectSlug } from "./src/infrastructure/bridge/pathing";
@@ -25,6 +24,10 @@ export default defineConfig({
         const ensureProjectRoot = async (project: string) => {
           const base = path.resolve(root, project, "assets");
           await fs.mkdir(base, { recursive: true });
+          await fs.mkdir(path.resolve(base, "originals", "backgrounds"), { recursive: true });
+          await fs.mkdir(path.resolve(base, "originals", "items"), { recursive: true });
+          await fs.mkdir(path.resolve(base, "derived", "backgrounds"), { recursive: true });
+          await fs.mkdir(path.resolve(base, "derived", "items"), { recursive: true });
           return base;
         };
         const sanitizeSlug = (value: string) => normalizeProjectSlug(value);
@@ -149,9 +152,11 @@ export default defineConfig({
         const COMMAND_TIMEOUT_MS = 900000;
         const ITEM_DERIVED_FPS = 18;
         const BACKGROUND_DERIVED_FPS = 18;
+        const ITEM_DERIVED_PREVIEW_SIZE = 384;
+        const BACKGROUND_DERIVED_SCALE = 0.5;
         const DERIVED_FALLBACK_PROFILE_ID = "ffmpeg-v2-copy-fallback";
-        const BACKGROUND_DERIVED_PROFILE_ID = "ffmpeg-v4-background-cover-webp";
-        const ITEM_DERIVED_PROFILE_ID = "ffmpeg-v6-item-contain-md-webp-lg-gif";
+        const BACKGROUND_DERIVED_PROFILE_ID = "ffmpeg-v5-background-half-webp";
+        const ITEM_DERIVED_PROFILE_ID = "ffmpeg-v7-item-md-webp-detail-original";
         const runCommand = async (
           command: string,
           args: string[],
@@ -341,32 +346,6 @@ export default defineConfig({
           ]);
           return true;
         };
-        const ensureAnimatedGifDerivative = async (
-          sourceFull: string,
-          outputFull: string,
-          filter: string
-        ) => {
-          if (!(await isOutputStale(sourceFull, outputFull))) {
-            return false;
-          }
-          await fs.mkdir(path.dirname(outputFull), { recursive: true });
-          await runCommand("ffmpeg", [
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-i",
-            sourceFull,
-            "-filter_complex",
-            `${filter},split[a][b];[a]palettegen=reserve_transparent=1:stats_mode=single[p];[b][p]paletteuse=dither=sierra2_4a:alpha_threshold=128`,
-            "-gifflags",
-            "+transdiff",
-            "-loop",
-            "0",
-            outputFull
-          ]);
-          return true;
-        };
         const buildFallbackBackgroundAsset = async (
           projectSlug: string,
           background: MediaAsset,
@@ -384,28 +363,24 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/backgrounds/${stem}${extension}`;
-          const mediumRelative = `derived/backgrounds/${stem}-md${extension}`;
-          const largeRelative = `derived/backgrounds/${stem}-lg${extension}`;
-          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
-          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const previewRelative = `derived/backgrounds/${stem}-md${extension}`;
+          const { full: previewFull } = await resolveAssetPath(projectSlug, previewRelative);
           const originalPublic = await ensureCopiedOriginal(
             projectSlug,
             source.full,
             source.relative,
             originalRelative
           );
-          await ensureCopiedDerivativeFallback(source.full, mediumFull);
-          await ensureCopiedDerivativeFallback(source.full, largeFull);
-          const mediumPublic = toPublicAssetPath(projectSlug, mediumRelative);
-          const largePublic = toPublicAssetPath(projectSlug, largeRelative);
+          await ensureCopiedDerivativeFallback(source.full, previewFull);
+          const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
           return {
             ...background,
-            src: largePublic,
+            src: previewPublic,
             originalSrc: originalPublic,
             derived: {
               profileId: DERIVED_FALLBACK_PROFILE_ID,
-              medium: buildDerivedVariant(mediumPublic, extension),
-              large: buildDerivedVariant(largePublic, extension)
+              medium: buildDerivedVariant(previewPublic, extension),
+              large: buildDerivedVariant(previewPublic, extension)
             }
           };
         };
@@ -422,35 +397,31 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/items/${stem}${extension}`;
-          const mediumRelative = `derived/items/${stem}-md${extension}`;
-          const largeRelative = `derived/items/${stem}-lg${extension}`;
-          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
-          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const previewRelative = `derived/items/${stem}-md${extension}`;
+          const { full: previewFull } = await resolveAssetPath(projectSlug, previewRelative);
           const originalPublic = await ensureCopiedOriginal(
             projectSlug,
             source.full,
             source.relative,
             originalRelative
           );
-          await ensureCopiedDerivativeFallback(source.full, mediumFull);
-          await ensureCopiedDerivativeFallback(source.full, largeFull);
-          const mediumPublic = toPublicAssetPath(projectSlug, mediumRelative);
-          const largePublic = toPublicAssetPath(projectSlug, largeRelative);
+          await ensureCopiedDerivativeFallback(source.full, previewFull);
+          const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
           return {
             ...item,
             media: {
               ...item.media,
-              hero360: largePublic,
+              hero360: previewPublic,
               originalHero360: originalPublic,
               responsive: {
-                small: mediumPublic,
-                medium: mediumPublic,
-                large: largePublic
+                small: previewPublic,
+                medium: previewPublic,
+                large: previewPublic
               },
               derived: {
                 profileId: DERIVED_FALLBACK_PROFILE_ID,
-                medium: buildDerivedVariant(mediumPublic, extension),
-                large: buildDerivedVariant(largePublic, extension)
+                medium: buildDerivedVariant(previewPublic, extension),
+                large: buildDerivedVariant(previewPublic, extension)
               }
             }
           };
@@ -471,45 +442,37 @@ export default defineConfig({
             projectSlug,
             background.derived?.large as string | Record<string, string | undefined> | undefined
           );
+          const existingPreviewRelative = existingMediumRelative ?? existingLargeRelative;
           const existingProfileId = background.derived?.profileId ?? "";
           const canReuseExistingSet =
             existingProfileId === BACKGROUND_DERIVED_PROFILE_ID ||
             existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
-          if (
-            canReuseExistingSet &&
-            existingOriginalRelative &&
-            existingMediumRelative &&
-            existingLargeRelative
-          ) {
+          if (canReuseExistingSet && existingOriginalRelative && existingPreviewRelative) {
             const { full: existingOriginalFull } = await resolveAssetPath(
               projectSlug,
               existingOriginalRelative
             );
-            const { full: existingMediumFull } = await resolveAssetPath(projectSlug, existingMediumRelative);
-            const { full: existingLargeFull } = await resolveAssetPath(projectSlug, existingLargeRelative);
-            if (
-              await areOutputsFresh(existingOriginalFull, [existingMediumFull, existingLargeFull])
-            ) {
-              const existingMediumExt = normalizeExtension(path.posix.extname(existingMediumRelative) || ".webp");
-              const existingLargeExt = normalizeExtension(path.posix.extname(existingLargeRelative) || ".webp");
+            const { full: existingPreviewFull } = await resolveAssetPath(
+              projectSlug,
+              existingPreviewRelative
+            );
+            if (await areOutputsFresh(existingOriginalFull, [existingPreviewFull])) {
+              const existingPreviewExt = normalizeExtension(
+                path.posix.extname(existingPreviewRelative) || ".webp"
+              );
               const profileId =
                 existingProfileId === DERIVED_FALLBACK_PROFILE_ID
                   ? DERIVED_FALLBACK_PROFILE_ID
                   : BACKGROUND_DERIVED_PROFILE_ID;
+              const previewPublic = toPublicAssetPath(projectSlug, existingPreviewRelative);
               return {
                 ...background,
-                src: toPublicAssetPath(projectSlug, existingLargeRelative),
+                src: previewPublic,
                 originalSrc: toPublicAssetPath(projectSlug, existingOriginalRelative),
                 derived: {
                   profileId,
-                  medium: buildDerivedVariant(
-                    toPublicAssetPath(projectSlug, existingMediumRelative),
-                    existingMediumExt
-                  ),
-                  large: buildDerivedVariant(
-                    toPublicAssetPath(projectSlug, existingLargeRelative),
-                    existingLargeExt
-                  )
+                  medium: buildDerivedVariant(previewPublic, existingPreviewExt),
+                  large: buildDerivedVariant(previewPublic, existingPreviewExt)
                 }
               };
             }
@@ -526,27 +489,22 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/backgrounds/${stem}${extension}`;
-          const mediumRelative = `derived/backgrounds/${stem}-md.webp`;
-          const largeRelative = `derived/backgrounds/${stem}-lg.webp`;
-          const { full: mediumFull } = await resolveAssetPath(projectSlug, mediumRelative);
-          const { full: largeFull } = await resolveAssetPath(projectSlug, largeRelative);
+          const previewRelative = `derived/backgrounds/${stem}-md.webp`;
+          const { full: previewFull } = await resolveAssetPath(projectSlug, previewRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
           const reusableProfile =
             background.derived?.profileId === BACKGROUND_DERIVED_PROFILE_ID ||
             background.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
-          if (reusableProfile && (await areOutputsFresh(originalFull, [mediumFull, largeFull]))) {
+          if (reusableProfile && (await areOutputsFresh(originalFull, [previewFull]))) {
+            const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
             return {
               ...background,
-              src: toPublicAssetPath(projectSlug, largeRelative),
+              src: previewPublic,
               originalSrc: toPublicAssetPath(projectSlug, originalRelative),
               derived: {
                 profileId: BACKGROUND_DERIVED_PROFILE_ID,
-                medium: {
-                  webp: toPublicAssetPath(projectSlug, mediumRelative)
-                },
-                large: {
-                  webp: toPublicAssetPath(projectSlug, largeRelative)
-                }
+                medium: { webp: previewPublic },
+                large: { webp: previewPublic }
               }
             };
           }
@@ -558,26 +516,18 @@ export default defineConfig({
           );
           await ensureAnimatedWebpDerivative(
             source.full,
-            mediumFull,
-            `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1280, 720)}`
+            previewFull,
+            `fps=${BACKGROUND_DERIVED_FPS},scale=max(2\\,trunc(iw*${BACKGROUND_DERIVED_SCALE}/2)*2):max(2\\,trunc(ih*${BACKGROUND_DERIVED_SCALE}/2)*2):flags=lanczos`
           );
-          await ensureAnimatedWebpDerivative(
-            source.full,
-            largeFull,
-            `fps=${BACKGROUND_DERIVED_FPS},${buildCenteredCoverCropFfmpegFilter(1920, 1080)}`
-          );
+          const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
           return {
             ...background,
-            src: toPublicAssetPath(projectSlug, largeRelative),
+            src: previewPublic,
             originalSrc: originalPublic,
             derived: {
               profileId: BACKGROUND_DERIVED_PROFILE_ID,
-              medium: {
-                webp: toPublicAssetPath(projectSlug, mediumRelative)
-              },
-              large: {
-                webp: toPublicAssetPath(projectSlug, largeRelative)
-              }
+              medium: { webp: previewPublic },
+              large: { webp: previewPublic }
             }
           };
         };
@@ -595,52 +545,44 @@ export default defineConfig({
             item.media.derived?.large as string | Record<string, string | undefined> | undefined,
             ["gif", "webp", "png", "jpg", "jpeg", "webm", "mp4"]
           );
+          const existingPreviewRelative = existingMediumRelative ?? existingLargeRelative;
           const existingProfileId = item.media.derived?.profileId ?? "";
           const canReuseExistingSet =
             existingProfileId === ITEM_DERIVED_PROFILE_ID ||
             existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
-          if (
-            canReuseExistingSet &&
-            existingOriginalRelative &&
-            existingMediumRelative &&
-            existingLargeRelative
-          ) {
+          if (canReuseExistingSet && existingOriginalRelative && existingPreviewRelative) {
             const { full: existingOriginalFull } = await resolveAssetPath(
               projectSlug,
               existingOriginalRelative
             );
-            const { full: existingMediumFull } = await resolveAssetPath(projectSlug, existingMediumRelative);
-            const { full: existingLargeFull } = await resolveAssetPath(projectSlug, existingLargeRelative);
-            if (
-              await areOutputsFresh(existingOriginalFull, [existingMediumFull, existingLargeFull])
-            ) {
-              const existingMediumExt = normalizeExtension(path.posix.extname(existingMediumRelative) || ".webp");
-              const existingLargeExt = normalizeExtension(path.posix.extname(existingLargeRelative) || ".gif");
+            const { full: existingPreviewFull } = await resolveAssetPath(
+              projectSlug,
+              existingPreviewRelative
+            );
+            if (await areOutputsFresh(existingOriginalFull, [existingPreviewFull])) {
+              const existingPreviewExt = normalizeExtension(
+                path.posix.extname(existingPreviewRelative) || ".webp"
+              );
               const profileId =
                 existingProfileId === DERIVED_FALLBACK_PROFILE_ID
                   ? DERIVED_FALLBACK_PROFILE_ID
                   : ITEM_DERIVED_PROFILE_ID;
+              const previewPublic = toPublicAssetPath(projectSlug, existingPreviewRelative);
               return {
                 ...item,
                 media: {
                   ...item.media,
-                  hero360: toPublicAssetPath(projectSlug, existingLargeRelative),
+                  hero360: previewPublic,
                   originalHero360: toPublicAssetPath(projectSlug, existingOriginalRelative),
                   responsive: {
-                    small: toPublicAssetPath(projectSlug, existingMediumRelative),
-                    medium: toPublicAssetPath(projectSlug, existingMediumRelative),
-                    large: toPublicAssetPath(projectSlug, existingMediumRelative)
+                    small: previewPublic,
+                    medium: previewPublic,
+                    large: previewPublic
                   },
                   derived: {
                     profileId,
-                    medium: buildDerivedVariant(
-                      toPublicAssetPath(projectSlug, existingMediumRelative),
-                      existingMediumExt
-                    ),
-                    large: buildDerivedVariant(
-                      toPublicAssetPath(projectSlug, existingLargeRelative),
-                      existingLargeExt
-                    )
+                    medium: buildDerivedVariant(previewPublic, existingPreviewExt),
+                    large: buildDerivedVariant(previewPublic, existingPreviewExt)
                   }
                 }
               };
@@ -658,39 +600,30 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/items/${stem}${extension}`;
-          const mediumWebpRelative = `derived/items/${stem}-md.webp`;
-          const largeGifRelative = `derived/items/${stem}-lg.gif`;
-          const containMd = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(512, 512)}`;
-          const containLg = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(768, 768)}`;
-          const { full: mediumWebpFull } = await resolveAssetPath(projectSlug, mediumWebpRelative);
-          const { full: largeGifFull } = await resolveAssetPath(projectSlug, largeGifRelative);
+          const previewWebpRelative = `derived/items/${stem}-md.webp`;
+          const containPreview = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(ITEM_DERIVED_PREVIEW_SIZE, ITEM_DERIVED_PREVIEW_SIZE)}`;
+          const { full: previewWebpFull } = await resolveAssetPath(projectSlug, previewWebpRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
           const reusableProfile =
             item.media.derived?.profileId === ITEM_DERIVED_PROFILE_ID ||
             item.media.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
-          if (
-            reusableProfile &&
-            (await areOutputsFresh(originalFull, [mediumWebpFull, largeGifFull]))
-          ) {
+          if (reusableProfile && (await areOutputsFresh(originalFull, [previewWebpFull]))) {
+            const previewPublic = toPublicAssetPath(projectSlug, previewWebpRelative);
             return {
               ...item,
               media: {
                 ...item.media,
-                hero360: toPublicAssetPath(projectSlug, largeGifRelative),
+                hero360: previewPublic,
                 originalHero360: toPublicAssetPath(projectSlug, originalRelative),
                 responsive: {
-                  small: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                  medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                  large: toPublicAssetPath(projectSlug, mediumWebpRelative)
+                  small: previewPublic,
+                  medium: previewPublic,
+                  large: previewPublic
                 },
                 derived: {
                   profileId: ITEM_DERIVED_PROFILE_ID,
-                  medium: {
-                    webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
-                  },
-                  large: {
-                    gif: toPublicAssetPath(projectSlug, largeGifRelative)
-                  }
+                  medium: { webp: previewPublic },
+                  large: { webp: previewPublic }
                 }
               }
             };
@@ -701,27 +634,23 @@ export default defineConfig({
             source.relative,
             originalRelative
           );
-          await ensureStillWebpDerivative(source.full, mediumWebpFull, containMd);
-          await ensureAnimatedGifDerivative(source.full, largeGifFull, containLg);
+          await ensureStillWebpDerivative(source.full, previewWebpFull, containPreview);
+          const previewPublic = toPublicAssetPath(projectSlug, previewWebpRelative);
           return {
             ...item,
             media: {
               ...item.media,
-              hero360: toPublicAssetPath(projectSlug, largeGifRelative),
+              hero360: previewPublic,
               originalHero360: originalPublic,
               responsive: {
-                small: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                medium: toPublicAssetPath(projectSlug, mediumWebpRelative),
-                large: toPublicAssetPath(projectSlug, mediumWebpRelative)
+                small: previewPublic,
+                medium: previewPublic,
+                large: previewPublic
               },
               derived: {
                 profileId: ITEM_DERIVED_PROFILE_ID,
-                medium: {
-                  webp: toPublicAssetPath(projectSlug, mediumWebpRelative)
-                },
-                large: {
-                  gif: toPublicAssetPath(projectSlug, largeGifRelative)
-                }
+                medium: { webp: previewPublic },
+                large: { webp: previewPublic }
               }
             }
           };

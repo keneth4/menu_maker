@@ -22,7 +22,6 @@ describe("DishModal", () => {
         detailRotateHint: "drag",
         textOf: (value: Record<string, string> | undefined) => value?.es ?? "",
         getDetailImageSource: () => "/projects/demo/assets/tostada.webp",
-        buildResponsiveSrcSetFromMedia: () => undefined,
         getAllergenValues: () => ["Nueces"],
         getMenuTerm: (key: string) => key,
         formatPrice: (value: number) => `$${value}`

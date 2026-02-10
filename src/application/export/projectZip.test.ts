@@ -156,6 +156,7 @@ describe("project zip helpers", () => {
       "projects/demo-menu/assets/branding/logo.webp",
       "projects/demo-menu/assets/derived/backgrounds/main-md.webp",
       "projects/demo-menu/assets/derived/backgrounds/main-lg.webp",
+      "projects/demo-menu/assets/originals/items/tostada.gif",
       "projects/demo-menu/assets/derived/items/tostada-md.webp",
       "projects/demo-menu/assets/derived/items/tostada-md.gif",
       "projects/demo-menu/assets/derived/items/tostada-lg.webp"

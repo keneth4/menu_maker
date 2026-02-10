@@ -42,6 +42,9 @@
   export let renameEntry: (entry: AssetEntry) => void = () => {};
   export let moveEntry: (entry: AssetEntry) => void = () => {};
   export let deleteEntry: (entry: AssetEntry) => void = () => {};
+
+  const LOCKED_ROOTS = new Set(["originals/backgrounds", "originals/items"]);
+  const isLockedRoot = (path: string) => LOCKED_ROOTS.has(path);
 </script>
 
 <section class="asset-manager">
@@ -183,7 +186,7 @@
               class="asset-icon-btn"
               title={t("rename")}
               aria-label={t("rename")}
-              disabled={assetProjectReadOnly}
+              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => renameEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -196,7 +199,7 @@
               class="asset-icon-btn"
               title={t("move")}
               aria-label={t("move")}
-              disabled={assetProjectReadOnly}
+              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => moveEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -211,7 +214,7 @@
               class="asset-icon-btn danger"
               title={t("delete")}
               aria-label={t("delete")}
-              disabled={assetProjectReadOnly}
+              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => deleteEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">

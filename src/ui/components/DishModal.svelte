@@ -11,8 +11,6 @@
   export let textOf: (value: Record<string, string> | undefined, fallback?: string) => string =
     () => "";
   export let getDetailImageSource: (value: MenuItem) => string = () => "";
-  export let buildResponsiveSrcSetFromMedia: (value: MenuItem) => string | undefined = () =>
-    undefined;
   export let getAllergenValues: (value: MenuItem) => string[] = () => [];
   export let getMenuTerm: (key: string) => string = (key) => key;
   export let formatPrice: (value: number) => string = (value) => String(value);
@@ -20,6 +18,16 @@
   const dispatch = createEventDispatcher<{
     close: void;
   }>();
+
+  let detailMediaSrc = "";
+  let previousDetailMediaSrc = "";
+  let detailMediaLoading = true;
+
+  $: detailMediaSrc = getDetailImageSource(dish);
+  $: if (detailMediaSrc !== previousDetailMediaSrc) {
+    previousDetailMediaSrc = detailMediaSrc;
+    detailMediaLoading = true;
+  }
 </script>
 
 <div class="dish-modal" on:click={() => dispatch("close")}>
@@ -32,15 +40,20 @@
       {#if interactiveEnabled}
         <p class="dish-modal__media-note">{detailRotateHint}</p>
       {/if}
+      {#if detailMediaLoading}
+        <div class="dish-modal__media-loading" aria-hidden="true">
+          <span></span>
+        </div>
+      {/if}
       <img
         bind:this={modalMediaImage}
-        src={getDetailImageSource(dish)}
-        srcset={buildResponsiveSrcSetFromMedia(dish)}
-        sizes="(max-width: 720px) 90vw, 440px"
+        src={detailMediaSrc}
         alt={textOf(dish.name)}
         draggable="false"
         on:contextmenu|preventDefault
         on:dragstart|preventDefault
+        on:load={() => (detailMediaLoading = false)}
+        on:error={() => (detailMediaLoading = false)}
         decoding="async"
       />
     </div>

@@ -130,6 +130,13 @@ Tracking checklist:
 - Simplified interactive modal frame normalization to rely on browser-decoded complete frames and avoid manual `visibleRect` recomposition artifacts (ghost/onion edges).
 - Added e2e regression coverage for bridge save zips to assert originals + derived packaging contract after ffmpeg preprocessing/fallback (`tests/e2e/ffmpeg-derived-export.spec.ts`).
 - Updated derivative reuse rules and bumped active derivative profile IDs (`ffmpeg-v4-*`) to regenerate legacy/stale media once, ensuring projects pick up the latest sizing/alpha/perf profile fixes.
+
+### 2026-02-10
+- Refined Phase 4 asset strategy: preview/startup now consumes reduced derived media while detail-card media resolves to `originalHero360` on demand.
+- Changed derived generation targets to smaller mirrors (backgrounds scaled to ~50%; dishes to single reduced preview variant) and updated active derivative profile IDs (`ffmpeg-v5-background-half-webp`, `ffmpeg-v7-item-md-webp-detail-original`) for one-time regeneration.
+- Restricted user asset management scope to `assets/originals/backgrounds/**` and `assets/originals/items/**`; `derived/**` is now hidden from asset manager operations.
+- Added guardrails to prevent rename/move/delete of base managed roots and to reject path traversal/out-of-scope operations.
+- Updated export packaging/runtime contract so static export includes `originals/items/**` for detail rendering while still avoiding `originals/backgrounds/**`.
 - Fixed bridge derivative reuse staleness checks so existing derived assets are only reused when they are newer than originals; re-uploaded originals now force regeneration on the next derive run.
 - ZIP open flow in bridge mode now waits for `prepare-derived` during upload workflow (with progress), instead of deferring derivation silently in the background.
 - Assets tab now uses icon-based top/file actions and includes an in-panel progress bar that shows upload + derived-processing status for manual asset uploads.

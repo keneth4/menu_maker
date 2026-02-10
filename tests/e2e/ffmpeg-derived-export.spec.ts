@@ -129,7 +129,8 @@ test("bridge export generates derived assets and keeps originals out of static e
 
   expect(names.some((name) => name.startsWith("assets/derived/backgrounds/"))).toBeTruthy();
   expect(names.some((name) => name.startsWith("assets/derived/items/"))).toBeTruthy();
-  expect(names.some((name) => name.startsWith("assets/originals/"))).toBeFalsy();
+  expect(names.some((name) => name.startsWith("assets/originals/backgrounds/"))).toBeFalsy();
+  expect(names.some((name) => name.startsWith("assets/originals/items/"))).toBeTruthy();
   expect(names.some((name) => name.startsWith("assets/backgrounds/"))).toBeFalsy();
   expect(names.some((name) => name.startsWith("assets/dishes/"))).toBeFalsy();
 
@@ -138,13 +139,15 @@ test("bridge export generates derived assets and keeps originals out of static e
   const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
 
   expect(menu.backgrounds[0].src).toMatch(
-    /^assets\/derived\/backgrounds\/.+-lg\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
+    /^assets\/derived\/backgrounds\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
   expect(menu.backgrounds[0].originalSrc).toBeUndefined();
   expect(menu.categories[0].items[0].media.hero360).toMatch(
-    /^assets\/derived\/items\/.+-lg\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
+    /^assets\/derived\/items\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
-  expect(menu.categories[0].items[0].media.originalHero360).toBeUndefined();
+  expect(menu.categories[0].items[0].media.originalHero360).toMatch(
+    /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
+  );
 
   const mediumVariant = menu.categories[0].items[0].media.derived?.medium;
   const largeVariant = menu.categories[0].items[0].media.derived?.large;
@@ -153,7 +156,7 @@ test("bridge export generates derived assets and keeps originals out of static e
   const mediumSources = Object.values(asObject(mediumVariant));
   const largeSources = Object.values(asObject(largeVariant));
   expect(mediumSources.some((value) => /^assets\/derived\/items\/.+-md\./i.test(value))).toBeTruthy();
-  expect(largeSources.some((value) => /^assets\/derived\/items\/.+-lg\./i.test(value))).toBeTruthy();
+  expect(largeSources.some((value) => /^assets\/derived\/items\/.+-md\./i.test(value))).toBeTruthy();
 });
 
 test("bridge save zip keeps originals and derived assets", async ({ page, request }, testInfo) => {
