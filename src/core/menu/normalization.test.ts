@@ -54,6 +54,7 @@ describe("normalizeProject", () => {
     expect(normalized.meta.fontFamily).toBe("Fraunces");
     expect(normalized.meta.fontSource).toBe("");
     expect(normalized.meta.currencyPosition).toBe("left");
+    expect(normalized.meta.backgroundCarouselSeconds).toBe(9);
     expect(normalized.meta.template).toBe("focus-rows");
     expect(normalized.categories[0].items[0].media.originalHero360).toBe(
       "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
@@ -88,6 +89,17 @@ describe("normalizeProject", () => {
     expect(normalized.meta.identityMode).toBe("text");
     expect(normalized.meta.logoSrc).toBe("/projects/demo/assets/logo.webp");
     expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
+  });
+
+  it("normalizes background carousel timing into a safe seconds range", () => {
+    const project = buildProjectFixture();
+    (project.meta as { backgroundCarouselSeconds?: unknown }).backgroundCarouselSeconds = 90.7;
+    const normalizedHigh = normalizeProject(project);
+    expect(normalizedHigh.meta.backgroundCarouselSeconds).toBe(60);
+
+    (project.meta as { backgroundCarouselSeconds?: unknown }).backgroundCarouselSeconds = 0;
+    const normalizedLow = normalizeProject(project);
+    expect(normalizedLow.meta.backgroundCarouselSeconds).toBe(2);
   });
 });
 

@@ -88,6 +88,7 @@ export type MenuProject = {
     defaultLocale: LocaleCode;
     currency: string;
     currencyPosition?: "left" | "right";
+    backgroundCarouselSeconds?: number;
   };
   backgrounds: MediaAsset[];
   categories: MenuCategory[];

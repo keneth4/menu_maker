@@ -228,6 +228,7 @@
   let activeBackgroundIndex = 0;
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
+  let backgroundRotationIntervalMs = 0;
   let previewStartupLoading = false;
   let previewStartupProgress = 100;
   let previewStartupSignature = "";
@@ -249,6 +250,9 @@
     "demo"
   ]);
   const USER_MANAGED_ASSET_ROOTS = ["originals/backgrounds", "originals/items"] as const;
+  const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 9;
+  const MIN_BACKGROUND_CAROUSEL_SECONDS = 2;
+  const MAX_BACKGROUND_CAROUSEL_SECONDS = 60;
   const bridgeClient = createBridgeAssetClient(fetch);
 
   const normalizeAssetFolderPath = (value: string) =>
@@ -748,15 +752,25 @@
     }
   }
 
+  const normalizeBackgroundCarouselSeconds = (value: unknown) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return DEFAULT_BACKGROUND_CAROUSEL_SECONDS;
+    return Math.min(MAX_BACKGROUND_CAROUSEL_SECONDS, Math.max(MIN_BACKGROUND_CAROUSEL_SECONDS, Math.round(parsed)));
+  };
+
+  const getBackgroundRotationIntervalMs = (value: MenuProject | null) =>
+    normalizeBackgroundCarouselSeconds(value?.meta.backgroundCarouselSeconds) * 1000;
+
   const clearBackgroundRotation = () => {
     if (backgroundRotationTimer) {
       window.clearInterval(backgroundRotationTimer);
       backgroundRotationTimer = null;
     }
     backgroundRotationCount = 0;
+    backgroundRotationIntervalMs = 0;
   };
 
-  const syncBackgroundRotation = (count: number) => {
+  const syncBackgroundRotation = (count: number, intervalMs: number) => {
     if (count < 2) {
       clearBackgroundRotation();
       activeBackgroundIndex = 0;
@@ -765,16 +779,23 @@
     if (activeBackgroundIndex >= count) {
       activeBackgroundIndex = 0;
     }
-    if (backgroundRotationTimer && backgroundRotationCount === count) return;
+    if (
+      backgroundRotationTimer &&
+      backgroundRotationCount === count &&
+      backgroundRotationIntervalMs === intervalMs
+    ) {
+      return;
+    }
     clearBackgroundRotation();
     backgroundRotationCount = count;
+    backgroundRotationIntervalMs = intervalMs;
     backgroundRotationTimer = window.setInterval(() => {
       activeBackgroundIndex = (activeBackgroundIndex + 1) % count;
-    }, 9000);
+    }, intervalMs);
   };
 
   $: if (typeof window !== "undefined") {
-    syncBackgroundRotation(previewBackgrounds.length);
+    syncBackgroundRotation(previewBackgrounds.length, getBackgroundRotationIntervalMs(activeProject));
   }
 
   const touchDraft = () => {
@@ -941,6 +962,7 @@
     showcase.meta.logoSrc = draft.meta.logoSrc;
     showcase.meta.fontFamily = draft.meta.fontFamily;
     showcase.meta.fontSource = draft.meta.fontSource;
+    showcase.meta.backgroundCarouselSeconds = draft.meta.backgroundCarouselSeconds;
     return showcase;
   };
 
@@ -958,7 +980,8 @@
       locales: ["es", "en"],
       defaultLocale: "es",
       currency: "MXN",
-      currencyPosition: "left"
+      currencyPosition: "left",
+      backgroundCarouselSeconds: DEFAULT_BACKGROUND_CAROUSEL_SECONDS
     },
     backgrounds: [],
     categories: [],
@@ -1483,6 +1506,12 @@ const builtInFontHref = builtInFontSources[fontFamily] || "";
 const backgrounds = (DATA.backgrounds || []).filter(
   (item) => item?.src && String(item.src).trim().length > 0
 );
+const normalizeBackgroundCarouselSeconds = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return ${DEFAULT_BACKGROUND_CAROUSEL_SECONDS};
+  return Math.min(${MAX_BACKGROUND_CAROUSEL_SECONDS}, Math.max(${MIN_BACKGROUND_CAROUSEL_SECONDS}, Math.round(parsed)));
+};
+const backgroundRotationMs = normalizeBackgroundCarouselSeconds(DATA.meta.backgroundCarouselSeconds) * 1000;
 let activeBackgroundIndex = 0;
 let backgroundTimer;
 let fontInjected = false;
@@ -2821,7 +2850,7 @@ const render = () => {
     backgroundTimer = window.setInterval(() => {
       activeBackgroundIndex = (activeBackgroundIndex + 1) % backgrounds.length;
       applyBackgroundState();
-    }, 9000);
+    }, backgroundRotationMs);
   };
   applyBackgroundState();
   startBackgroundRotation();
@@ -5824,6 +5853,27 @@ void prewarmInteractiveDetailAssets();
     touchDraft();
   };
 
+  const setBackgroundCarouselSeconds = (seconds: number) => {
+    if (!draft) return;
+    const normalized = normalizeBackgroundCarouselSeconds(seconds);
+    if (draft.meta.backgroundCarouselSeconds === normalized) return;
+    draft.meta.backgroundCarouselSeconds = normalized;
+    touchDraft();
+  };
+
+  const moveBackground = (id: string, direction: -1 | 1) => {
+    if (!draft) return;
+    const index = draft.backgrounds.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= draft.backgrounds.length) return;
+    const ordered = [...draft.backgrounds];
+    const [moved] = ordered.splice(index, 1);
+    ordered.splice(nextIndex, 0, moved);
+    draft.backgrounds = ordered;
+    touchDraft();
+  };
+
   const removeBackground = (id: string) => {
     if (!draft) return;
     draft.backgrounds = draft.backgrounds.filter((item) => item.id !== id);
@@ -6601,7 +6651,12 @@ void prewarmInteractiveDetailAssets();
               {addSection}
               {deleteSection}
               {addBackground}
+              {moveBackground}
               {removeBackground}
+              backgroundCarouselSeconds={normalizeBackgroundCarouselSeconds(
+                draft.meta.backgroundCarouselSeconds
+              )}
+              {setBackgroundCarouselSeconds}
               {goPrevDish}
               {goNextDish}
               {addDish}

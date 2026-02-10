@@ -59,6 +59,12 @@ const normalizeDerivedMap = (value: unknown) => {
 const normalizeRotationDirection = (value: unknown): "cw" | "ccw" =>
   value === "cw" ? "cw" : "ccw";
 
+const normalizeBackgroundCarouselSeconds = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 9;
+  return Math.min(60, Math.max(2, Math.round(parsed)));
+};
+
 export const normalizeProject = (value: MenuProject): MenuProject => {
   const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
   value.meta.locales = locales;
@@ -83,6 +89,9 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
   if (!value.meta.currencyPosition) {
     value.meta.currencyPosition = "left";
   }
+  value.meta.backgroundCarouselSeconds = normalizeBackgroundCarouselSeconds(
+    value.meta.backgroundCarouselSeconds
+  );
 
   const defaultLocale = value.meta.defaultLocale ?? "en";
   value.backgrounds = (value.backgrounds ?? []).map((asset) => {

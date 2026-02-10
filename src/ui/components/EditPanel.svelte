@@ -35,7 +35,10 @@
   export let addSection: () => void = () => {};
   export let deleteSection: () => void = () => {};
   export let addBackground: () => void = () => {};
+  export let moveBackground: (id: string, direction: -1 | 1) => void = () => {};
   export let removeBackground: (id: string) => void = () => {};
+  export let backgroundCarouselSeconds = 9;
+  export let setBackgroundCarouselSeconds: (seconds: number) => void = () => {};
   export let goPrevDish: () => void = () => {};
   export let goNextDish: () => void = () => {};
   export let addDish: () => void = () => {};
@@ -107,6 +110,12 @@
     const parsed = Number(target.value);
     item.price.amount = Number.isFinite(parsed) ? parsed : 0;
     touchDraft();
+  };
+
+  const handleBackgroundCarouselSecondsInput = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    setBackgroundCarouselSeconds(Number(target.value));
   };
 </script>
 
@@ -248,17 +257,68 @@
       </div>
     {:else if editPanel === "background"}
       <div class="edit-block">
+        <label class="editor-field">
+          <span>{t("backgroundCarouselDuration")}</span>
+          <div class="background-duration-field">
+            <input
+              type="number"
+              min="2"
+              max="60"
+              step="1"
+              class="editor-input"
+              value={backgroundCarouselSeconds}
+              on:input={handleBackgroundCarouselSecondsInput}
+            />
+            <span class="background-duration-unit">{t("secondsShort")}</span>
+          </div>
+          <small class="editor-hint">{t("backgroundCarouselDurationHint")}</small>
+        </label>
         <div class="edit-actions">
           <button class="editor-outline" type="button" on:click={addBackground}>
             {t("wizardAddBg")}
           </button>
         </div>
+        <p class="edit-block__title">{t("backgroundOrder")}</p>
         {#if draft.backgrounds.length === 0}
           <p class="edit-hint">{t("wizardMissingBackground")}</p>
         {:else}
-          <div class="wizard-list">
-            {#each draft.backgrounds as bg}
-              <div class="wizard-item">
+          <div class="background-carousel-list">
+            {#each draft.backgrounds as bg, index}
+              <div class="background-carousel-item">
+                <div class="background-carousel-item__header">
+                  <p class="background-carousel-item__index">
+                    {t("backgroundLabel")} {index + 1}
+                  </p>
+                  <div class="background-carousel-item__actions">
+                    <button
+                      class="editor-outline"
+                      type="button"
+                      disabled={index === 0}
+                      aria-label={t("moveBackgroundUp")}
+                      title={t("moveBackgroundUp")}
+                      on:click={() => moveBackground(bg.id, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      class="editor-outline"
+                      type="button"
+                      disabled={index === draft.backgrounds.length - 1}
+                      aria-label={t("moveBackgroundDown")}
+                      title={t("moveBackgroundDown")}
+                      on:click={() => moveBackground(bg.id, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      class="editor-outline danger"
+                      type="button"
+                      on:click={() => removeBackground(bg.id)}
+                    >
+                      {t("delete")}
+                    </button>
+                  </div>
+                </div>
                 <label class="editor-field">
                   <span>{t("wizardLabel")}</span>
                   <input
@@ -291,13 +351,6 @@
                     />
                   {/if}
                 </label>
-                <button
-                  class="editor-outline danger"
-                  type="button"
-                  on:click={() => removeBackground(bg.id)}
-                >
-                  {t("delete")}
-                </button>
               </div>
             {/each}
           </div>
