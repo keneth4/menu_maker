@@ -12,13 +12,18 @@
     id: string;
     src: string;
   };
+  const TRANSPARENT_PIXEL_SRC =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  const CAROUSEL_MEDIA_ACTIVE_RADIUS = 2;
 
   export let layoutMode = "desktop";
   export let effectivePreview = "device";
   export let activeProject: MenuProject;
   export let previewStartupLoading = false;
   export let previewStartupProgress = 100;
+  export let startupBlockingSources: Set<string> = new Set();
   export let previewBackgrounds: PreviewBackground[] = [];
+  export let loadedBackgroundIndexes: number[] = [];
   export let activeBackgroundIndex = 0;
   export let isBlankMenu = false;
   export let locale = "es";
@@ -47,14 +52,78 @@
   export let handleCarouselTouchMove: (categoryId: string, event: TouchEvent) => void = () => {};
   export let handleCarouselTouchEnd: (categoryId: string, event: TouchEvent) => void = () => {};
   export let openDish: (categoryId: string, itemId: string) => void = () => {};
+  export let prefetchDishDetail: (
+    categoryId: string,
+    itemId: string,
+    includeNeighbors?: boolean
+  ) => void = () => {};
 
   let activeTemplateCapabilities: TemplateCapabilities = getTemplateCapabilities("focus-rows");
   let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy("focus-rows");
+  let loadedBackgroundIndexSet = new Set<number>();
+  let loadedCarouselMediaKeys = new Set<string>();
+  let carouselMediaProjectSignature = "";
+
+  const getCircularDistance = (activeIndex: number, sourceIndex: number, total: number) => {
+    if (total <= 1) return 0;
+    const normalizedActive = ((Math.round(activeIndex) % total) + total) % total;
+    const normalizedSource = ((Math.round(sourceIndex) % total) + total) % total;
+    const delta = Math.abs(normalizedSource - normalizedActive);
+    return Math.min(delta, total - delta);
+  };
+
+  const shouldLoadCarouselMedia = (activeIndex: number, sourceIndex: number, total: number) =>
+    getCircularDistance(activeIndex, sourceIndex, total) <= CAROUSEL_MEDIA_ACTIVE_RADIUS;
+
+  const getCarouselMediaKey = (categoryId: string, itemId: string) => `${categoryId}::${itemId}`;
 
   $: {
     const templateId = resolveTemplateId(activeProject?.meta.template);
     activeTemplateCapabilities = getTemplateCapabilities(templateId);
     activeTemplateStrategy = getTemplateStrategy(templateId);
+  }
+
+  $: loadedBackgroundIndexSet = new Set(loadedBackgroundIndexes);
+
+  $: {
+    const signature = activeProject
+      ? activeProject.categories
+          .map((category) => `${category.id}:${category.items.map((item) => item.id).join(",")}`)
+          .join("|")
+      : "";
+    if (signature !== carouselMediaProjectSignature) {
+      carouselMediaProjectSignature = signature;
+      loadedCarouselMediaKeys = new Set<string>();
+    }
+  }
+
+  $: if (activeProject) {
+    const next = new Set(loadedCarouselMediaKeys);
+    let changed = false;
+    activeProject.categories.forEach((category) => {
+      const count = category.items.length;
+      const activeIndex = carouselActive[category.id] ?? 0;
+      const renderItems = activeTemplateStrategy.getRenderItems(category.items);
+      renderItems.forEach((entry) => {
+        if (!shouldLoadCarouselMedia(activeIndex, entry.sourceIndex, count)) return;
+        const source = getCarouselImageSource(entry.item).trim();
+        if (
+          previewStartupLoading &&
+          startupBlockingSources.size > 0 &&
+          source &&
+          !startupBlockingSources.has(source)
+        ) {
+          return;
+        }
+        const key = getCarouselMediaKey(category.id, entry.item.id);
+        if (next.has(key)) return;
+        next.add(key);
+        changed = true;
+      });
+    });
+    if (changed) {
+      loadedCarouselMediaKeys = next;
+    }
   }
 </script>
 
@@ -82,7 +151,11 @@
         {#each previewBackgrounds as background, index (`${background.id}-${index}`)}
           <div
             class={`menu-background ${index === activeBackgroundIndex ? "active" : ""}`}
-            style={`background-image: url('${background.src}');`}
+            style={
+              loadedBackgroundIndexSet.has(index)
+                ? `background-image: url('${background.src}');`
+                : undefined
+            }
           ></div>
         {/each}
       {/if}
@@ -197,6 +270,22 @@
                     entry.sourceIndex,
                     category.items.length
                   )}
+                  {@const shouldLoadMedia = shouldLoadCarouselMedia(
+                    activeIndex,
+                    entry.sourceIndex,
+                    category.items.length
+                  )}
+                  {@const mediaKey = getCarouselMediaKey(category.id, entry.item.id)}
+                  {@const carouselSource = getCarouselImageSource(entry.item)}
+                  {@const startupBlocked =
+                    previewStartupLoading &&
+                    startupBlockingSources.size > 0 &&
+                    carouselSource.trim().length > 0 &&
+                    !startupBlockingSources.has(carouselSource) &&
+                    !loadedCarouselMediaKeys.has(mediaKey)}
+                  {@const mediaLoaded =
+                    !startupBlocked && (loadedCarouselMediaKeys.has(mediaKey) || shouldLoadMedia)}
+                  {@const srcSet = buildResponsiveSrcSetFromMedia(entry.item)}
                   <button
                     class={`carousel-card ${stateClass}`}
                     type="button"
@@ -205,12 +294,15 @@
                       entry.sourceIndex,
                       category.items.length
                     )}
+                    on:pointerenter={() => prefetchDishDetail(category.id, entry.item.id)}
+                    on:focus={() => prefetchDishDetail(category.id, entry.item.id)}
+                    on:touchstart={() => prefetchDishDetail(category.id, entry.item.id)}
                     on:click={() => openDish(category.id, entry.item.id)}
                   >
                     <div class="carousel-media">
                       <img
-                        src={getCarouselImageSource(entry.item)}
-                        srcset={buildResponsiveSrcSetFromMedia(entry.item)}
+                        src={mediaLoaded ? carouselSource : TRANSPARENT_PIXEL_SRC}
+                        srcset={mediaLoaded ? srcSet : undefined}
                         sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
                         alt={textOf(entry.item.name)}
                         draggable="false"
@@ -218,7 +310,7 @@
                         on:dragstart|preventDefault
                         loading="lazy"
                         decoding="async"
-                        fetchpriority="low"
+                        fetchpriority={mediaLoaded ? "high" : "low"}
                       />
                     </div>
                     <div class="carousel-text">

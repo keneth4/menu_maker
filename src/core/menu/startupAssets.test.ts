@@ -70,5 +70,31 @@ describe("startup asset planning", () => {
     expect(plan.deferred).toEqual(["bg2.webp", "a3.webp"]);
     expect(plan.all).toEqual(["bg1.webp", "bg2.webp", "a1.webp", "a2.webp", "a3.webp"]);
   });
-});
 
+  it("can prioritize smaller weighted sources for blocking startup", () => {
+    const plan = buildStartupAssetPlan({
+      backgroundSources: ["bg-heavy.webp", "bg-light.webp"],
+      itemSources: ["a-heavy.webp", "a-light.webp", "a-mid.webp"],
+      blockingBackgroundLimit: 1,
+      blockingItemLimit: 2,
+      prioritizeSmallerFirst: true,
+      sourceWeights: {
+        "bg-heavy.webp": 900_000,
+        "bg-light.webp": 300_000,
+        "a-heavy.webp": 700_000,
+        "a-mid.webp": 350_000,
+        "a-light.webp": 150_000
+      }
+    });
+
+    expect(plan.blocking).toEqual(["bg-light.webp", "a-light.webp", "a-mid.webp"]);
+    expect(plan.deferred).toEqual(["bg-heavy.webp", "a-heavy.webp"]);
+    expect(plan.all).toEqual([
+      "bg-heavy.webp",
+      "bg-light.webp",
+      "a-heavy.webp",
+      "a-light.webp",
+      "a-mid.webp"
+    ]);
+  });
+});

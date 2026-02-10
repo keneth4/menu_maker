@@ -157,7 +157,8 @@
   const interactiveDetailBytesCache = new Map<string, ArrayBuffer>();
   const interactiveDetailBytesPending = new Map<string, Promise<ArrayBuffer | null>>();
   const interactiveDetailCenterOffsetCache = new Map<string, { x: number; y: number }>();
-  let interactivePrewarmSignature = "";
+  const detailPrefetchedSources = new Set<string>();
+  let detailPrefetchProjectSignature = "";
   let carouselActive: Record<string, number> = {};
   let carouselSnapTimeout: Record<string, ReturnType<typeof setTimeout> | null> = {};
   let carouselTouchState: Record<
@@ -225,12 +226,15 @@
   let uploadFolderOptions: { value: string; label: string }[] = [];
   let fontChoice = "Fraunces";
   let previewBackgrounds: { id: string; src: string }[] = [];
+  let loadedPreviewBackgroundIndexes: number[] = [];
   let activeBackgroundIndex = 0;
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
   let backgroundRotationIntervalMs = 0;
   let previewStartupLoading = false;
   let previewStartupProgress = 100;
+  let previewStartupSourceWeights: Record<string, number> = {};
+  let previewStartupBlockingSources = new Set<string>();
   let previewStartupSignature = "";
   let previewStartupToken = 0;
   let templateSyncSignature = "";
@@ -702,18 +706,21 @@
       wizardShowcaseProject;
     activeProject = showcaseActive ? wizardShowcaseProject : (draft ?? project);
   }
-  $: if (activeProject && supportsInteractiveMedia()) {
-    const signature = activeProject.categories
-      .map((category) =>
+  $: if (activeProject) {
+    const signature = [
+      activeProject.meta.slug || "",
+      ...activeProject.categories.map((category) =>
         category.items
-          .map((item) => getInteractiveDetailAsset(item)?.source || "")
-          .filter(Boolean)
+          .map((item) => [item.media.originalHero360 || "", item.media.hero360 || ""].join("::"))
           .join("|")
       )
-      .join("::");
-    if (signature !== interactivePrewarmSignature) {
-      interactivePrewarmSignature = signature;
-      void prewarmInteractiveDetailAssets(activeProject);
+    ].join("||");
+    if (signature !== detailPrefetchProjectSignature) {
+      detailPrefetchProjectSignature = signature;
+      detailPrefetchedSources.clear();
+      interactiveDetailBytesCache.clear();
+      interactiveDetailBytesPending.clear();
+      interactiveDetailCenterOffsetCache.clear();
     }
   }
   $: {
@@ -736,6 +743,29 @@
         id: item.id || `bg-${index}`,
         src: item.src
       })) ?? [];
+  $: {
+    const count = previewBackgrounds.length;
+    const nextIndexes: number[] = [];
+    if (count > 0) {
+      const active = Math.min(Math.max(activeBackgroundIndex, 0), count - 1);
+      nextIndexes.push(active);
+      if (count > 1) {
+        nextIndexes.push((active + 1) % count);
+      }
+      loadedPreviewBackgroundIndexes.forEach((index) => {
+        if (index < 0 || index >= count) return;
+        if (!nextIndexes.includes(index)) {
+          nextIndexes.push(index);
+        }
+      });
+    }
+    const sameLength = nextIndexes.length === loadedPreviewBackgroundIndexes.length;
+    const sameEntries =
+      sameLength && nextIndexes.every((value, index) => value === loadedPreviewBackgroundIndexes[index]);
+    if (!sameEntries) {
+      loadedPreviewBackgroundIndexes = nextIndexes;
+    }
+  }
   $: if (typeof document !== "undefined") {
     if (!fontFaceCss) {
       if (fontStyleEl) {
@@ -1525,6 +1555,7 @@ let carouselCleanup = [];
 let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
+let startupBlockingSourceSet = null;
 const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
 const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
@@ -1536,6 +1567,10 @@ const DEBUG_INTERACTIVE_CENTER = new URLSearchParams(window.location.search).has
 const interactiveDetailBytesCache = new Map();
 const interactiveDetailBytesPending = new Map();
 const interactiveDetailCenterOffsetCache = new Map();
+const detailPrefetchedSources = new Set();
+const startupAssetBytes = new Map();
+let startupAssetBytesPromise = null;
+let startupAssetBytesReady = false;
 let detailRotateDirection = -1;
 const jukeboxWheelState = new Map();
 const focusRowWheelState = new Map();
@@ -1638,6 +1673,32 @@ const getCircularOffset = (activeIndex, targetIndex, count) => {
 const wrapCarouselIndex = (value, count) => {
   if (count <= 0) return 0;
   return ((value % count) + count) % count;
+};
+const TRANSPARENT_PIXEL_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+const CAROUSEL_MEDIA_ACTIVE_RADIUS = 2.25;
+const hydrateCarouselCardMedia = (card) => {
+  const image = card?.querySelector(".carousel-media img");
+  if (!(image instanceof HTMLImageElement)) return;
+  if (image.dataset.mediaLoaded === "1") return;
+  const source = (image.dataset.mediaSrc || "").trim();
+  if (!source) return;
+  image.src = source;
+  const srcSet = (image.dataset.mediaSrcset || "").trim();
+  if (srcSet) image.setAttribute("srcset", srcSet);
+  image.setAttribute("fetchpriority", "high");
+  image.dataset.mediaLoaded = "1";
+};
+const maybeHydrateCarouselCardMedia = (card, distance) => {
+  if (distance > CAROUSEL_MEDIA_ACTIVE_RADIUS) return;
+  const image = card?.querySelector(".carousel-media img");
+  if (!(image instanceof HTMLImageElement)) return;
+  const source = (image.dataset.mediaSrc || "").trim();
+  if (!source) return;
+  if (startupLoading) {
+    if (!(startupBlockingSourceSet instanceof Set)) return;
+    if (startupBlockingSourceSet.size > 0 && !startupBlockingSourceSet.has(source)) return;
+  }
+  hydrateCarouselCardMedia(card);
 };
 const normalizeJukeboxWheelDelta = (event) => {
   const modeScale = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? 240 : 1;
@@ -1961,16 +2022,38 @@ const getInteractiveAssetBytes = async (source) => {
   interactiveDetailBytesPending.set(source, task);
   return task;
 };
-const prewarmInteractiveDetailAssets = async () => {
-  if (!supportsInteractiveMedia()) return;
-  const sources = new Set();
-  DATA.categories.forEach((category) => {
-    category.items.forEach((item) => {
-      const asset = getInteractiveDetailAsset(item);
-      if (asset) sources.add(asset.source);
-    });
+const prefetchDishDetailItem = (dish) => {
+  if (!dish) return;
+  const detailSource = (getDetailImageSrc(dish) || "").trim();
+  if (detailSource && !detailPrefetchedSources.has(detailSource)) {
+    detailPrefetchedSources.add(detailSource);
+    const preload = new Image();
+    preload.decoding = "async";
+    preload.src = detailSource;
+  }
+  const interactiveAsset = getInteractiveDetailAsset(dish);
+  if (
+    interactiveAsset &&
+    supportsInteractiveMedia() &&
+    !detailPrefetchedSources.has(interactiveAsset.source)
+  ) {
+    detailPrefetchedSources.add(interactiveAsset.source);
+    void getInteractiveAssetBytes(interactiveAsset.source);
+  }
+};
+const prefetchDishDetailByIds = (categoryId, itemId, includeNeighbors = false) => {
+  const category = DATA.categories.find((entry) => entry.id === categoryId);
+  if (!category || !category.items?.length) return;
+  const index = category.items.findIndex((entry) => entry.id === itemId);
+  if (index < 0) return;
+  const targets = [index];
+  if (includeNeighbors && category.items.length > 1) {
+    targets.push((index - 1 + category.items.length) % category.items.length);
+    targets.push((index + 1) % category.items.length);
+  }
+  Array.from(new Set(targets)).forEach((target) => {
+    prefetchDishDetailItem(category.items[target]);
   });
-  await Promise.allSettled(Array.from(sources).slice(0, 12).map((source) => getInteractiveAssetBytes(source)));
 };
 const teardownInteractiveModalMedia = () => {
   modalMediaToken += 1;
@@ -2560,7 +2643,64 @@ const getJukeboxHint = () => getInstructionCopy("jukeboxHint");
 const getFocusRowsHint = () => getInstructionCopy("focusRowsHint");
 const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
 const STARTUP_BLOCKING_BACKGROUND_LIMIT = 1;
-const STARTUP_BLOCKING_ITEM_LIMIT = 6;
+const STARTUP_BLOCKING_ITEM_LIMIT = 3;
+const normalizeStartupSourceKey = (value) =>
+  String(value || "").trim().replace(/^\\/+/, "").split(/[?#]/, 1)[0];
+const estimateStartupAssetBytes = (source) => {
+  const key = normalizeStartupSourceKey(source).toLowerCase();
+  const isBackground = key.includes("/backgrounds/");
+  const isGif = key.endsWith(".gif");
+  const isWebp = key.endsWith(".webp");
+  const isAvif = key.endsWith(".avif");
+  const isPng = key.endsWith(".png");
+  const isJpeg = key.endsWith(".jpg") || key.endsWith(".jpeg");
+  if (isBackground) {
+    if (isGif) return 1300000;
+    if (isWebp) return 650000;
+    if (isAvif) return 420000;
+    if (isPng || isJpeg) return 700000;
+    return 900000;
+  }
+  if (isGif) return 650000;
+  if (isWebp) return 260000;
+  if (isAvif) return 180000;
+  if (isPng || isJpeg) return 320000;
+  return 300000;
+};
+const readStartupAssetBytes = (source) => {
+  const key = normalizeStartupSourceKey(source);
+  const bytes = startupAssetBytes.get(key);
+  if (typeof bytes === "number" && Number.isFinite(bytes) && bytes > 0) {
+    return Math.round(bytes);
+  }
+  return estimateStartupAssetBytes(source);
+};
+const sortSourcesByStartupWeight = (sources) =>
+  [...sources].sort((left, right) => readStartupAssetBytes(left) - readStartupAssetBytes(right));
+const loadStartupAssetBytes = async () => {
+  if (startupAssetBytesReady) return;
+  if (startupAssetBytesPromise) return startupAssetBytesPromise;
+  startupAssetBytesPromise = (async () => {
+    try {
+      const response = await fetch("asset-manifest.json", { cache: "force-cache" });
+      if (!response.ok) return;
+      const payload = await response.json();
+      const assets = Array.isArray(payload?.assets) ? payload.assets : [];
+      assets.forEach((entry) => {
+        const outputPath = typeof entry?.outputPath === "string" ? entry.outputPath : "";
+        const bytes = Number(entry?.bytes);
+        if (!outputPath || !Number.isFinite(bytes) || bytes <= 0) return;
+        startupAssetBytes.set(normalizeStartupSourceKey(outputPath), Math.round(bytes));
+      });
+    } catch {
+      // Ignore diagnostics loading failures; fallback estimates will be used.
+    } finally {
+      startupAssetBytesReady = true;
+      startupAssetBytesPromise = null;
+    }
+  })();
+  return startupAssetBytesPromise;
+};
 const collectStartupItemPrioritySources = () => {
   const rows = DATA.categories.map((category) =>
     category.items
@@ -2599,14 +2739,16 @@ const buildStartupSourcePlan = () => {
     backgroundSources.push(src);
   });
   const itemSources = collectStartupItemPrioritySources();
+  const backgroundBlockingCandidates = sortSourcesByStartupWeight(backgroundSources);
+  const itemBlockingCandidates = sortSourcesByStartupWeight(itemSources);
   const blocking = [];
   const blockingSet = new Set();
-  backgroundSources.slice(0, STARTUP_BLOCKING_BACKGROUND_LIMIT).forEach((src) => {
+  backgroundBlockingCandidates.slice(0, STARTUP_BLOCKING_BACKGROUND_LIMIT).forEach((src) => {
     if (blockingSet.has(src)) return;
     blockingSet.add(src);
     blocking.push(src);
   });
-  itemSources.slice(0, STARTUP_BLOCKING_ITEM_LIMIT).forEach((src) => {
+  itemBlockingCandidates.slice(0, STARTUP_BLOCKING_ITEM_LIMIT).forEach((src) => {
     if (blockingSet.has(src)) return;
     blockingSet.add(src);
     blocking.push(src);
@@ -2647,7 +2789,7 @@ const preloadImageBatch = async (sources, onProgress, concurrency = 4) => {
       if (!source) continue;
       await preloadImageAsset(source);
       loaded += 1;
-      onProgress?.(loaded, sources.length);
+      onProgress?.(source, loaded, sources.length);
     }
   };
   await Promise.all(Array.from({ length: workers }, () => runWorker()));
@@ -2675,22 +2817,36 @@ const syncStartupUi = () => {
 };
 const preloadStartupAssets = async () => {
   const token = ++startupToken;
+  await loadStartupAssetBytes();
   const plan = buildStartupSourcePlan();
+  startupBlockingSourceSet = new Set(plan.blocking);
+  refreshVisibleCarouselMedia();
   if (plan.blocking.length === 0) {
     startupProgress = 100;
     startupLoading = false;
+    startupBlockingSourceSet = new Set();
     syncStartupUi();
+    refreshVisibleCarouselMedia();
     preloadDeferredAssets(plan.deferred);
     return;
   }
+  const totalWeight = Math.max(
+    1,
+    plan.blocking.reduce((sum, source) => sum + readStartupAssetBytes(source), 0)
+  );
+  let loadedWeight = 0;
   startupLoading = true;
   startupProgress = 0;
   syncStartupUi();
   await preloadImageBatch(
     plan.blocking,
-    (loaded, total) => {
+    (source) => {
       if (token !== startupToken) return;
-      startupProgress = Math.round((loaded / total) * 100);
+      loadedWeight += readStartupAssetBytes(source);
+      startupProgress = Math.max(
+        1,
+        Math.min(100, Math.round((loadedWeight / totalWeight) * 100))
+      );
       syncStartupUi();
     },
     4
@@ -2698,7 +2854,9 @@ const preloadStartupAssets = async () => {
   if (token !== startupToken) return;
   startupProgress = 100;
   startupLoading = false;
+  startupBlockingSourceSet = new Set();
   syncStartupUi();
+  refreshVisibleCarouselMedia();
   preloadDeferredAssets(plan.deferred);
 };
 
@@ -2728,7 +2886,7 @@ const buildCarousel = (category) => {
           return \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media">
-                <img src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
+                <img src="\${TRANSPARENT_PIXEL_SRC}" data-media-src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'data-media-srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">
                 <div class="carousel-row">
@@ -2773,7 +2931,7 @@ const render = () => {
       \${backgrounds
         .map(
           (item, index) =>
-            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" style="background-image:url('\${item.src}');"></div>\`
+            \`<div class="menu-background \${index === activeBackgroundIndex ? "active" : ""}" data-bg-src="\${item.src}"></div>\`
         )
         .join("")}
       <div class="menu-overlay"></div>
@@ -2834,8 +2992,21 @@ const render = () => {
   }
   const applyBackgroundState = () => {
     const layers = Array.from(app.querySelectorAll(".menu-background"));
+    const warmIndexes = [];
+    if (backgrounds.length > 0) {
+      warmIndexes.push(activeBackgroundIndex);
+      if (backgrounds.length > 1) {
+        warmIndexes.push((activeBackgroundIndex + 1) % backgrounds.length);
+      }
+    }
     layers.forEach((layer, index) => {
       layer.classList.toggle("active", index === activeBackgroundIndex);
+      if (!warmIndexes.includes(index)) return;
+      if (layer.dataset.bgLoaded === "1") return;
+      const source = (layer.dataset.bgSrc || "").trim();
+      if (!source) return;
+      layer.style.backgroundImage = "url('" + source.replace(/'/g, "\\\\'") + "')";
+      layer.dataset.bgLoaded = "1";
     });
   };
   const startBackgroundRotation = () => {
@@ -2898,6 +3069,7 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
       card.classList.toggle("near", Math.abs(offset) >= 0.5 && Math.abs(offset) < 1.25);
       card.classList.toggle("far", Math.abs(offset) >= 1.25);
       card.classList.toggle("is-hidden", distance >= hideAt);
+      maybeHydrateCarouselCardMedia(card, distance);
     });
     return;
   }
@@ -2928,6 +3100,19 @@ const applyFocusState = (container, activeIndex, itemCount = 0) => {
     card.classList.toggle("near", distance >= 0.5 && distance < 1.5);
     card.classList.toggle("far", distance >= 1.5 && distance < 2.5);
     card.classList.toggle("is-hidden", distance >= hideAt);
+    maybeHydrateCarouselCardMedia(card, distance);
+  });
+};
+
+const refreshVisibleCarouselMedia = () => {
+  const carousels = Array.from(document.querySelectorAll(".menu-carousel"));
+  carousels.forEach((container) => {
+    const id = container.dataset.categoryId;
+    const category = DATA.categories.find((item) => item.id === id);
+    const count = category?.items.length || 0;
+    if (count === 0) return;
+    const active = Number(container.dataset.activeIndex || "0") || 0;
+    applyFocusState(container, active, count);
   });
 };
 
@@ -3293,12 +3478,18 @@ const bindCarousels = () => {
 
 const bindCards = () => {
   document.querySelectorAll(".carousel-card").forEach((card) => {
+    const categoryId = card.closest(".menu-carousel")?.dataset.categoryId;
+    const itemId = card.dataset.item;
+    if (!categoryId || !itemId) return;
+    const prefetch = () => prefetchDishDetailByIds(categoryId, itemId);
+    card.addEventListener("pointerenter", prefetch);
+    card.addEventListener("focus", prefetch);
+    card.addEventListener("touchstart", prefetch, { passive: true });
     card.addEventListener("click", () => {
-      const categoryId = card.closest(".menu-carousel")?.dataset.categoryId;
-      const itemId = card.dataset.item;
       const category = DATA.categories.find((item) => item.id === categoryId);
       const dish = category?.items.find((item) => item.id === itemId);
       if (!dish) return;
+      prefetchDishDetailByIds(categoryId, itemId, true);
       const allergenLabel = getTerm("allergens");
       const veganLabel = getTerm("vegan");
       const longDesc = textOf(dish.longDescription);
@@ -3452,7 +3643,6 @@ window.addEventListener("keydown", handleKeyboardNavigation);
 
 render();
 void preloadStartupAssets();
-void prewarmInteractiveDetailAssets();
 `;
   };
 
@@ -3751,11 +3941,18 @@ void prewarmInteractiveDetailAssets();
         });
       });
 
+      const startupWeightMap = manifestEntries.reduce<Record<string, number>>((acc, entry) => {
+        if (!entry.outputPath || !entry.bytes) return acc;
+        acc[entry.outputPath] = entry.bytes;
+        return acc;
+      }, {});
       const startupPlan = buildStartupAssetPlan({
         backgroundSources: exportProject.backgrounds.map((bg) => bg.src || ""),
         itemSources: collectItemPrioritySources(exportProject, getCarouselImageSource),
         blockingBackgroundLimit: 1,
-        blockingItemLimit: 6
+        blockingItemLimit: 3,
+        sourceWeights: startupWeightMap,
+        prioritizeSmallerFirst: true
       });
       const firstViewSources = new Set(startupPlan.blocking);
       manifestEntries.forEach((entry) => {
@@ -4193,24 +4390,6 @@ void prewarmInteractiveDetailAssets();
     })();
     interactiveDetailBytesPending.set(source, task);
     return task;
-  };
-
-  const prewarmInteractiveDetailAssets = async (data: MenuProject) => {
-    if (!supportsInteractiveMedia()) return;
-    const sources = new Set<string>();
-    data.categories.forEach((category) => {
-      category.items.forEach((item) => {
-        const asset = getInteractiveDetailAsset(item);
-        if (asset) {
-          sources.add(asset.source);
-        }
-      });
-    });
-    await Promise.allSettled(
-      Array.from(sources)
-        .slice(0, 12)
-        .map((source) => getInteractiveAssetBytes(source))
-    );
   };
 
   const teardownInteractiveDetailMedia = () => {
@@ -4679,9 +4858,46 @@ void prewarmInteractiveDetailAssets();
       }
     });
 
+  const normalizeStartupSourceKey = (value: string) =>
+    value.trim().replace(/^\/+/, "").split(/[?#]/, 1)[0];
+
+  const estimateStartupAssetBytes = (source: string) => {
+    const key = normalizeStartupSourceKey(source).toLowerCase();
+    const isBackground = key.includes("/backgrounds/");
+    const isGif = key.endsWith(".gif");
+    const isWebp = key.endsWith(".webp");
+    const isAvif = key.endsWith(".avif");
+    const isPng = key.endsWith(".png");
+    const isJpeg = key.endsWith(".jpg") || key.endsWith(".jpeg");
+    if (isBackground) {
+      if (isGif) return 1_300_000;
+      if (isWebp) return 650_000;
+      if (isAvif) return 420_000;
+      if (isPng || isJpeg) return 700_000;
+      return 900_000;
+    }
+    if (isGif) return 650_000;
+    if (isWebp) return 260_000;
+    if (isAvif) return 180_000;
+    if (isPng || isJpeg) return 320_000;
+    return 300_000;
+  };
+
+  const readPreviewStartupWeight = (source: string) => {
+    const direct = previewStartupSourceWeights[source];
+    if (typeof direct === "number" && Number.isFinite(direct) && direct > 0) {
+      return Math.round(direct);
+    }
+    const normalized = previewStartupSourceWeights[normalizeStartupSourceKey(source)];
+    if (typeof normalized === "number" && Number.isFinite(normalized) && normalized > 0) {
+      return Math.round(normalized);
+    }
+    return estimateStartupAssetBytes(source);
+  };
+
   const preloadImageAssetBatch = async (
     sources: string[],
-    onProgress: ((loaded: number, total: number) => void) | null,
+    onProgress: ((source: string, loaded: number, total: number) => void) | null,
     concurrency = 4
   ) => {
     if (sources.length === 0) return;
@@ -4694,7 +4910,7 @@ void prewarmInteractiveDetailAssets();
         if (!source) continue;
         await preloadImageAsset(source);
         loaded += 1;
-        onProgress?.(loaded, sources.length);
+        onProgress?.(source, loaded, sources.length);
       }
     };
     await Promise.all(Array.from({ length: workers }, () => runWorker()));
@@ -4716,34 +4932,71 @@ void prewarmInteractiveDetailAssets();
   };
 
   const collectPreviewStartupPlan = (data: MenuProject) =>
-    buildStartupAssetPlan({
-      backgroundSources: data.backgrounds.map((bg) => bg.src || ""),
-      itemSources: collectItemPrioritySources(data, getCarouselImageSource),
-      blockingBackgroundLimit: 1,
-      blockingItemLimit: 6
-    });
+    {
+      const itemSources = collectItemPrioritySources(data, getCarouselImageSource);
+      const backgroundSources = data.backgrounds.map((bg) => bg.src || "");
+      const allSources = [
+        ...backgroundSources,
+        ...itemSources
+      ].filter((source) => source.trim().length > 0);
+      const sourceWeights = allSources.reduce<Record<string, number>>((acc, source) => {
+        acc[source] = estimateStartupAssetBytes(source);
+        acc[normalizeStartupSourceKey(source)] = acc[source];
+        return acc;
+      }, {});
+      return buildStartupAssetPlan({
+        backgroundSources,
+        itemSources,
+        blockingBackgroundLimit: 1,
+        blockingItemLimit: 3,
+        sourceWeights,
+        prioritizeSmallerFirst: true
+      });
+    };
 
-  const preloadPreviewStartupAssets = async (plan: { blocking: string[]; deferred: string[] }) => {
+  const preloadPreviewStartupAssets = async (plan: {
+    blocking: string[];
+    deferred: string[];
+    all: string[];
+  }) => {
     const token = ++previewStartupToken;
+    previewStartupBlockingSources = new Set(plan.blocking);
+    previewStartupSourceWeights = plan.all.reduce<Record<string, number>>((acc, source) => {
+      const weight = estimateStartupAssetBytes(source);
+      acc[source] = weight;
+      acc[normalizeStartupSourceKey(source)] = weight;
+      return acc;
+    }, {});
     if (plan.blocking.length === 0) {
       previewStartupProgress = 100;
       previewStartupLoading = false;
+      previewStartupBlockingSources = new Set();
       preloadDeferredPreviewAssets(plan.deferred);
       return;
     }
+    const totalWeight = Math.max(
+      1,
+      plan.blocking.reduce((sum, source) => sum + readPreviewStartupWeight(source), 0)
+    );
+    let loadedWeight = 0;
     previewStartupLoading = true;
     previewStartupProgress = 0;
     await preloadImageAssetBatch(
       plan.blocking,
-      (loaded, total) => {
+      (source) => {
         if (token !== previewStartupToken) return;
-        previewStartupProgress = Math.round((loaded / total) * 100);
+        loadedWeight += readPreviewStartupWeight(source);
+        previewStartupProgress = Math.max(
+          1,
+          Math.min(100, Math.round((loadedWeight / totalWeight) * 100))
+        );
       },
       4
     );
     if (token !== previewStartupToken) return;
     previewStartupProgress = 100;
     previewStartupLoading = false;
+    previewStartupBlockingSources = new Set();
     preloadDeferredPreviewAssets(plan.deferred);
   };
 
@@ -4758,6 +5011,8 @@ void prewarmInteractiveDetailAssets();
     previewStartupSignature = "";
     previewStartupProgress = 100;
     previewStartupLoading = false;
+    previewStartupSourceWeights = {};
+    previewStartupBlockingSources = new Set();
   }
 
   const syncWizardShowcaseVisibility = () => {
@@ -6136,7 +6391,49 @@ void prewarmInteractiveDetailAssets();
     carouselTouchState = { ...carouselTouchState, [categoryId]: null };
   };
 
+  const prefetchDishDetailItem = (dish: MenuItem | null) => {
+    if (!dish) return;
+    const detailSource = getDetailImageSource(dish).trim();
+    if (detailSource && !detailPrefetchedSources.has(detailSource)) {
+      detailPrefetchedSources.add(detailSource);
+      const preload = new Image();
+      preload.decoding = "async";
+      preload.src = detailSource;
+    }
+    const interactiveAsset = getInteractiveDetailAsset(dish);
+    if (
+      interactiveAsset &&
+      supportsInteractiveMedia() &&
+      !detailPrefetchedSources.has(interactiveAsset.source)
+    ) {
+      detailPrefetchedSources.add(interactiveAsset.source);
+      void getInteractiveAssetBytes(interactiveAsset.source);
+    }
+  };
+
+  const prefetchDishDetail = (
+    categoryId: string,
+    itemId: string,
+    includeNeighbors = false
+  ) => {
+    if (!activeProject) return;
+    const category = activeProject.categories.find((item) => item.id === categoryId);
+    if (!category || category.items.length === 0) return;
+    const index = category.items.findIndex((item) => item.id === itemId);
+    if (index < 0) return;
+    const targets = [index];
+    if (includeNeighbors && category.items.length > 1) {
+      targets.push((index - 1 + category.items.length) % category.items.length);
+      targets.push((index + 1) % category.items.length);
+    }
+    const dedupedTargets = Array.from(new Set(targets));
+    dedupedTargets.forEach((target) => {
+      prefetchDishDetailItem(category.items[target] ?? null);
+    });
+  };
+
   const openDish = (categoryId: string, itemId: string) => {
+    prefetchDishDetail(categoryId, itemId, true);
     activeItem = { category: categoryId, itemId };
     void tick().then(() => {
       const dish = resolveActiveDish();
@@ -6727,7 +7024,9 @@ void prewarmInteractiveDetailAssets();
         bind:locale
         {previewStartupLoading}
         {previewStartupProgress}
+        startupBlockingSources={previewStartupBlockingSources}
         {previewBackgrounds}
+        loadedBackgroundIndexes={loadedPreviewBackgroundIndexes}
         {activeBackgroundIndex}
         {isBlankMenu}
         {carouselActive}
@@ -6751,6 +7050,7 @@ void prewarmInteractiveDetailAssets();
         {handleCarouselTouchMove}
         {handleCarouselTouchEnd}
         {openDish}
+        {prefetchDishDetail}
       />
     </div>
   {/if}
