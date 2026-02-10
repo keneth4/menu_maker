@@ -72,6 +72,11 @@ export const collectExportProjectAssetPaths = (
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
 
   project.backgrounds.forEach((bg) => {
+    if (bg.originalSrc) {
+      assets.add(bg.originalSrc);
+    } else if (bg.src) {
+      assets.add(bg.src);
+    }
     const derivedSources = new Set<string>();
     collectDerivedPaths(derivedSources, bg.derived);
     if (derivedSources.size > 0) {
@@ -109,22 +114,23 @@ export const collectSaveProjectAssetPaths = (
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
 
   project.backgrounds.forEach((bg) => {
+    if (bg.originalSrc) {
+      assets.add(bg.originalSrc);
+      return;
+    }
     if (bg.src) assets.add(bg.src);
-    if (bg.originalSrc) assets.add(bg.originalSrc);
-    collectDerivedPaths(assets, bg.derived);
   });
 
   project.categories.forEach((category) => {
     category.items.forEach((item) => {
-      if (item.media.hero360) assets.add(item.media.hero360);
-      if (item.media.originalHero360) assets.add(item.media.originalHero360);
+      if (item.media.originalHero360) {
+        assets.add(item.media.originalHero360);
+      } else if (item.media.hero360) {
+        assets.add(item.media.hero360);
+      }
       item.media.gallery?.forEach((entry) => {
         if (entry) assets.add(entry);
       });
-      if (item.media.responsive?.small) assets.add(item.media.responsive.small);
-      if (item.media.responsive?.medium) assets.add(item.media.responsive.medium);
-      if (item.media.responsive?.large) assets.add(item.media.responsive.large);
-      collectDerivedPaths(assets, item.media.derived);
     });
   });
 
@@ -168,36 +174,6 @@ export const rewriteProjectForSaveZip = (
     const normalized = normalizePath(value);
     return sourceToRelative.get(normalized) ?? value;
   };
-  const rewriteDerivedVariant = (value?: DerivedMediaVariant) => {
-    if (!value) return value;
-    if (typeof value === "string") {
-      return rewriteSource(value) ?? value;
-    }
-    const next: Record<string, string> = {};
-    Object.entries(value).forEach(([format, source]) => {
-      if (!source) return;
-      next[format] = rewriteSource(source) ?? source;
-    });
-    return Object.keys(next).length ? next : value;
-  };
-  const rewriteDerived = (value?: DerivedMediaMap) => {
-    if (!value) return value;
-    return {
-      ...(value.profileId ? { profileId: value.profileId } : {}),
-      ...(value.small ? { small: rewriteDerivedVariant(value.small) } : {}),
-      ...(value.medium ? { medium: rewriteDerivedVariant(value.medium) } : {}),
-      ...(value.large ? { large: rewriteDerivedVariant(value.large) } : {})
-    };
-  };
-  const rewriteResponsive = (value?: { small?: string; medium?: string; large?: string }) => {
-    if (!value) return value;
-    return {
-      ...(value.small ? { small: rewriteSource(value.small) ?? value.small } : {}),
-      ...(value.medium ? { medium: rewriteSource(value.medium) ?? value.medium } : {}),
-      ...(value.large ? { large: rewriteSource(value.large) ?? value.large } : {})
-    };
-  };
-
   if (exportProject.meta.fontSource) {
     exportProject.meta.fontSource =
       rewriteSource(exportProject.meta.fontSource) ?? exportProject.meta.fontSource;
@@ -207,24 +183,27 @@ export const rewriteProjectForSaveZip = (
   }
 
   exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
+    const { derived: _derived, ...bgBase } = bg;
+    const rewrittenOriginal = rewriteSource(bg.originalSrc ?? bg.src) ?? bg.originalSrc ?? bg.src;
     return {
-      ...bg,
-      src: rewriteSource(bg.src) ?? bg.src,
-      originalSrc: rewriteSource(bg.originalSrc) ?? bg.originalSrc,
-      derived: rewriteDerived(bg.derived)
+      ...bgBase,
+      src: rewrittenOriginal ?? bg.src,
+      originalSrc: rewrittenOriginal
     };
   });
   exportProject.categories = exportProject.categories.map((category) => ({
     ...category,
     items: category.items.map((item) => {
+      const rewrittenOriginalHero =
+        rewriteSource(item.media.originalHero360 ?? item.media.hero360) ??
+        item.media.originalHero360 ??
+        item.media.hero360;
+      const { responsive: _responsive, derived: _derived, ...mediaBase } = item.media;
       const media = {
-        ...item.media,
-        hero360: rewriteSource(item.media.hero360) ?? item.media.hero360,
-        originalHero360:
-          rewriteSource(item.media.originalHero360) ?? item.media.originalHero360,
+        ...mediaBase,
+        hero360: rewrittenOriginalHero ?? item.media.hero360,
+        originalHero360: rewrittenOriginalHero,
         gallery: item.media.gallery?.map((entry) => rewriteSource(entry) ?? entry),
-        responsive: rewriteResponsive(item.media.responsive),
-        derived: rewriteDerived(item.media.derived)
       };
       return {
         ...item,

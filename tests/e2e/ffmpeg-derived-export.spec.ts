@@ -74,7 +74,7 @@ const writeBridgeFixtureZip = async (testInfo: TestInfo, slug: string) => {
   return fixturePath;
 };
 
-test("bridge export generates derived assets and keeps originals out of static export", async ({
+test("bridge export generates derived assets and keeps originals for detail rendering", async ({
   page,
   request
 }, testInfo) => {
@@ -126,10 +126,11 @@ test("bridge export generates derived assets and keeps originals out of static e
   const entries = readZip(zipBuffer);
   const names = entries.map((entry) => entry.name);
   expect(names).toContain("asset-manifest.json");
+  expect(names).toContain("export-report.json");
 
   expect(names.some((name) => name.startsWith("assets/derived/backgrounds/"))).toBeTruthy();
   expect(names.some((name) => name.startsWith("assets/derived/items/"))).toBeTruthy();
-  expect(names.some((name) => name.startsWith("assets/originals/backgrounds/"))).toBeFalsy();
+  expect(names.some((name) => name.startsWith("assets/originals/backgrounds/"))).toBeTruthy();
   expect(names.some((name) => name.startsWith("assets/originals/items/"))).toBeTruthy();
   expect(names.some((name) => name.startsWith("assets/backgrounds/"))).toBeFalsy();
   expect(names.some((name) => name.startsWith("assets/dishes/"))).toBeFalsy();
@@ -138,18 +139,25 @@ test("bridge export generates derived assets and keeps originals out of static e
   expect(menuEntry).toBeDefined();
   const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
 
+  const reportEntry = entries.find((entry) => entry.name === "export-report.json");
+  expect(reportEntry).toBeDefined();
+  const report = JSON.parse(new TextDecoder().decode(reportEntry!.data)) as {
+    budgets?: { passed?: boolean };
+    totals?: { firstViewImageBytes?: number };
+  };
+  expect(report.budgets?.passed).toBeTruthy();
+  expect((report.totals?.firstViewImageBytes ?? 0)).toBeGreaterThanOrEqual(0);
+
   expect(menu.backgrounds[0].src).toMatch(
     /^assets\/derived\/backgrounds\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
-  expect(menu.backgrounds[0].originalSrc).toBeUndefined();
-  expect(menu.backgrounds[0].derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
+  expect(menu.backgrounds[0].originalSrc).toMatch(/^assets\/originals\/backgrounds\/.+\.[a-z0-9]+$/i);
   expect(menu.categories[0].items[0].media.hero360).toMatch(
     /^assets\/derived\/items\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
   expect(menu.categories[0].items[0].media.originalHero360).toMatch(
     /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
   );
-  expect(menu.categories[0].items[0].media.derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
 
   const mediumVariant = menu.categories[0].items[0].media.derived?.medium;
   const largeVariant = menu.categories[0].items[0].media.derived?.large;
@@ -161,7 +169,7 @@ test("bridge export generates derived assets and keeps originals out of static e
   expect(largeSources.some((value) => /^assets\/derived\/items\/.+-md\./i.test(value))).toBeTruthy();
 });
 
-test("bridge save zip keeps originals and derived assets", async ({ page, request }, testInfo) => {
+test("bridge save zip keeps originals and strips derived metadata", async ({ page, request }, testInfo) => {
   test.setTimeout(240000);
 
   const probe = await request.post("/api/assets/prepare-derived?project=ffmpeg-probe-save", {
@@ -213,15 +221,19 @@ test("bridge save zip keeps originals and derived assets", async ({ page, reques
   const zipRoot = names.find((name) => name.endsWith("/menu.json"))?.split("/")[0] ?? slug;
 
   expect(names.some((name) => name.startsWith(`${zipRoot}/assets/originals/`))).toBeTruthy();
-  expect(names.some((name) => name.startsWith(`${zipRoot}/assets/derived/`))).toBeTruthy();
+  expect(names.some((name) => name.startsWith(`${zipRoot}/assets/derived/`))).toBeFalsy();
 
   const menuEntry = entries.find((entry) => entry.name === `${zipRoot}/menu.json`);
   expect(menuEntry).toBeDefined();
   const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
+  expect(menu.backgrounds[0].src).toMatch(/^assets\/originals\/backgrounds\/.+\.[a-z0-9]+$/i);
   expect(menu.backgrounds[0].originalSrc).toMatch(/^assets\/originals\/backgrounds\/.+\.[a-z0-9]+$/i);
-  expect(menu.backgrounds[0].derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
+  expect(menu.backgrounds[0].derived).toBeUndefined();
+  expect(menu.categories[0].items[0].media.hero360).toMatch(
+    /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
+  );
   expect(menu.categories[0].items[0].media.originalHero360).toMatch(
     /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
   );
-  expect(menu.categories[0].items[0].media.derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
+  expect(menu.categories[0].items[0].media.derived).toBeUndefined();
 });

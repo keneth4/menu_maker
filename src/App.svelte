@@ -3666,12 +3666,15 @@ void prewarmInteractiveDetailAssets();
       updateWorkflow("progressExportBundle", 80);
 
       exportProject.backgrounds = exportProject.backgrounds.map((bg) => {
-        const { originalSrc: _originalSrc, derived: _derived, ...bgBase } = bg;
-        const mappedSrc = getMappedSource(bg.src) ?? pickMappedDerivedSource(bg.derived);
+        const { derived: _derived, ...bgBase } = bg;
+        const mappedOriginalSrc = getMappedSource(bg.originalSrc) ?? getMappedSource(bg.src);
+        const mappedPreviewSrc =
+          pickMappedDerivedSource(bg.derived) ?? getMappedSource(bg.src) ?? mappedOriginalSrc;
         const rewrittenDerived = rewriteDerived(bg.derived);
         return {
           ...bgBase,
-          src: mappedSrc ?? bg.src,
+          src: mappedPreviewSrc ?? bg.src,
+          ...(mappedOriginalSrc ? { originalSrc: mappedOriginalSrc } : {}),
           ...(rewrittenDerived ? { derived: rewrittenDerived } : {})
         };
       });
@@ -3705,9 +3708,10 @@ void prewarmInteractiveDetailAssets();
           const nextMedia = {
             ...mediaBase,
             hero360:
-              mappedHero ??
               mappedFromDerived ??
               pickMappedResponsiveSource(rewrittenResponsive) ??
+              mappedHero ??
+              mappedOriginalHero ??
               item.media.hero360
           };
           if (mappedOriginalHero) {

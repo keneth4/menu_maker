@@ -128,32 +128,23 @@ describe("project zip helpers", () => {
     ]);
   });
 
-  it("collects save-project paths including logo, originals, responsive and derived assets", () => {
+  it("collects save-project paths including originals only for generated media", () => {
     const project = createProject();
     expect(collectSaveProjectAssetPaths(project, normalize)).toEqual([
       "projects/demo-menu/assets/fonts/menu.woff2",
       "projects/demo-menu/assets/branding/logo.webp",
-      "projects/demo-menu/assets/backgrounds/main.jpg",
       "projects/demo-menu/assets/originals/backgrounds/main.gif",
-      "projects/demo-menu/assets/derived/backgrounds/main-md.webp",
-      "projects/demo-menu/assets/derived/backgrounds/main-lg.webp",
-      "projects/demo-menu/assets/items/tostada.webp",
       "projects/demo-menu/assets/originals/items/tostada.gif",
-      "projects/demo-menu/assets/items/tostada-side.webp",
-      "assets/items/tostada-sm.webp",
-      "assets/items/tostada-md.webp",
-      "assets/items/tostada-lg.webp",
-      "projects/demo-menu/assets/derived/items/tostada-md.webp",
-      "projects/demo-menu/assets/derived/items/tostada-md.gif",
-      "projects/demo-menu/assets/derived/items/tostada-lg.webp"
+      "projects/demo-menu/assets/items/tostada-side.webp"
     ]);
   });
 
-  it("collects export-project paths using derived assets and excluding originals", () => {
+  it("collects export-project paths including originals plus derived assets", () => {
     const project = createProject();
     expect(collectExportProjectAssetPaths(project, normalize)).toEqual([
       "projects/demo-menu/assets/fonts/menu.woff2",
       "projects/demo-menu/assets/branding/logo.webp",
+      "projects/demo-menu/assets/originals/backgrounds/main.gif",
       "projects/demo-menu/assets/derived/backgrounds/main-md.webp",
       "projects/demo-menu/assets/derived/backgrounds/main-lg.webp",
       "projects/demo-menu/assets/originals/items/tostada.gif",
@@ -174,33 +165,18 @@ describe("project zip helpers", () => {
 
     expect(rewritten.meta.fontSource).toBe("assets/fonts/menu.woff2");
     expect(rewritten.meta.logoSrc).toBe("assets/branding/logo.webp");
-    expect(rewritten.backgrounds[0].src).toBe("assets/backgrounds/main.jpg");
+    expect(rewritten.backgrounds[0].src).toBe("assets/originals/backgrounds/main.gif");
     expect(rewritten.backgrounds[0].originalSrc).toBe("assets/originals/backgrounds/main.gif");
-    expect(rewritten.backgrounds[0].derived?.medium).toEqual({
-      webp: "assets/derived/backgrounds/main-md.webp"
-    });
-    expect(rewritten.categories[0].items[0].media.hero360).toBe("assets/items/tostada.webp");
+    expect(rewritten.backgrounds[0].derived).toBeUndefined();
+    expect(rewritten.categories[0].items[0].media.hero360).toBe("assets/originals/items/tostada.gif");
     expect(rewritten.categories[0].items[0].media.originalHero360).toBe(
       "assets/originals/items/tostada.gif"
     );
     expect(rewritten.categories[0].items[0].media.gallery).toEqual([
       "assets/items/tostada-side.webp"
     ]);
-    expect(rewritten.categories[0].items[0].media.responsive).toEqual({
-      small: "assets/items/tostada-sm.webp",
-      medium: "assets/items/tostada-md.webp",
-      large: "assets/items/tostada-lg.webp"
-    });
-    expect(rewritten.categories[0].items[0].media.derived).toEqual({
-      profileId: "v1",
-      medium: {
-        webp: "assets/derived/items/tostada-md.webp",
-        gif: "assets/derived/items/tostada-md.gif"
-      },
-      large: {
-        webp: "assets/derived/items/tostada-lg.webp"
-      }
-    });
+    expect(rewritten.categories[0].items[0].media.responsive).toBeUndefined();
+    expect(rewritten.categories[0].items[0].media.derived).toBeUndefined();
   });
 
   it("builds menu and asset entries, skipping missing assets", async () => {
@@ -225,8 +201,9 @@ describe("project zip helpers", () => {
     const names = entries.map((entry) => entry.name);
     expect(names).toContain("demo-menu/assets/fonts/menu.woff2");
     expect(names).toContain("demo-menu/assets/branding/logo.webp");
-    expect(names).toContain("demo-menu/assets/items/tostada.webp");
-    expect(names).not.toContain("demo-menu/assets/backgrounds/main.jpg");
+    expect(names).toContain("demo-menu/assets/originals/items/tostada.gif");
+    expect(names).toContain("demo-menu/assets/items/tostada-side.webp");
+    expect(names).not.toContain("demo-menu/assets/originals/backgrounds/main.gif");
     expect(missing).toEqual([]);
   });
 });
