@@ -10,7 +10,7 @@
   export let draft: MenuProject | null = null;
   export let deviceMode: "mobile" | "desktop" = "desktop";
   export let previewMode: "device" | "mobile" | "full" = "device";
-  export let editPanel: "identity" | "section" | "dish" = "identity";
+  export let editPanel: "identity" | "background" | "section" | "dish" = "identity";
   export let editLang = "es";
   export let selectedCategoryId = "";
   export let selectedItemId = "";
@@ -34,6 +34,8 @@
   ) => string = () => "";
   export let addSection: () => void = () => {};
   export let deleteSection: () => void = () => {};
+  export let addBackground: () => void = () => {};
+  export let removeBackground: (id: string) => void = () => {};
   export let goPrevDish: () => void = () => {};
   export let goNextDish: () => void = () => {};
   export let addDish: () => void = () => {};
@@ -62,6 +64,7 @@
     item: MenuItem,
     direction: "cw" | "ccw"
   ) => void = () => {};
+  export let touchDraft: () => void = () => {};
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -75,6 +78,35 @@
   const toggleItemRotationDirection = (item: MenuItem) => {
     const current = getItemRotationDirection(item);
     setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
+  };
+
+  const handleBackgroundLabelInput = (bg: { label?: string }, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    bg.label = target.value;
+    touchDraft();
+  };
+
+  const handleBackgroundSourceInput = (bg: { src: string }, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    bg.src = target.value;
+    touchDraft();
+  };
+
+  const handleDishAssetInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    item.media.hero360 = target.value;
+    touchDraft();
+  };
+
+  const handleDishPriceInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    const parsed = Number(target.value);
+    item.price.amount = Number.isFinite(parsed) ? parsed : 0;
+    touchDraft();
   };
 </script>
 
@@ -93,6 +125,13 @@
         on:click={() => (editPanel = 'identity')}
       >
         {t("editIdentity")}
+      </button>
+      <button
+        class="edit-subtab {editPanel === 'background' ? 'active' : ''}"
+        type="button"
+        on:click={() => (editPanel = 'background')}
+      >
+        {t("editBackgrounds")}
       </button>
       <button
         class="edit-subtab {editPanel === 'section' ? 'active' : ''}"
@@ -119,7 +158,9 @@
         <span>{editLang.toUpperCase()}</span>
       </button>
     </div>
-    <p class="edit-hierarchy">{t("editHierarchyHint")}</p>
+    <p class="edit-hierarchy">
+      {editPanel === "background" ? t("backgroundHint") : t("editHierarchyHint")}
+    </p>
 
     {#if editPanel === "identity"}
       <div class="edit-block">
@@ -204,6 +245,63 @@
             }}
           />
         </label>
+      </div>
+    {:else if editPanel === "background"}
+      <div class="edit-block">
+        <div class="edit-actions">
+          <button class="editor-outline" type="button" on:click={addBackground}>
+            {t("wizardAddBg")}
+          </button>
+        </div>
+        {#if draft.backgrounds.length === 0}
+          <p class="edit-hint">{t("wizardMissingBackground")}</p>
+        {:else}
+          <div class="wizard-list">
+            {#each draft.backgrounds as bg}
+              <div class="wizard-item">
+                <label class="editor-field">
+                  <span>{t("wizardLabel")}</span>
+                  <input
+                    type="text"
+                    class="editor-input"
+                    value={bg.label ?? ""}
+                    on:input={(event) => handleBackgroundLabelInput(bg, event)}
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>{t("wizardSrc")}</span>
+                  {#if assetOptions.length}
+                    <select
+                      class="editor-select"
+                      value={bg.src}
+                      on:change={(event) => handleBackgroundSourceInput(bg, event)}
+                    >
+                      <option value=""></option>
+                      {#each assetOptions as path}
+                        <option value={path}>{path}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={bg.src}
+                      list="asset-files"
+                      on:input={(event) => handleBackgroundSourceInput(bg, event)}
+                    />
+                  {/if}
+                </label>
+                <button
+                  class="editor-outline danger"
+                  type="button"
+                  on:click={() => removeBackground(bg.id)}
+                >
+                  {t("delete")}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="edit-row">
@@ -313,8 +411,9 @@
                   <input
                     type="text"
                     class="editor-input"
-                    bind:value={selectedItem.media.hero360}
+                    value={selectedItem.media.hero360}
                     list="asset-files"
+                    on:input={(event) => handleDishAssetInput(selectedItem, event)}
                   />
                   <div class="edit-item__rotation">
                     <button
@@ -371,7 +470,8 @@
                   <input
                     type="number"
                     class="editor-input"
-                    bind:value={selectedItem.price.amount}
+                    value={selectedItem.price.amount}
+                    on:input={(event) => handleDishPriceInput(selectedItem, event)}
                   />
                 </label>
                 <div class="editor-field">

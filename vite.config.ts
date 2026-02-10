@@ -156,7 +156,9 @@ export default defineConfig({
         const BACKGROUND_DERIVED_SCALE = 0.5;
         const DERIVED_FALLBACK_PROFILE_ID = "ffmpeg-v2-copy-fallback";
         const BACKGROUND_DERIVED_PROFILE_ID = "ffmpeg-v5-background-half-webp";
+        const BACKGROUND_DERIVED_GIF_PROFILE_ID = "ffmpeg-v6-background-half-gif";
         const ITEM_DERIVED_PROFILE_ID = "ffmpeg-v7-item-md-webp-detail-original";
+        const ITEM_DERIVED_PNG_PROFILE_ID = "ffmpeg-v8-item-md-png-detail-original";
         const runCommand = async (
           command: string,
           args: string[],
@@ -251,6 +253,7 @@ export default defineConfig({
           return null;
         };
         let ffmpegAvailable: boolean | null = null;
+        let ffmpegWebpEncoderAvailable: boolean | null = null;
         const ensureFfmpegAvailable = async () => {
           if (ffmpegAvailable !== null) return ffmpegAvailable;
           try {
@@ -260,6 +263,23 @@ export default defineConfig({
             ffmpegAvailable = false;
           }
           return ffmpegAvailable;
+        };
+        const ensureFfmpegWebpEncoderAvailable = async () => {
+          if (ffmpegWebpEncoderAvailable !== null) return ffmpegWebpEncoderAvailable;
+          const hasFfmpeg = await ensureFfmpegAvailable();
+          if (!hasFfmpeg) {
+            ffmpegWebpEncoderAvailable = false;
+            return false;
+          }
+          try {
+            await runCommand("ffmpeg", ["-hide_banner", "-loglevel", "error", "-h", "encoder=libwebp"], {
+              timeoutMs: 20000
+            });
+            ffmpegWebpEncoderAvailable = true;
+          } catch {
+            ffmpegWebpEncoderAvailable = false;
+          }
+          return ffmpegWebpEncoderAvailable;
         };
         const ensureCopiedOriginal = async (
           projectSlug: string,
@@ -342,6 +362,61 @@ export default defineConfig({
             "100",
             "-compression_level",
             "5",
+            outputFull
+          ]);
+          return true;
+        };
+        const ensureStillPngDerivative = async (
+          sourceFull: string,
+          outputFull: string,
+          filter: string
+        ) => {
+          if (!(await isOutputStale(sourceFull, outputFull))) {
+            return false;
+          }
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          await runCommand("ffmpeg", [
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            sourceFull,
+            "-vf",
+            `select=eq(n\\,0),${filter}`,
+            "-frames:v",
+            "1",
+            "-an",
+            "-c:v",
+            "png",
+            "-compression_level",
+            "9",
+            outputFull
+          ]);
+          return true;
+        };
+        const ensureAnimatedGifDerivative = async (
+          sourceFull: string,
+          outputFull: string,
+          filter: string
+        ) => {
+          if (!(await isOutputStale(sourceFull, outputFull))) {
+            return false;
+          }
+          await fs.mkdir(path.dirname(outputFull), { recursive: true });
+          await runCommand("ffmpeg", [
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            sourceFull,
+            "-filter_complex",
+            `${filter},split[a][b];[a]palettegen=reserve_transparent=1:stats_mode=single[p];[b][p]paletteuse=dither=sierra2_4a:alpha_threshold=128`,
+            "-gifflags",
+            "+transdiff",
+            "-loop",
+            "0",
             outputFull
           ]);
           return true;
@@ -444,9 +519,11 @@ export default defineConfig({
           );
           const existingPreviewRelative = existingMediumRelative ?? existingLargeRelative;
           const existingProfileId = background.derived?.profileId ?? "";
-          const canReuseExistingSet =
-            existingProfileId === BACKGROUND_DERIVED_PROFILE_ID ||
-            existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
+          const canEncodeWebp = await ensureFfmpegWebpEncoderAvailable();
+          const targetProfileId = canEncodeWebp
+            ? BACKGROUND_DERIVED_PROFILE_ID
+            : BACKGROUND_DERIVED_GIF_PROFILE_ID;
+          const canReuseExistingSet = existingProfileId === targetProfileId;
           if (canReuseExistingSet && existingOriginalRelative && existingPreviewRelative) {
             const { full: existingOriginalFull } = await resolveAssetPath(
               projectSlug,
@@ -460,17 +537,13 @@ export default defineConfig({
               const existingPreviewExt = normalizeExtension(
                 path.posix.extname(existingPreviewRelative) || ".webp"
               );
-              const profileId =
-                existingProfileId === DERIVED_FALLBACK_PROFILE_ID
-                  ? DERIVED_FALLBACK_PROFILE_ID
-                  : BACKGROUND_DERIVED_PROFILE_ID;
               const previewPublic = toPublicAssetPath(projectSlug, existingPreviewRelative);
               return {
                 ...background,
                 src: previewPublic,
                 originalSrc: toPublicAssetPath(projectSlug, existingOriginalRelative),
                 derived: {
-                  profileId,
+                  profileId: targetProfileId,
                   medium: buildDerivedVariant(previewPublic, existingPreviewExt),
                   large: buildDerivedVariant(previewPublic, existingPreviewExt)
                 }
@@ -489,12 +562,11 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/backgrounds/${stem}${extension}`;
-          const previewRelative = `derived/backgrounds/${stem}-md.webp`;
+          const previewExt = canEncodeWebp ? ".webp" : ".gif";
+          const previewRelative = `derived/backgrounds/${stem}-md${previewExt}`;
           const { full: previewFull } = await resolveAssetPath(projectSlug, previewRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
-          const reusableProfile =
-            background.derived?.profileId === BACKGROUND_DERIVED_PROFILE_ID ||
-            background.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
+          const reusableProfile = background.derived?.profileId === targetProfileId;
           if (reusableProfile && (await areOutputsFresh(originalFull, [previewFull]))) {
             const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
             return {
@@ -502,9 +574,9 @@ export default defineConfig({
               src: previewPublic,
               originalSrc: toPublicAssetPath(projectSlug, originalRelative),
               derived: {
-                profileId: BACKGROUND_DERIVED_PROFILE_ID,
-                medium: { webp: previewPublic },
-                large: { webp: previewPublic }
+                profileId: targetProfileId,
+                medium: buildDerivedVariant(previewPublic, previewExt),
+                large: buildDerivedVariant(previewPublic, previewExt)
               }
             };
           }
@@ -514,20 +586,21 @@ export default defineConfig({
             source.relative,
             originalRelative
           );
-          await ensureAnimatedWebpDerivative(
-            source.full,
-            previewFull,
-            `fps=${BACKGROUND_DERIVED_FPS},scale=max(2\\,trunc(iw*${BACKGROUND_DERIVED_SCALE}/2)*2):max(2\\,trunc(ih*${BACKGROUND_DERIVED_SCALE}/2)*2):flags=lanczos`
-          );
+          const filter = `fps=${BACKGROUND_DERIVED_FPS},scale=max(2\\,trunc(iw*${BACKGROUND_DERIVED_SCALE}/2)*2):max(2\\,trunc(ih*${BACKGROUND_DERIVED_SCALE}/2)*2):flags=lanczos`;
+          if (canEncodeWebp) {
+            await ensureAnimatedWebpDerivative(source.full, previewFull, filter);
+          } else {
+            await ensureAnimatedGifDerivative(source.full, previewFull, filter);
+          }
           const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
           return {
             ...background,
             src: previewPublic,
             originalSrc: originalPublic,
             derived: {
-              profileId: BACKGROUND_DERIVED_PROFILE_ID,
-              medium: { webp: previewPublic },
-              large: { webp: previewPublic }
+              profileId: targetProfileId,
+              medium: buildDerivedVariant(previewPublic, previewExt),
+              large: buildDerivedVariant(previewPublic, previewExt)
             }
           };
         };
@@ -547,9 +620,9 @@ export default defineConfig({
           );
           const existingPreviewRelative = existingMediumRelative ?? existingLargeRelative;
           const existingProfileId = item.media.derived?.profileId ?? "";
-          const canReuseExistingSet =
-            existingProfileId === ITEM_DERIVED_PROFILE_ID ||
-            existingProfileId === DERIVED_FALLBACK_PROFILE_ID;
+          const canEncodeWebp = await ensureFfmpegWebpEncoderAvailable();
+          const targetProfileId = canEncodeWebp ? ITEM_DERIVED_PROFILE_ID : ITEM_DERIVED_PNG_PROFILE_ID;
+          const canReuseExistingSet = existingProfileId === targetProfileId;
           if (canReuseExistingSet && existingOriginalRelative && existingPreviewRelative) {
             const { full: existingOriginalFull } = await resolveAssetPath(
               projectSlug,
@@ -563,10 +636,6 @@ export default defineConfig({
               const existingPreviewExt = normalizeExtension(
                 path.posix.extname(existingPreviewRelative) || ".webp"
               );
-              const profileId =
-                existingProfileId === DERIVED_FALLBACK_PROFILE_ID
-                  ? DERIVED_FALLBACK_PROFILE_ID
-                  : ITEM_DERIVED_PROFILE_ID;
               const previewPublic = toPublicAssetPath(projectSlug, existingPreviewRelative);
               return {
                 ...item,
@@ -580,7 +649,7 @@ export default defineConfig({
                     large: previewPublic
                   },
                   derived: {
-                    profileId,
+                    profileId: targetProfileId,
                     medium: buildDerivedVariant(previewPublic, existingPreviewExt),
                     large: buildDerivedVariant(previewPublic, existingPreviewExt)
                   }
@@ -600,15 +669,14 @@ export default defineConfig({
           const originalRelative = sourceIsOriginal
             ? source.relative
             : `originals/items/${stem}${extension}`;
-          const previewWebpRelative = `derived/items/${stem}-md.webp`;
+          const previewExt = canEncodeWebp ? ".webp" : ".png";
+          const previewRelative = `derived/items/${stem}-md${previewExt}`;
           const containPreview = `fps=${ITEM_DERIVED_FPS},${buildCenteredContainPadFfmpegFilter(ITEM_DERIVED_PREVIEW_SIZE, ITEM_DERIVED_PREVIEW_SIZE)}`;
-          const { full: previewWebpFull } = await resolveAssetPath(projectSlug, previewWebpRelative);
+          const { full: previewFull } = await resolveAssetPath(projectSlug, previewRelative);
           const { full: originalFull } = await resolveAssetPath(projectSlug, originalRelative);
-          const reusableProfile =
-            item.media.derived?.profileId === ITEM_DERIVED_PROFILE_ID ||
-            item.media.derived?.profileId === DERIVED_FALLBACK_PROFILE_ID;
-          if (reusableProfile && (await areOutputsFresh(originalFull, [previewWebpFull]))) {
-            const previewPublic = toPublicAssetPath(projectSlug, previewWebpRelative);
+          const reusableProfile = item.media.derived?.profileId === targetProfileId;
+          if (reusableProfile && (await areOutputsFresh(originalFull, [previewFull]))) {
+            const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
             return {
               ...item,
               media: {
@@ -621,9 +689,9 @@ export default defineConfig({
                   large: previewPublic
                 },
                 derived: {
-                  profileId: ITEM_DERIVED_PROFILE_ID,
-                  medium: { webp: previewPublic },
-                  large: { webp: previewPublic }
+                  profileId: targetProfileId,
+                  medium: buildDerivedVariant(previewPublic, previewExt),
+                  large: buildDerivedVariant(previewPublic, previewExt)
                 }
               }
             };
@@ -634,8 +702,12 @@ export default defineConfig({
             source.relative,
             originalRelative
           );
-          await ensureStillWebpDerivative(source.full, previewWebpFull, containPreview);
-          const previewPublic = toPublicAssetPath(projectSlug, previewWebpRelative);
+          if (canEncodeWebp) {
+            await ensureStillWebpDerivative(source.full, previewFull, containPreview);
+          } else {
+            await ensureStillPngDerivative(source.full, previewFull, containPreview);
+          }
+          const previewPublic = toPublicAssetPath(projectSlug, previewRelative);
           return {
             ...item,
             media: {
@@ -648,9 +720,9 @@ export default defineConfig({
                 large: previewPublic
               },
               derived: {
-                profileId: ITEM_DERIVED_PROFILE_ID,
-                medium: { webp: previewPublic },
-                large: { webp: previewPublic }
+                profileId: targetProfileId,
+                medium: buildDerivedVariant(previewPublic, previewExt),
+                large: buildDerivedVariant(previewPublic, previewExt)
               }
             }
           };

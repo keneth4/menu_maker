@@ -176,7 +176,7 @@
   let languageMenuOpen = false;
   let uiLang: "es" | "en" = "es";
   let editLang = "es";
-  let editPanel: "identity" | "section" | "dish" = "identity";
+  let editPanel: "identity" | "background" | "section" | "dish" = "identity";
   let wizardLang = "es";
   let wizardCategoryId = "";
   let wizardItemId = "";
@@ -6600,6 +6600,8 @@ void prewarmInteractiveDetailAssets();
               {getLocalizedValue}
               {addSection}
               {deleteSection}
+              {addBackground}
+              {removeBackground}
               {goPrevDish}
               {goNextDish}
               {addDish}
@@ -6616,6 +6618,7 @@ void prewarmInteractiveDetailAssets();
               {setIdentityMode}
               {setLogoSrc}
               {setItemRotationDirection}
+              {touchDraft}
             />
           {:else}
             <WizardPanel
@@ -6653,6 +6656,7 @@ void prewarmInteractiveDetailAssets();
               {goPrevStep}
               {goNextStep}
               {exportStaticSite}
+              {touchDraft}
             />
           {/if}
       </EditorShell>

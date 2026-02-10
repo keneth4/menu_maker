@@ -89,6 +89,24 @@
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
       "cover": "/projects/ffmpeg-save-1770685405044-save/assets/derived/backgrounds/backery-outside-md.webp"
+    },
+    {
+      "slug": "ffmpeg-save-1770687646536-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770687646536-save/assets/derived/backgrounds/backery-outside-md.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770687807521-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770687807521-save/assets/derived/backgrounds/backery-outside-md.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1770687996930-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1770687996930-save/assets/derived/backgrounds/backery-outside-md.webp"
     }
   ]
 }

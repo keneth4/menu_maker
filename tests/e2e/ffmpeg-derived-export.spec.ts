@@ -3,8 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createZipBlob, readZip } from "../../src/lib/zip";
 import type { MenuProject } from "../../src/lib/types";
 
-const TINY_TRANSPARENT_GIF = Uint8Array.from(
-  Buffer.from("R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==", "base64")
+const TINY_TRANSPARENT_PNG = Uint8Array.from(
+  Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5z8N8AAAAASUVORK5CYII=", "base64")
 );
 
 
@@ -28,7 +28,7 @@ const makeFixtureProject = (slug: string): MenuProject => ({
     {
       id: "bg-1",
       label: "main",
-      src: "assets/backgrounds/backery-outside.gif",
+      src: "assets/backgrounds/backery-outside.png",
       type: "image"
     }
   ],
@@ -46,7 +46,7 @@ const makeFixtureProject = (slug: string): MenuProject => ({
           allergens: [],
           vegan: false,
           media: {
-            hero360: "assets/dishes/backery-outside.gif",
+            hero360: "assets/dishes/backery-outside.png",
             rotationDirection: "cw"
           }
         }
@@ -66,8 +66,8 @@ const writeBridgeFixtureZip = async (testInfo: TestInfo, slug: string) => {
   const menuBytes = new TextEncoder().encode(JSON.stringify(project, null, 2));
   const zipBlob = createZipBlob([
     { name: `${slug}/menu.json`, data: menuBytes },
-    { name: `${slug}/assets/backgrounds/backery-outside.gif`, data: TINY_TRANSPARENT_GIF },
-    { name: `${slug}/assets/dishes/backery-outside.gif`, data: TINY_TRANSPARENT_GIF }
+    { name: `${slug}/assets/backgrounds/backery-outside.png`, data: TINY_TRANSPARENT_PNG },
+    { name: `${slug}/assets/dishes/backery-outside.png`, data: TINY_TRANSPARENT_PNG }
   ]);
   const fixturePath = testInfo.outputPath(`${slug}.zip`);
   await writeFile(fixturePath, new Uint8Array(await zipBlob.arrayBuffer()));
@@ -142,12 +142,14 @@ test("bridge export generates derived assets and keeps originals out of static e
     /^assets\/derived\/backgrounds\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
   expect(menu.backgrounds[0].originalSrc).toBeUndefined();
+  expect(menu.backgrounds[0].derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
   expect(menu.categories[0].items[0].media.hero360).toMatch(
     /^assets\/derived\/items\/.+-md\.(webp|gif|png|jpg|jpeg|webm|mp4)$/i
   );
   expect(menu.categories[0].items[0].media.originalHero360).toMatch(
     /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
   );
+  expect(menu.categories[0].items[0].media.derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
 
   const mediumVariant = menu.categories[0].items[0].media.derived?.medium;
   const largeVariant = menu.categories[0].items[0].media.derived?.large;
@@ -217,7 +219,9 @@ test("bridge save zip keeps originals and derived assets", async ({ page, reques
   expect(menuEntry).toBeDefined();
   const menu = JSON.parse(new TextDecoder().decode(menuEntry!.data)) as MenuProject;
   expect(menu.backgrounds[0].originalSrc).toMatch(/^assets\/originals\/backgrounds\/.+\.[a-z0-9]+$/i);
+  expect(menu.backgrounds[0].derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
   expect(menu.categories[0].items[0].media.originalHero360).toMatch(
     /^assets\/originals\/items\/.+\.[a-z0-9]+$/i
   );
+  expect(menu.categories[0].items[0].media.derived?.profileId).not.toBe("ffmpeg-v2-copy-fallback");
 });

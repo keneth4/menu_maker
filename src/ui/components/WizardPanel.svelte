@@ -66,6 +66,7 @@
   export let goPrevStep: () => void = () => {};
   export let goNextStep: () => void = () => {};
   export let exportStaticSite: () => Promise<void> | void = () => {};
+  export let touchDraft: () => void = () => {};
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -79,6 +80,35 @@
   const toggleItemRotationDirection = (item: MenuItem) => {
     const current = getItemRotationDirection(item);
     setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
+  };
+
+  const handleBackgroundLabelInput = (bg: { label?: string }, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    bg.label = target.value;
+    touchDraft();
+  };
+
+  const handleBackgroundSourceInput = (bg: { src: string }, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    bg.src = target.value;
+    touchDraft();
+  };
+
+  const handleWizardItemPriceInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    const parsed = Number(target.value);
+    item.price.amount = Number.isFinite(parsed) ? parsed : 0;
+    touchDraft();
+  };
+
+  const handleWizardItemAssetInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    item.media.hero360 = target.value;
+    touchDraft();
   };
 </script>
 
@@ -211,13 +241,18 @@
                   <input
                     type="text"
                     class="editor-input"
-                    bind:value={bg.label}
+                    value={bg.label ?? ""}
+                    on:input={(event) => handleBackgroundLabelInput(bg, event)}
                   />
                 </label>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
                   {#if assetOptions.length}
-                    <select bind:value={bg.src} class="editor-select">
+                    <select
+                      class="editor-select"
+                      value={bg.src}
+                      on:change={(event) => handleBackgroundSourceInput(bg, event)}
+                    >
                       <option value=""></option>
                       {#each assetOptions as path}
                         <option value={path}>{path}</option>
@@ -227,8 +262,9 @@
                     <input
                       type="text"
                       class="editor-input"
-                      bind:value={bg.src}
+                      value={bg.src}
                       list="asset-files"
+                      on:input={(event) => handleBackgroundSourceInput(bg, event)}
                     />
                   {/if}
                 </label>
@@ -357,7 +393,8 @@
               <input
                 type="number"
                 class="editor-input"
-                bind:value={wizardItem.price.amount}
+                value={wizardItem.price.amount}
+                on:input={(event) => handleWizardItemPriceInput(wizardItem, event)}
               />
             </label>
             <label class="editor-field">
@@ -365,8 +402,9 @@
               <input
                 type="text"
                 class="editor-input"
-                bind:value={wizardItem.media.hero360}
+                value={wizardItem.media.hero360}
                 list="asset-files"
+                on:input={(event) => handleWizardItemAssetInput(wizardItem, event)}
               />
               <div class="edit-item__rotation">
                 <button
