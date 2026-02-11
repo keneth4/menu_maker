@@ -111,8 +111,8 @@
     {
       "slug": "kenethsplatscollection",
       "name": "SplatsCollection",
-      "template": "jukebox",
-      "cover": "/projects/kenethsplatscollection/assets/derived/backgrounds/Main180-md.gif"
+      "template": "focus-rows",
+      "cover": "/projects/kenethsplatscollection/assets/derived/backgrounds/backgroundMannheim-md.gif"
     }
   ]
 }

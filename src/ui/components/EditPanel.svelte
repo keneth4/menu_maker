@@ -17,6 +17,12 @@
   export let selectedCategory: MenuCategory | null = null;
   export let selectedItem: MenuItem | null = null;
   export let assetOptions: Array<{ value: string; label: string }> = [];
+  export let sectionBackgroundOptionsByCategory: Record<
+    string,
+    Array<{ value: string; label: string }>
+  > = {};
+  export let sectionBackgroundNeedsCoverage = false;
+  export let sectionBackgroundHasDuplicates = false;
   export let commonAllergenCatalog: CommonAllergen[] = [];
 
   export let cycleEditLang: () => void = () => {};
@@ -75,16 +81,12 @@
     mode: "hero360" | "alternate"
   ) => void = () => {};
   export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
-  export let setFontRoleFamily: (
-    role: "identity" | "section" | "item",
-    family: string
-  ) => void = () => {};
   export let setFontRoleSource: (
     role: "identity" | "section" | "item",
     source: string
   ) => void = () => {};
-  export let setItemFontFamily: (item: MenuItem, family: string) => void = () => {};
   export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
+  export let setItemPriceVisible: (item: MenuItem, visible: boolean) => void = () => {};
   export let touchDraft: () => void = () => {};
 
   let mediaAssetOptions: Array<{ value: string; label: string }> = [];
@@ -133,15 +135,6 @@
     setItemScrollAnimationSrc(item, target.value);
   };
 
-  const handleRoleFontFamilyInput = (
-    role: "identity" | "section" | "item",
-    event: Event
-  ) => {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
-    setFontRoleFamily(role, target.value);
-  };
-
   const handleRoleFontSourceInput = (
     role: "identity" | "section" | "item",
     event: Event
@@ -149,12 +142,6 @@
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
     setFontRoleSource(role, target.value);
-  };
-
-  const handleItemFontFamilyInput = (item: MenuItem, event: Event) => {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
-    setItemFontFamily(item, target.value);
   };
 
   const handleItemFontSourceInput = (item: MenuItem, event: Event) => {
@@ -169,6 +156,12 @@
     const parsed = Number(target.value);
     item.price.amount = Number.isFinite(parsed) ? parsed : 0;
     touchDraft();
+  };
+
+  const handleShowPriceToggle = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    setItemPriceVisible(item, target.checked);
   };
 
   const handleBackgroundCarouselSecondsInput = (event: Event) => {
@@ -317,15 +310,6 @@
       <div class="edit-block">
         <p class="edit-block__title">{t("fontRoleIdentity")}</p>
         <label class="editor-field">
-          <span>{t("fontCustomName")}</span>
-          <input
-            type="text"
-            class="editor-input"
-            value={draft.meta.fontRoles?.identity?.family ?? ""}
-            on:input={(event) => handleRoleFontFamilyInput("identity", event)}
-          />
-        </label>
-        <label class="editor-field">
           <span>{t("fontCustomSrc")}</span>
           {#if fontAssetOptions.length}
             <select
@@ -343,7 +327,7 @@
               type="text"
               class="editor-input"
               value={draft.meta.fontRoles?.identity?.source ?? ""}
-              list="asset-files"
+              list="font-asset-files"
               on:input={(event) => handleRoleFontSourceInput("identity", event)}
             />
           {/if}
@@ -351,15 +335,6 @@
       </div>
       <div class="edit-block">
         <p class="edit-block__title">{t("fontRoleSection")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomName")}</span>
-          <input
-            type="text"
-            class="editor-input"
-            value={draft.meta.fontRoles?.section?.family ?? ""}
-            on:input={(event) => handleRoleFontFamilyInput("section", event)}
-          />
-        </label>
         <label class="editor-field">
           <span>{t("fontCustomSrc")}</span>
           {#if fontAssetOptions.length}
@@ -378,7 +353,7 @@
               type="text"
               class="editor-input"
               value={draft.meta.fontRoles?.section?.source ?? ""}
-              list="asset-files"
+              list="font-asset-files"
               on:input={(event) => handleRoleFontSourceInput("section", event)}
             />
           {/if}
@@ -386,15 +361,6 @@
       </div>
       <div class="edit-block">
         <p class="edit-block__title">{t("fontRoleItem")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomName")}</span>
-          <input
-            type="text"
-            class="editor-input"
-            value={draft.meta.fontRoles?.item?.family ?? ""}
-            on:input={(event) => handleRoleFontFamilyInput("item", event)}
-          />
-        </label>
         <label class="editor-field">
           <span>{t("fontCustomSrc")}</span>
           {#if fontAssetOptions.length}
@@ -413,7 +379,7 @@
               type="text"
               class="editor-input"
               value={draft.meta.fontRoles?.item?.source ?? ""}
-              list="asset-files"
+              list="font-asset-files"
               on:input={(event) => handleRoleFontSourceInput("item", event)}
             />
           {/if}
@@ -582,11 +548,17 @@
             />
           </label>
           {#if (draft.meta.backgroundDisplayMode ?? "carousel") === "section"}
+            {#if sectionBackgroundNeedsCoverage}
+              <p class="edit-hint">{t("sectionBackgroundNeedsCoverage")}</p>
+            {/if}
+            {#if sectionBackgroundHasDuplicates}
+              <p class="edit-hint">{t("sectionBackgroundNeedsUnique")}</p>
+            {/if}
             <label class="editor-field">
               <span>{t("sectionBackground")}</span>
               <select
                 class="editor-select"
-                value={selectedCategory.backgroundId ?? draft.backgrounds[0]?.id ?? ""}
+                value={selectedCategory.backgroundId ?? ""}
                 on:change={(event) => {
                   const target = event.currentTarget;
                   if (!(target instanceof HTMLSelectElement)) return;
@@ -594,9 +566,9 @@
                 }}
               >
                 <option value=""></option>
-                {#each draft.backgrounds as background}
-                  <option value={background.id}>
-                    {background.label || `${t("backgroundLabel")} ${background.id}`}
+                {#each sectionBackgroundOptionsByCategory[selectedCategory.id] ?? [] as background}
+                  <option value={background.value}>
+                    {background.label}
                   </option>
                 {/each}
               </select>
@@ -781,23 +753,24 @@
                   ></textarea>
                 </label>
                 <label class="editor-field">
-                  <span>{t("price")}</span>
+                  <span>{t("showPrice")}</span>
                   <input
-                    type="number"
-                    class="editor-input"
-                    value={selectedItem.price.amount}
-                    on:input={(event) => handleDishPriceInput(selectedItem, event)}
+                    type="checkbox"
+                    checked={selectedItem.priceVisible !== false}
+                    on:change={(event) => handleShowPriceToggle(selectedItem, event)}
                   />
                 </label>
-                <label class="editor-field">
-                  <span>{t("itemFontOverrideName")}</span>
-                  <input
-                    type="text"
-                    class="editor-input"
-                    value={selectedItem.typography?.item?.family ?? ""}
-                    on:input={(event) => handleItemFontFamilyInput(selectedItem, event)}
-                  />
-                </label>
+                {#if selectedItem.priceVisible !== false}
+                  <label class="editor-field">
+                    <span>{t("price")}</span>
+                    <input
+                      type="number"
+                      class="editor-input"
+                      value={selectedItem.price.amount}
+                      on:input={(event) => handleDishPriceInput(selectedItem, event)}
+                    />
+                  </label>
+                {/if}
                 <label class="editor-field">
                   <span>{t("itemFontOverrideSrc")}</span>
                   {#if fontAssetOptions.length}
@@ -816,7 +789,7 @@
                       type="text"
                       class="editor-input"
                       value={selectedItem.typography?.item?.source ?? ""}
-                      list="asset-files"
+                      list="font-asset-files"
                       on:input={(event) => handleItemFontSourceInput(selectedItem, event)}
                     />
                   {/if}

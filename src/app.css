@@ -531,6 +531,10 @@ body {
   transition: opacity 1200ms ease;
 }
 
+.menu-preview.background-mode-section .menu-background {
+  transition: opacity 100ms ease;
+}
+
 .menu-background.active {
   opacity: 0.82;
 }

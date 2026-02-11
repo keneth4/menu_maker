@@ -146,24 +146,46 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
   const backgroundIdSet = new Set(
     normalizedBackgrounds.map((background) => background.id).filter(Boolean)
   );
-  const fallbackBackgroundId = normalizedBackgrounds.find((background) => background.id)?.id;
+  const sectionBackgroundIdSet = new Set(
+    normalizedBackgrounds
+      .filter((background) => background.id && background.src.trim().length > 0)
+      .map((background) => background.id)
+  );
+  const fallbackBackgroundId =
+    normalizedBackgrounds.find((background) => background.id && background.src.trim().length > 0)?.id ??
+    normalizedBackgrounds.find((background) => background.id)?.id;
+  const sectionMode = value.meta.backgroundDisplayMode === "section";
+  const usedSectionBackgroundIds = new Set<string>();
   value.categories = (value.categories ?? []).map((category) => {
     const normalizedBackgroundId = normalizeOptionalText(
       (category as { backgroundId?: unknown }).backgroundId
     );
-    const backgroundId =
-      normalizedBackgroundId && backgroundIdSet.has(normalizedBackgroundId)
-        ? normalizedBackgroundId
-        : fallbackBackgroundId;
+    let backgroundId = "";
+    if (sectionMode) {
+      if (
+        normalizedBackgroundId &&
+        sectionBackgroundIdSet.has(normalizedBackgroundId) &&
+        !usedSectionBackgroundIds.has(normalizedBackgroundId)
+      ) {
+        backgroundId = normalizedBackgroundId;
+        usedSectionBackgroundIds.add(normalizedBackgroundId);
+      }
+    } else {
+      backgroundId =
+        normalizedBackgroundId && backgroundIdSet.has(normalizedBackgroundId)
+          ? normalizedBackgroundId
+          : (fallbackBackgroundId ?? "");
+    }
     return {
       ...category,
-      ...(backgroundId ? { backgroundId } : {}),
+      backgroundId,
       items: (category.items ?? []).map((item) => {
         const normalizedItemFont = normalizeFontConfig(
           (item as { typography?: { item?: unknown } }).typography?.item
         );
         return {
           ...item,
+          priceVisible: item.priceVisible !== false,
           media: {
             ...(item.media ?? {}),
             hero360: normalizeOptionalText(item.media?.hero360) ?? "",

@@ -39,6 +39,7 @@ const fixture = (): MenuProject => ({
         {
           id: "item-1",
           name: { en: "Dish" },
+          priceVisible: false,
           price: { amount: 1, currency: "USD" },
           media: {
             hero360: "/projects/old/assets/dishes/dish.gif",
@@ -105,6 +106,7 @@ describe("mapProjectAssetPaths", () => {
     });
 
     const media = mapped.categories[0].items[0].media;
+    expect(mapped.categories[0].items[0].priceVisible).toBe(false);
     expect(media.hero360).toBe("/projects/new/assets/dishes/dish.gif");
     expect(media.originalHero360).toBe("/projects/new/assets/originals/dishes/dish.gif");
     expect(media.scrollAnimationSrc).toBe("/projects/new/assets/dishes/dish-alt.webp");

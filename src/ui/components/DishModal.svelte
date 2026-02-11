@@ -83,9 +83,11 @@
           <span class="dish-modal__badge">🌿 {getMenuTerm("vegan")}</span>
         {/if}
       </div>
-      <p class="dish-modal__price">
-        {formatPrice(dish.price.amount)}
-      </p>
+      {#if dish.priceVisible !== false}
+        <p class="dish-modal__price">
+          {formatPrice(dish.price.amount)}
+        </p>
+      {/if}
     </div>
   </div>
 </div>

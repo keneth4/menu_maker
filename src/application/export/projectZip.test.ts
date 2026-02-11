@@ -61,6 +61,7 @@ const createProject = (): MenuProject => ({
         {
           id: "item-1",
           name: { es: "Tostada", en: "Toast" },
+          priceVisible: false,
           price: { amount: 10, currency: "USD" },
           media: {
             hero360: "/projects/demo-menu/assets/items/tostada.webp",
@@ -230,6 +231,7 @@ describe("project zip helpers", () => {
     ]);
     expect(rewritten.categories[0].items[0].media.responsive).toBeUndefined();
     expect(rewritten.categories[0].items[0].media.derived).toBeUndefined();
+    expect(rewritten.categories[0].items[0].priceVisible).toBe(false);
     expect(rewritten.categories[0].items[0].typography).toEqual({
       item: {
         family: "Item Override",
@@ -256,6 +258,7 @@ describe("project zip helpers", () => {
     const menuJson = new TextDecoder().decode(entries[0]!.data);
     const parsed = JSON.parse(menuJson) as MenuProject;
     expect(parsed.meta.fontSource).toBe("assets/fonts/menu.woff2");
+    expect(parsed.categories[0].items[0].priceVisible).toBe(false);
 
     const names = entries.map((entry) => entry.name);
     expect(names).toContain("demo-menu/assets/fonts/menu.woff2");

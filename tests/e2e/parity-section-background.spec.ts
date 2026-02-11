@@ -145,6 +145,15 @@ const ACTIVE_BG_SELECTOR = ".menu-background.active";
 const getActiveBackgroundSource = async (page: Page) =>
   await page.locator(ACTIVE_BG_SELECTOR).first().getAttribute("data-bg-src");
 
+const getActiveBackgroundCount = async (page: Page) => page.locator(ACTIVE_BG_SELECTOR).count();
+
+const getBackgroundTransitionDuration = async (page: Page) =>
+  await page.evaluate(() => {
+    const layer = document.querySelector(".menu-background");
+    if (!(layer instanceof HTMLElement)) return "";
+    return window.getComputedStyle(layer).transitionDuration;
+  });
+
 const goToNextSection = async (page: Page) => {
   await page.locator(".section-nav__btn.next").click();
 };
@@ -230,12 +239,15 @@ test("section background mode stays in parity between preview and export", async
   await closeEditorIfOpen(page);
 
   await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+  await expect
+    .poll(async () => await getBackgroundTransitionDuration(page))
+    .toContain("0.1s");
   await expect(page.locator(ACTIVE_BG_SELECTOR)).toBeVisible();
   await expect(await getActiveBackgroundSource(page)).toBe(fixture.backgrounds[0].src);
 
   await goToNextSection(page);
   await expect
-    .poll(async () => await getActiveBackgroundSource(page))
+    .poll(async () => await getActiveBackgroundSource(page), { timeout: 350 })
     .toBe(fixture.backgrounds[1].src);
 
   await openEditorIfClosed(page);
@@ -254,12 +266,57 @@ test("section background mode stays in parity between preview and export", async
   try {
     await page.goto(server.url);
     await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+    await expect
+      .poll(async () => await getBackgroundTransitionDuration(page))
+      .toContain("0.1s");
     await expect(await getActiveBackgroundSource(page)).toBe(fixture.backgrounds[0].src);
 
     await goToNextSection(page);
     await expect
-      .poll(async () => await getActiveBackgroundSource(page))
+      .poll(async () => await getActiveBackgroundSource(page), { timeout: 350 })
       .toBe(fixture.backgrounds[1].src);
+  } finally {
+    await server.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("section background mode does not fallback when mapping is invalid", async ({ page }, testInfo) => {
+  const fixture = createFixture();
+  fixture.categories[0].backgroundId = "bg-missing-a";
+  fixture.categories[1].backgroundId = "bg-missing-b";
+  const fixturePath = await writeJsonFixture(testInfo, fixture);
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+  await closeEditorIfOpen(page);
+
+  await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+  await expect.poll(async () => await getActiveBackgroundCount(page)).toBe(0);
+
+  await goToNextSection(page);
+  await expect.poll(async () => await getActiveBackgroundCount(page)).toBe(0);
+
+  await openEditorIfClosed(page);
+  const downloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: /exportar sitio|export site/i })
+    .evaluate((element) => (element as HTMLButtonElement).click());
+  const download = await downloadPromise;
+  const exportPath = await download.path();
+  expect(exportPath).toBeTruthy();
+
+  const zipBytes = await readFile(exportPath!);
+  const tempDir = await writeZipToTempDir(zipBytes);
+  const server = await startStaticServer(tempDir);
+
+  try {
+    await page.goto(server.url);
+    await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+    await expect.poll(async () => await getActiveBackgroundCount(page)).toBe(0);
+
+    await goToNextSection(page);
+    await expect.poll(async () => await getActiveBackgroundCount(page)).toBe(0);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

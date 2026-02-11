@@ -27,6 +27,7 @@ type ProjectFixture = {
       name: Record<string, string>;
       description: Record<string, string>;
       longDescription: Record<string, string>;
+      priceVisible?: boolean;
       price: { amount: number; currency: string };
       allergens: Array<{ label: Record<string, string> }>;
       vegan: boolean;
@@ -92,7 +93,12 @@ const openProjectFromLanding = async (page: Page, fixturePath: string) => {
 };
 
 const openEditor = async (page: Page) => {
-  await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
+  const isOpen = await page
+    .locator(".editor-panel")
+    .evaluate((element) => element.classList.contains("open"));
+  if (!isOpen) {
+    await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
+  }
 };
 
 const getProjectNameInput = (page: Page) =>
@@ -112,12 +118,11 @@ test("landing shows Menu Maker header", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /menu maker/i })).toBeVisible();
 });
 
-test("create project starts with editor closed and opens on toggle", async ({ page }) => {
+test("create project starts with editor open", async ({ page }) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
-  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
-  await openEditor(page);
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
   await expect(page.getByText(/centro de control del proyecto|project control center/i)).toBeVisible();
 });
 
@@ -127,7 +132,7 @@ test("open project from JSON file", async ({ page }, testInfo) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
-  await openEditor(page);
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
   await expect(getProjectNameInput(page)).toHaveValue("JSON Smoke Project");
 });
 
@@ -137,8 +142,15 @@ test("open project from ZIP file", async ({ page }, testInfo) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
-  await openEditor(page);
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
   await expect(getProjectNameInput(page)).toHaveValue("ZIP Smoke Project");
+});
+
+test("wizard flow starts with editor open", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /iniciar wizard|run wizard/i }).click();
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
 });
 
 test("template smoke fixture path renders jukebox strategy shell", async ({ page }) => {
@@ -192,8 +204,7 @@ test("desktop editor opens as centered card and closes on backdrop click", async
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
 
-  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
-  await openEditor(page);
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
   await expect(page.locator(".editor-panel.open.desktop-card")).toBeVisible();
   await expect(page.locator(".editor-backdrop")).toBeVisible();
 
@@ -284,4 +295,51 @@ test("preview stays full width when desktop editor card opens", async ({ page })
   expect(after).not.toBeNull();
   expect(Math.abs(after!.previewWidth - after!.panelWidth)).toBeLessThanOrEqual(2);
   expect(Math.abs(after!.previewWidth - before!.previewWidth)).toBeLessThanOrEqual(2);
+});
+
+test("item show price toggle hides price in carousel and detail modal", async ({ page }, testInfo) => {
+  const transparentGif =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  const project: ProjectFixture = {
+    ...makeProjectFixture("Price Toggle", "price-toggle"),
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "Main",
+        src:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%230ea5e9'/%3E%3C/svg%3E",
+        type: "image"
+      }
+    ],
+    categories: [
+      {
+        id: "cat-1",
+        name: { es: "Sección", en: "Section" },
+        items: [
+          {
+            id: "item-1",
+            name: { es: "Item 1", en: "Item 1" },
+            description: { es: "Desc", en: "Desc" },
+            longDescription: { es: "", en: "" },
+            priceVisible: false,
+            price: { amount: 25, currency: "MXN" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: transparentGif }
+          }
+        ]
+      }
+    ]
+  };
+  const fixturePath = await writeJsonFixture(testInfo, project);
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  await expect(page.locator(".carousel-card")).toBeVisible();
+  await expect(page.locator(".carousel-price")).toHaveCount(0);
+
+  await page.locator(".carousel-card").first().click();
+  await expect(page.locator(".dish-modal.open")).toBeVisible();
+  await expect(page.locator(".dish-modal__price")).toHaveCount(0);
 });

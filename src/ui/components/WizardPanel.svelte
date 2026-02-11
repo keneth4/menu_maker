@@ -32,6 +32,12 @@
   export let wizardDemoPreview = false;
   export let wizardNeedsRootBackground = false;
   export let assetOptions: Array<{ value: string; label: string }> = [];
+  export let sectionBackgroundOptionsByCategory: Record<
+    string,
+    Array<{ value: string; label: string }>
+  > = {};
+  export let sectionBackgroundNeedsCoverage = false;
+  export let sectionBackgroundHasDuplicates = false;
 
   export let isWizardStepValid: (index: number) => boolean = () => false;
   export let goToStep: (index: number) => void = () => {};
@@ -59,16 +65,12 @@
     mode: "hero360" | "alternate"
   ) => void = () => {};
   export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
-  export let setFontRoleFamily: (
-    role: "identity" | "section" | "item",
-    family: string
-  ) => void = () => {};
   export let setFontRoleSource: (
     role: "identity" | "section" | "item",
     source: string
   ) => void = () => {};
-  export let setItemFontFamily: (item: MenuItem, family: string) => void = () => {};
   export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
+  export let setItemPriceVisible: (item: MenuItem, visible: boolean) => void = () => {};
   export let handleLocalizedInput: (
     localized: Record<string, string>,
     lang: string,
@@ -138,6 +140,12 @@
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
     setItemScrollAnimationSrc(item, target.value);
+  };
+
+  const handleWizardShowPriceToggle = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    setItemPriceVisible(item, target.checked);
   };
 </script>
 
@@ -272,19 +280,6 @@
               </select>
             </label>
             <label class="editor-field">
-              <span>{t("fontRoleIdentity")}</span>
-              <input
-                type="text"
-                class="editor-input"
-                value={draft.meta.fontRoles?.identity?.family ?? ""}
-                on:input={(event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLInputElement)) return;
-                  setFontRoleFamily("identity", target.value);
-                }}
-              />
-            </label>
-            <label class="editor-field">
               <span>{t("fontRoleIdentitySrc")}</span>
               {#if fontAssetOptions.length}
                 <select
@@ -306,7 +301,7 @@
                   type="text"
                   class="editor-input"
                   value={draft.meta.fontRoles?.identity?.source ?? ""}
-                  list="asset-files"
+                  list="font-asset-files"
                   on:input={(event) => {
                     const target = event.currentTarget;
                     if (!(target instanceof HTMLInputElement)) return;
@@ -373,6 +368,12 @@
       {#if !wizardStatus.categories}
         <p class="wizard-warning">{t("wizardMissingCategories")}</p>
       {/if}
+      {#if draft?.meta.backgroundDisplayMode === "section" && sectionBackgroundNeedsCoverage}
+        <p class="wizard-warning">{t("sectionBackgroundNeedsCoverage")}</p>
+      {/if}
+      {#if draft?.meta.backgroundDisplayMode === "section" && sectionBackgroundHasDuplicates}
+        <p class="wizard-warning">{t("sectionBackgroundNeedsUnique")}</p>
+      {/if}
       {#if draft}
         <div class="wizard-block">
           <label class="editor-field">
@@ -404,7 +405,7 @@
                     <span>{t("sectionBackground")}</span>
                     <select
                       class="editor-select"
-                      value={category.backgroundId ?? draft.backgrounds[0]?.id ?? ""}
+                      value={category.backgroundId ?? ""}
                       on:change={(event) => {
                         const target = event.currentTarget;
                         if (!(target instanceof HTMLSelectElement)) return;
@@ -412,9 +413,9 @@
                       }}
                     >
                       <option value=""></option>
-                      {#each draft.backgrounds as background}
-                        <option value={background.id}>
-                          {background.label || `${t("backgroundLabel")} ${background.id}`}
+                      {#each sectionBackgroundOptionsByCategory[category.id] ?? [] as background}
+                        <option value={background.value}>
+                          {background.label}
                         </option>
                       {/each}
                     </select>
@@ -458,19 +459,6 @@
             </select>
           </label>
           <label class="editor-field">
-            <span>{t("fontRoleItem")}</span>
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.item?.family ?? ""}
-              on:input={(event) => {
-                const target = event.currentTarget;
-                if (!(target instanceof HTMLInputElement)) return;
-                setFontRoleFamily("item", target.value);
-              }}
-            />
-          </label>
-          <label class="editor-field">
             <span>{t("fontRoleItemSrc")}</span>
             {#if fontAssetOptions.length}
               <select
@@ -492,7 +480,7 @@
                 type="text"
                 class="editor-input"
                 value={draft.meta.fontRoles?.item?.source ?? ""}
-                list="asset-files"
+                list="font-asset-files"
                 on:input={(event) => {
                   const target = event.currentTarget;
                   if (!(target instanceof HTMLInputElement)) return;
@@ -542,14 +530,24 @@
               ></textarea>
             </label>
             <label class="editor-field">
-              <span>{t("price")}</span>
+              <span>{t("showPrice")}</span>
               <input
-                type="number"
-                class="editor-input"
-                value={wizardItem.price.amount}
-                on:input={(event) => handleWizardItemPriceInput(wizardItem, event)}
+                type="checkbox"
+                checked={wizardItem.priceVisible !== false}
+                on:change={(event) => handleWizardShowPriceToggle(wizardItem, event)}
               />
             </label>
+            {#if wizardItem.priceVisible !== false}
+              <label class="editor-field">
+                <span>{t("price")}</span>
+                <input
+                  type="number"
+                  class="editor-input"
+                  value={wizardItem.price.amount}
+                  on:input={(event) => handleWizardItemPriceInput(wizardItem, event)}
+                />
+              </label>
+            {/if}
             <label class="editor-field">
               <span>{t("asset360")}</span>
               {#if mediaAssetOptions.length}
@@ -617,19 +615,6 @@
               </label>
             {/if}
             <label class="editor-field">
-              <span>{t("itemFontOverrideName")}</span>
-              <input
-                type="text"
-                class="editor-input"
-                value={wizardItem.typography?.item?.family ?? ""}
-                on:input={(event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLInputElement)) return;
-                  setItemFontFamily(wizardItem, target.value);
-                }}
-              />
-            </label>
-            <label class="editor-field">
               <span>{t("itemFontOverrideSrc")}</span>
               {#if fontAssetOptions.length}
                 <select
@@ -651,7 +636,7 @@
                   type="text"
                   class="editor-input"
                   value={wizardItem.typography?.item?.source ?? ""}
-                  list="asset-files"
+                  list="font-asset-files"
                   on:input={(event) => {
                     const target = event.currentTarget;
                     if (!(target instanceof HTMLInputElement)) return;

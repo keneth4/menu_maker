@@ -29,6 +29,7 @@ export type MenuItem = {
   name: LocalizedText;
   description?: LocalizedText;
   longDescription?: LocalizedText;
+  priceVisible?: boolean;
   price: {
     amount: number;
     currency: string;

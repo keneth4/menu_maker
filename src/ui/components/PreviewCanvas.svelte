@@ -65,6 +65,7 @@
   let loadedCarouselMediaKeys = new Set<string>();
   let readyCarouselMediaKeys = new Set<string>();
   let carouselMediaProjectSignature = "";
+  let backgroundModeClass = "background-mode-carousel";
 
   const getCircularDistance = (activeIndex: number, sourceIndex: number, total: number) => {
     if (total <= 1) return 0;
@@ -92,6 +93,11 @@
     activeTemplateCapabilities = getTemplateCapabilities(templateId);
     activeTemplateStrategy = getTemplateStrategy(templateId);
   }
+
+  $: backgroundModeClass =
+    activeProject?.meta.backgroundDisplayMode === "section"
+      ? "background-mode-section"
+      : "background-mode-carousel";
 
   $: loadedBackgroundIndexSet = new Set(loadedBackgroundIndexes);
 
@@ -146,7 +152,7 @@
 <section class="preview-panel">
   <section class="preview-shell {effectivePreview}">
     <section
-      class={`menu-preview template-${activeTemplateCapabilities.id} ${
+      class={`menu-preview template-${activeTemplateCapabilities.id} ${backgroundModeClass} ${
         previewStartupLoading ? "is-loading" : ""
       }`}
       style={previewFontVars || `--menu-font:${previewFontStack};`}
@@ -351,9 +357,11 @@
                             <span class="vegan-icon" title={getMenuTerm("vegan")}>🌿</span>
                           {/if}
                         </p>
-                        <span class="carousel-price">
-                          {formatPrice(entry.item.price.amount)}
-                        </span>
+                        {#if entry.item.priceVisible !== false}
+                          <span class="carousel-price">
+                            {formatPrice(entry.item.price.amount)}
+                          </span>
+                        {/if}
                       </div>
                       <p class="carousel-desc">{textOf(entry.item.description)}</p>
                     </div>

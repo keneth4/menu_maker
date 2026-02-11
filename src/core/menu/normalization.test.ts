@@ -72,6 +72,7 @@ describe("normalizeProject", () => {
     expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
     expect(normalized.categories[0].items[0].media.scrollAnimationMode).toBe("hero360");
     expect(normalized.categories[0].items[0].media.scrollAnimationSrc).toBe("");
+    expect(normalized.categories[0].items[0].priceVisible).toBe(true);
 
     const allergens = normalized.categories[0].items[0].allergens ?? [];
     expect(allergens).toHaveLength(2);
@@ -133,6 +134,39 @@ describe("normalizeProject", () => {
     expect(normalized.categories[0].items[0].typography).toEqual({
       item: { family: "Item Sans", source: "assets/fonts/item.woff2" }
     });
+  });
+
+  it("enforces strict section background one-to-one mapping without fallback", () => {
+    const project = buildProjectFixture();
+    project.meta.backgroundDisplayMode = "section";
+    project.backgrounds = [
+      { id: "bg-1", label: "One", src: "assets/backgrounds/one.jpg", type: "image" },
+      { id: "bg-2", label: "Two", src: "assets/backgrounds/two.jpg", type: "image" }
+    ];
+    project.categories = [
+      {
+        ...project.categories[0],
+        id: "cat-1",
+        backgroundId: "bg-1"
+      },
+      {
+        ...project.categories[0],
+        id: "cat-2",
+        backgroundId: "bg-1"
+      },
+      {
+        ...project.categories[0],
+        id: "cat-3",
+        backgroundId: "bg-missing"
+      }
+    ];
+
+    const normalized = normalizeProject(project);
+    expect(normalized.categories.map((category) => category.backgroundId)).toEqual([
+      "bg-1",
+      "",
+      ""
+    ]);
   });
 
   it("normalizes background carousel timing into a safe seconds range", () => {

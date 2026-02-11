@@ -231,6 +231,13 @@
   let loadedPreviewBackgroundIndexes: number[] = [];
   let activeBackgroundIndex = 0;
   let sectionBackgroundIndexByCategory: Record<string, number> = {};
+  let sectionBackgroundOptionsByCategory: Record<
+    string,
+    { value: string; label: string }[]
+  > = {};
+  let sectionBackgroundNeedsCoverage = false;
+  let sectionBackgroundHasDuplicates = false;
+  let sectionBackgroundMappingValid = true;
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
   let backgroundRotationIntervalMs = 0;
@@ -380,6 +387,88 @@
       .sort((left, right) => left.label.localeCompare(right.label));
   };
 
+  const normalizeSectionBackgroundId = (value?: string) => (value ?? "").trim();
+
+  const getSectionModeBackgroundEntries = (value: MenuProject) =>
+    value.backgrounds
+      .filter((background) => background.id && background.src.trim().length > 0)
+      .map((background, index) => ({
+        id: background.id,
+        label:
+          background.label?.trim() ||
+          `${t("backgroundLabel")} ${index + 1}`
+      }));
+
+  const buildSectionBackgroundUsage = (categories: MenuCategory[]) =>
+    categories.reduce<Map<string, number>>((usage, category) => {
+      const id = normalizeSectionBackgroundId(category.backgroundId);
+      if (!id) return usage;
+      usage.set(id, (usage.get(id) ?? 0) + 1);
+      return usage;
+    }, new Map<string, number>());
+
+  const buildSectionBackgroundState = (value: MenuProject) => {
+    const entries = getSectionModeBackgroundEntries(value);
+    const entryIds = new Set(entries.map((entry) => entry.id));
+    const usage = buildSectionBackgroundUsage(value.categories);
+    const optionsByCategory = value.categories.reduce<
+      Record<string, { value: string; label: string }[]>
+    >((acc, category) => {
+      const currentId = normalizeSectionBackgroundId(category.backgroundId);
+      const options = entries
+        .filter((entry) => entry.id === currentId || (usage.get(entry.id) ?? 0) === 0)
+        .map((entry) => ({ value: entry.id, label: entry.label }));
+      acc[category.id] = options;
+      return acc;
+    }, {});
+    const hasInsufficientBackgrounds = entries.length < value.categories.length;
+    const hasMissingAssignments = value.categories.some(
+      (category) => !normalizeSectionBackgroundId(category.backgroundId)
+    );
+    const hasInvalidAssignments = value.categories.some((category) => {
+      const id = normalizeSectionBackgroundId(category.backgroundId);
+      return Boolean(id) && !entryIds.has(id);
+    });
+    const hasDuplicateAssignments = value.categories.some((category) => {
+      const id = normalizeSectionBackgroundId(category.backgroundId);
+      return Boolean(id) && (usage.get(id) ?? 0) > 1;
+    });
+    return {
+      optionsByCategory,
+      hasInsufficientBackgrounds,
+      hasMissingAssignments,
+      hasInvalidAssignments,
+      hasDuplicateAssignments,
+      isComplete:
+        !hasInsufficientBackgrounds &&
+        !hasMissingAssignments &&
+        !hasInvalidAssignments &&
+        !hasDuplicateAssignments
+    };
+  };
+
+  const autoAssignSectionBackgroundsByOrder = (value: MenuProject) => {
+    const entries = getSectionModeBackgroundEntries(value);
+    value.categories = value.categories.map((category, index) => ({
+      ...category,
+      backgroundId: entries[index]?.id ?? ""
+    }));
+  };
+
+  const getNextUnusedSectionBackgroundId = (
+    value: MenuProject,
+    currentCategoryId = ""
+  ) => {
+    const entries = getSectionModeBackgroundEntries(value);
+    const used = new Set(
+      value.categories
+        .filter((category) => category.id !== currentCategoryId)
+        .map((category) => normalizeSectionBackgroundId(category.backgroundId))
+        .filter(Boolean)
+    );
+    return entries.find((entry) => !used.has(entry.id))?.id ?? "";
+  };
+
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
     medium: 960,
@@ -458,20 +547,24 @@
         )
     );
     const fontCandidates = [
-      { id: "font-interface", label: draft.meta.fontFamily ?? "Interface", src: draft.meta.fontSource ?? "" },
+      {
+        id: "font-interface",
+        label: "Interface",
+        src: draft.meta.fontSource ?? ""
+      },
       {
         id: "font-identity",
-        label: draft.meta.fontRoles?.identity?.family ?? "Identity",
+        label: "Identity",
         src: draft.meta.fontRoles?.identity?.source ?? ""
       },
       {
         id: "font-section",
-        label: draft.meta.fontRoles?.section?.family ?? "Section",
+        label: "Section",
         src: draft.meta.fontRoles?.section?.source ?? ""
       },
       {
         id: "font-item-default",
-        label: draft.meta.fontRoles?.item?.family ?? "Item",
+        label: "Item",
         src: draft.meta.fontRoles?.item?.source ?? ""
       },
       ...draft.categories.flatMap((category) =>
@@ -503,6 +596,21 @@
   $: fontAssetOptions = assetOptions.filter((option) =>
     mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(option.value)).startsWith("originals/fonts/")
   );
+  $: if (draft) {
+    const sectionState = buildSectionBackgroundState(draft);
+    sectionBackgroundOptionsByCategory = sectionState.optionsByCategory;
+    sectionBackgroundNeedsCoverage =
+      sectionState.hasInsufficientBackgrounds ||
+      sectionState.hasMissingAssignments ||
+      sectionState.hasInvalidAssignments;
+    sectionBackgroundHasDuplicates = sectionState.hasDuplicateAssignments;
+    sectionBackgroundMappingValid = sectionState.isComplete;
+  } else {
+    sectionBackgroundOptionsByCategory = {};
+    sectionBackgroundNeedsCoverage = false;
+    sectionBackgroundHasDuplicates = false;
+    sectionBackgroundMappingValid = true;
+  }
   $: rootLabel = rootHandle
     ? rootHandle.name
     : bridgeAvailable
@@ -642,6 +750,7 @@
   $: if (draft) {
     const defaultLocale = draft.meta.defaultLocale || "es";
     const hasTemplate = Boolean(draft.meta.template);
+    const sectionMode = (draft.meta.backgroundDisplayMode ?? "carousel") === "section";
     const hasBackground = draft.backgrounds.some((bg) => bg.src && bg.src.trim().length > 0);
     const hasOwnBackground = hasWizardCustomBackground(draft, rootFiles, assetMode === "none");
     const hasDemoBackground = draft.backgrounds.some((bg) =>
@@ -652,7 +761,8 @@
     const hasIdentity = hasBackground && !wizardNeedsRootBackground;
     const hasCategories =
       draft.categories.length > 0 &&
-      draft.categories.every((category) => category.name?.[defaultLocale]?.trim());
+      draft.categories.every((category) => category.name?.[defaultLocale]?.trim()) &&
+      (!sectionMode || sectionBackgroundMappingValid);
     const dishCount = draft.categories.reduce((acc, category) => acc + category.items.length, 0);
     const hasDishes =
       dishCount > 0 &&
@@ -660,8 +770,8 @@
         category.items.every(
           (item) =>
             item.name?.[defaultLocale]?.trim() &&
-            typeof item.price?.amount === "number" &&
-            item.price.amount > 0
+            (item.priceVisible === false ||
+              (typeof item.price?.amount === "number" && item.price.amount > 0))
         )
       );
     wizardStatus = {
@@ -813,7 +923,9 @@
   $: assetProjectReadOnly = isProtectedAssetProjectSlug(
     draft?.meta.slug || activeSlug || "nuevo-proyecto"
   );
-  $: previewFontStack = activeProject ? buildFontStack(activeProject.meta.fontFamily) : "";
+  $: previewFontStack = activeProject
+    ? buildFontStack(getProjectInterfaceFontConfig(activeProject).family)
+    : "";
   $: previewFontVars = activeProject ? buildPreviewFontVarStyle(activeProject) : "";
   $: fontFaceCss = activeProject ? buildProjectFontFaceCss(activeProject) : "";
   $: builtInFontHrefs = activeProject ? collectProjectBuiltinFontHrefs(activeProject) : [];
@@ -826,18 +938,25 @@
       })) ?? [];
   $: {
     const lookup = new Map(previewBackgrounds.map((background, index) => [background.id, index]));
-    const fallbackIndex = previewBackgrounds.length > 0 ? 0 : -1;
+    const usage = new Map<string, number>();
+    (activeProject?.categories ?? []).forEach((category) => {
+      const id = normalizeSectionBackgroundId(category.backgroundId);
+      if (!id) return;
+      usage.set(id, (usage.get(id) ?? 0) + 1);
+    });
     const next: Record<string, number> = {};
     (activeProject?.categories ?? []).forEach((category) => {
-      const mapped = lookup.get(category.backgroundId ?? "");
-      next[category.id] = mapped ?? fallbackIndex;
+      const id = normalizeSectionBackgroundId(category.backgroundId);
+      const mapped = lookup.get(id);
+      next[category.id] =
+        id && typeof mapped === "number" && (usage.get(id) ?? 0) === 1 ? mapped : -1;
     });
     sectionBackgroundIndexByCategory = next;
   }
   $: {
     const count = previewBackgrounds.length;
     const nextIndexes: number[] = [];
-    if (count > 0) {
+    if (count > 0 && activeBackgroundIndex >= 0) {
       const active = Math.min(Math.max(activeBackgroundIndex, 0), count - 1);
       nextIndexes.push(active);
       if (count > 1) {
@@ -896,10 +1015,8 @@
   const syncBackgroundRotation = (count: number, intervalMs: number) => {
     if (isSectionBackgroundMode(activeProject)) {
       clearBackgroundRotation();
-      if (count < 1) {
-        activeBackgroundIndex = 0;
-      } else if (activeBackgroundIndex >= count) {
-        activeBackgroundIndex = 0;
+      if (count < 1 && activeBackgroundIndex !== -1) {
+        activeBackgroundIndex = -1;
       }
       return;
     }
@@ -908,7 +1025,7 @@
       activeBackgroundIndex = 0;
       return;
     }
-    if (activeBackgroundIndex >= count) {
+    if (activeBackgroundIndex < 0 || activeBackgroundIndex >= count) {
       activeBackgroundIndex = 0;
     }
     if (
@@ -933,14 +1050,12 @@
     const activeCategoryId =
       getActiveSectionCategoryId() ?? activeProject.categories[0]?.id ?? null;
     if (!activeCategoryId) {
-      activeBackgroundIndex = 0;
+      if (activeBackgroundIndex !== -1) {
+        activeBackgroundIndex = -1;
+      }
     } else {
-      const mappedIndex = sectionBackgroundIndexByCategory[activeCategoryId];
-      if (
-        typeof mappedIndex === "number" &&
-        mappedIndex >= 0 &&
-        mappedIndex !== activeBackgroundIndex
-      ) {
+      const mappedIndex = sectionBackgroundIndexByCategory[activeCategoryId] ?? -1;
+      if (mappedIndex !== activeBackgroundIndex) {
         activeBackgroundIndex = mappedIndex;
       }
     }
@@ -1662,10 +1777,18 @@ const backgrounds = (DATA.backgrounds || []).filter(
 const backgroundIndexById = new Map(
   backgrounds.map((background, index) => [background.id || "", index])
 );
+const sectionBackgroundUsage = new Map();
+(DATA.categories || []).forEach((category) => {
+  const id = String(category?.backgroundId || "").trim();
+  if (!id) return;
+  sectionBackgroundUsage.set(id, (sectionBackgroundUsage.get(id) || 0) + 1);
+});
 const sectionBackgroundByCategoryId = new Map(
   (DATA.categories || []).map((category) => {
-    const mapped = backgroundIndexById.get(category?.backgroundId || "");
-    return [category.id, mapped ?? (backgrounds.length > 0 ? 0 : -1)];
+    const id = String(category?.backgroundId || "").trim();
+    const mapped = backgroundIndexById.get(id);
+    const isUnique = Boolean(id) && (sectionBackgroundUsage.get(id) || 0) === 1;
+    return [category.id, isUnique && typeof mapped === "number" ? mapped : -1];
   })
 );
 const normalizeBackgroundCarouselSeconds = (value) => {
@@ -1674,7 +1797,15 @@ const normalizeBackgroundCarouselSeconds = (value) => {
   return Math.min(${MAX_BACKGROUND_CAROUSEL_SECONDS}, Math.max(${MIN_BACKGROUND_CAROUSEL_SECONDS}, Math.round(parsed)));
 };
 const backgroundRotationMs = normalizeBackgroundCarouselSeconds(DATA.meta.backgroundCarouselSeconds) * 1000;
-let activeBackgroundIndex = 0;
+let activeBackgroundIndex =
+  backgroundDisplayMode === "section"
+    ? (() => {
+        const firstCategoryId = DATA.categories?.[0]?.id;
+        if (!firstCategoryId) return -1;
+        const mapped = sectionBackgroundByCategoryId.get(firstCategoryId);
+        return typeof mapped === "number" ? mapped : -1;
+      })()
+    : 0;
 let backgroundTimer;
 let applyBackgroundState = () => {};
 const injectedFontFaceKeys = new Set();
@@ -1753,38 +1884,66 @@ const getFontStack = (family) => {
   const primary = cleaned ? '"' + cleaned + '", ' : "";
   return primary + '"Fraunces", "Georgia", serif';
 };
+const slugifyFontTokenPart = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+const hashFontSourceToken = (value) => {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).slice(0, 6);
+};
+const deriveFontFamilyFromSource = (source) => {
+  const normalized = String(source || "").trim();
+  if (!normalized) return "";
+  const filename = normalized.split("/").filter(Boolean).pop() || "font";
+  const base = filename.replace(/\.[a-z0-9]+$/i, "");
+  const slug = slugifyFontTokenPart(base).slice(0, 24) || "font";
+  return "menu-font-" + slug + "-" + hashFontSourceToken(normalized.toLowerCase());
+};
 const normalizeFontConfig = (config) => ({
   family: String(config?.family || "").trim(),
   source: String(config?.source || "").trim()
 });
+const withResolvedFontFamily = (config) =>
+  config.source
+    ? { family: deriveFontFamilyFromSource(config.source), source: config.source }
+    : config;
+const getInterfaceFontConfig = () =>
+  withResolvedFontFamily(normalizeFontConfig({ family: fontFamily, source: fontSource }));
 const getRoleFontConfig = (role) => {
-  const interfaceFont = normalizeFontConfig({ family: fontFamily, source: fontSource });
+  const interfaceFont = getInterfaceFontConfig();
   const roleFont = normalizeFontConfig(fontRoles?.[role]);
-  return {
+  return withResolvedFontFamily({
     family: roleFont.family || interfaceFont.family,
     source: roleFont.source || interfaceFont.source
-  };
+  });
 };
 const getItemFontConfig = (item) => {
   const fallback = getRoleFontConfig("item");
   const itemConfig = normalizeFontConfig(item?.typography?.item);
-  return {
+  return withResolvedFontFamily({
     family: itemConfig.family || fallback.family,
     source: itemConfig.source || fallback.source
-  };
+  });
 };
 const collectRuntimeFontConfigs = () => {
   const configs = [];
   const seen = new Set();
   const pushConfig = (config) => {
-    const normalized = normalizeFontConfig(config);
+    const normalized = withResolvedFontFamily(normalizeFontConfig(config));
     if (!normalized.family) return;
     const key = normalized.family + "::" + normalized.source;
     if (seen.has(key)) return;
     seen.add(key);
     configs.push(normalized);
   };
-  pushConfig({ family: fontFamily, source: fontSource });
+  pushConfig(getInterfaceFontConfig());
   pushConfig(getRoleFontConfig("identity"));
   pushConfig(getRoleFontConfig("section"));
   pushConfig(getRoleFontConfig("item"));
@@ -1831,14 +1990,15 @@ const ensureFont = () => {
   });
 };
 const getPreviewFontVars = () => {
+  const interfaceFont = getInterfaceFontConfig();
   const identityFont = getRoleFontConfig("identity");
   const sectionFont = getRoleFontConfig("section");
   const itemFont = getRoleFontConfig("item");
   return (
     "--menu-font:" +
-    getFontStack(fontFamily) +
+    getFontStack(interfaceFont.family) +
     ";--menu-font-ui:" +
-    getFontStack(fontFamily) +
+    getFontStack(interfaceFont.family) +
     ";--menu-font-identity:" +
     getFontStack(identityFont.family) +
     ";--menu-font-section:" +
@@ -1856,14 +2016,14 @@ const getItemFontStyle = (item) => {
 const getSectionBackgroundIndexByCategoryId = (categoryId) => {
   const index = sectionBackgroundByCategoryId.get(categoryId);
   if (typeof index === "number" && index >= 0) return index;
-  return backgrounds.length > 0 ? 0 : -1;
+  return -1;
 };
 const syncBackgroundForSectionIndex = (index) => {
   if (backgroundDisplayMode !== "section") return;
   const category = DATA.categories[index];
   if (!category) return;
   const mappedIndex = getSectionBackgroundIndexByCategoryId(category.id);
-  if (mappedIndex < 0 || mappedIndex === activeBackgroundIndex) return;
+  if (mappedIndex === activeBackgroundIndex) return;
   activeBackgroundIndex = mappedIndex;
   applyBackgroundState();
 };
@@ -3147,6 +3307,10 @@ const buildCarousel = (category) => {
       \${entries
         .map((entry) => {
           const srcSet = buildSrcSet(entry.item);
+          const priceHtml =
+            entry.item.priceVisible === false
+              ? ""
+              : '<span class="carousel-price">' + formatPrice(entry.item.price.amount) + "</span>";
           return \`
             <button class="carousel-card" type="button" style="\${getItemFontStyle(entry.item)}" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media is-loaded">
@@ -3156,7 +3320,7 @@ const buildCarousel = (category) => {
               <div class="carousel-text">
                 <div class="carousel-row">
                   <p class="carousel-title">\${textOf(entry.item.name)}\${entry.item.vegan ? '<span class="vegan-icon" title="' + getTerm("vegan") + '">🌿</span>' : ""}</p>
-                  <span class="carousel-price">\${formatPrice(entry.item.price.amount)}</span>
+                  \${priceHtml}
                 </div>
                 <p class="carousel-desc">\${textOf(entry.item.description)}</p>
               </div>
@@ -3181,9 +3345,11 @@ const render = () => {
   const logoSrc = (DATA.meta.logoSrc || "").trim();
   const logoAlt = (restaurantName || menuTitle || "Restaurant").replace(/"/g, "&quot;");
   const templateClass = "template-" + (DATA.meta.template || "focus-rows");
+  const backgroundModeClass =
+    backgroundDisplayMode === "section" ? "background-mode-section" : "background-mode-carousel";
   ensureFont();
   app.innerHTML = \`
-    <div class="menu-preview \${templateClass} \${startupLoading ? "is-loading" : ""}">
+    <div class="menu-preview \${templateClass} \${backgroundModeClass} \${startupLoading ? "is-loading" : ""}">
       <div class="menu-startup-loader \${startupLoading ? "active" : ""}">
         <div class="menu-startup-loader__card">
           <p class="menu-startup-loader__label">\${getLoadingLabel()}</p>
@@ -3246,11 +3412,12 @@ const render = () => {
   \`;
   const preview = app.querySelector(".menu-preview");
   if (preview) {
+    const interfaceFont = getInterfaceFontConfig();
     const identityFont = getRoleFontConfig("identity");
     const sectionFont = getRoleFontConfig("section");
     const itemFont = getRoleFontConfig("item");
-    preview.style.setProperty("--menu-font", getFontStack(fontFamily));
-    preview.style.setProperty("--menu-font-ui", getFontStack(fontFamily));
+    preview.style.setProperty("--menu-font", getFontStack(interfaceFont.family));
+    preview.style.setProperty("--menu-font-ui", getFontStack(interfaceFont.family));
     preview.style.setProperty("--menu-font-identity", getFontStack(identityFont.family));
     preview.style.setProperty("--menu-font-section", getFontStack(sectionFont.family));
     preview.style.setProperty("--menu-font-item", getFontStack(itemFont.family));
@@ -3265,7 +3432,7 @@ const render = () => {
   applyBackgroundState = () => {
     const layers = Array.from(app.querySelectorAll(".menu-background"));
     const warmIndexes = [];
-    if (backgrounds.length > 0) {
+    if (backgrounds.length > 0 && activeBackgroundIndex >= 0) {
       warmIndexes.push(activeBackgroundIndex);
       if (backgrounds.length > 1) {
         warmIndexes.push((activeBackgroundIndex + 1) % backgrounds.length);
@@ -3294,7 +3461,11 @@ const render = () => {
           : getClosestSectionIndex(scroll);
         if (sectionIndex >= 0) {
           syncBackgroundForSectionIndex(sectionIndex);
+        } else {
+          activeBackgroundIndex = -1;
         }
+      } else {
+        activeBackgroundIndex = -1;
       }
       applyBackgroundState();
       return;
@@ -3800,7 +3971,7 @@ const bindCards = () => {
             \${allergens ? '<p class="dish-modal__allergens">' + allergenLabel + ': ' + allergens + '</p>' : ""}
             \${dish.vegan ? '<span class="dish-modal__badge">🌿 ' + veganLabel + '</span>' : ""}
           </div>
-          <p class="dish-modal__price">\${formatPrice(dish.price.amount)}</p>
+          \${dish.priceVisible === false ? "" : '<p class="dish-modal__price">' + formatPrice(dish.price.amount) + "</p>"}
         </div>
       \`;
       modal.classList.add("open");
@@ -3863,12 +4034,16 @@ const bindSectionFocus = () => {
     if (scroll.scrollWidth <= scroll.clientWidth + 4) return;
     let snapTimeout;
     const onScroll = () => {
+      const closestIndex = getClosestHorizontalSectionIndex(scroll);
+      if (closestIndex >= 0) {
+        syncBackgroundForSectionIndex(closestIndex);
+      }
       if (snapTimeout) window.clearTimeout(snapTimeout);
       snapTimeout = window.setTimeout(() => {
-        const closestIndex = getClosestHorizontalSectionIndex(scroll);
-        if (closestIndex >= 0) {
-          centerSectionHorizontally(scroll, closestIndex, "smooth");
-          syncBackgroundForSectionIndex(closestIndex);
+        const snapIndex = getClosestHorizontalSectionIndex(scroll);
+        if (snapIndex >= 0) {
+          centerSectionHorizontally(scroll, snapIndex, "smooth");
+          syncBackgroundForSectionIndex(snapIndex);
         }
       }, 170);
     };
@@ -5416,20 +5591,20 @@ void preloadStartupAssets();
   const startCreateProject = async () => {
     await createNewProject();
     setEditorTab("info");
-    editorOpen = false;
+    editorOpen = true;
     showLanding = false;
   };
 
   const startWizard = async () => {
     await createNewProject({ forWizard: true });
     setEditorTab("wizard");
-    editorOpen = false;
+    editorOpen = true;
     showLanding = false;
   };
 
   const startOpenProject = () => {
     setEditorTab("info");
-    editorOpen = false;
+    editorOpen = true;
     showLanding = false;
     openProjectDialog();
   };
@@ -5618,14 +5793,18 @@ void preloadStartupAssets();
     const container = event.currentTarget as HTMLElement;
     if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
       if (container.scrollWidth <= container.clientWidth + 4) return;
+      const closestIndex = getClosestHorizontalSectionIndex(container);
+      if (closestIndex >= 0) {
+        syncSectionBackgroundByIndex(closestIndex);
+      }
       if (sectionSnapTimeout) {
         clearTimeout(sectionSnapTimeout);
       }
       sectionSnapTimeout = setTimeout(() => {
-        const closestIndex = getClosestHorizontalSectionIndex(container);
-        if (closestIndex >= 0) {
-          centerSectionHorizontally(container, closestIndex, "smooth");
-          syncSectionBackgroundByIndex(closestIndex);
+        const snapIndex = getClosestHorizontalSectionIndex(container);
+        if (snapIndex >= 0) {
+          centerSectionHorizontally(container, snapIndex, "smooth");
+          syncSectionBackgroundByIndex(snapIndex);
         }
       }, activeTemplateCapabilities.sectionSnapDelayMs);
       return;
@@ -5695,8 +5874,7 @@ void preloadStartupAssets();
     if (!activeProject || !isSectionBackgroundMode(activeProject)) return;
     const categoryId = activeProject.categories[index]?.id;
     if (!categoryId) return;
-    const mappedIndex = sectionBackgroundIndexByCategory[categoryId];
-    if (typeof mappedIndex !== "number" || mappedIndex < 0) return;
+    const mappedIndex = sectionBackgroundIndexByCategory[categoryId] ?? -1;
     if (mappedIndex === activeBackgroundIndex) return;
     activeBackgroundIndex = mappedIndex;
   };
@@ -6059,6 +6237,30 @@ void preloadStartupAssets();
     return `${primary}"Fraunces", "Georgia", serif`;
   };
 
+  const slugifyFontTokenPart = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const hashFontSourceToken = (value: string) => {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36).slice(0, 6);
+  };
+
+  const deriveFontFamilyFromSource = (source: string) => {
+    const normalized = source.trim();
+    if (!normalized) return "";
+    const filename = normalized.split("/").filter(Boolean).pop() ?? "font";
+    const base = filename.replace(/\.[a-z0-9]+$/i, "");
+    const slug = slugifyFontTokenPart(base).slice(0, 24) || "font";
+    return `menu-font-${slug}-${hashFontSourceToken(normalized.toLowerCase())}`;
+  };
+
   const normalizeFontConfigInput = (
     value?: { family?: string; source?: string } | null
   ): { family: string; source: string } => ({
@@ -6066,11 +6268,21 @@ void preloadStartupAssets();
     source: (value?.source ?? "").trim()
   });
 
+  const withResolvedFontFamily = (value: { family: string; source: string }) =>
+    value.source
+      ? {
+          family: deriveFontFamilyFromSource(value.source),
+          source: value.source
+        }
+      : value;
+
   const getProjectInterfaceFontConfig = (value: MenuProject) =>
-    normalizeFontConfigInput({
-      family: value.meta.fontFamily,
-      source: value.meta.fontSource
-    });
+    withResolvedFontFamily(
+      normalizeFontConfigInput({
+        family: value.meta.fontFamily,
+        source: value.meta.fontSource
+      })
+    );
 
   const getProjectRoleFontConfig = (
     value: MenuProject,
@@ -6083,16 +6295,16 @@ void preloadStartupAssets();
   ) => {
     const interfaceFont = getProjectInterfaceFontConfig(value);
     const roleFont = getProjectRoleFontConfig(value, role);
-    return {
+    return withResolvedFontFamily({
       family: roleFont.family || interfaceFont.family,
       source: roleFont.source || interfaceFont.source
-    };
+    });
   };
 
   const collectProjectFontConfigs = (value: MenuProject) => {
     const configs: Array<{ family: string; source: string }> = [];
     const pushConfig = (config?: { family?: string; source?: string } | null) => {
-      const normalized = normalizeFontConfigInput(config);
+      const normalized = withResolvedFontFamily(normalizeFontConfigInput(config));
       if (!normalized.family) return;
       const signature = `${normalized.family}::${normalized.source}`;
       if (configs.some((entry) => `${entry.family}::${entry.source}` === signature)) return;
@@ -6106,7 +6318,6 @@ void preloadStartupAssets();
     value.categories.forEach((category) => {
       category.items.forEach((item) => {
         const itemFont = normalizeFontConfigInput(item.typography?.item);
-        if (!itemFont.family) return;
         const fallbackItem = resolveProjectRoleFontConfig(value, "item");
         pushConfig({
           family: itemFont.family || fallbackItem.family,
@@ -6158,7 +6369,11 @@ void preloadStartupAssets();
     if (!activeProject) return "";
     const itemConfig = normalizeFontConfigInput(item.typography?.item);
     const fallback = resolveProjectRoleFontConfig(activeProject, "item");
-    const family = itemConfig.family || fallback.family;
+    const resolved = withResolvedFontFamily({
+      family: itemConfig.family || fallback.family,
+      source: itemConfig.source || fallback.source
+    });
+    const family = resolved.family;
     if (!family) return "";
     return `--item-font:${buildFontStack(family)};`;
   };
@@ -6505,10 +6720,12 @@ void preloadStartupAssets();
         type: "image"
       }
     ];
-    draft.categories = draft.categories.map((category) => ({
-      ...category,
-      backgroundId: category.backgroundId || id
-    }));
+    if ((draft.meta.backgroundDisplayMode ?? "carousel") !== "section") {
+      draft.categories = draft.categories.map((category) => ({
+        ...category,
+        backgroundId: category.backgroundId || id
+      }));
+    }
     touchDraft();
   };
 
@@ -6517,12 +6734,33 @@ void preloadStartupAssets();
     const nextMode = mode === "section" ? "section" : "carousel";
     if (draft.meta.backgroundDisplayMode === nextMode) return;
     draft.meta.backgroundDisplayMode = nextMode;
+    if (nextMode === "section") {
+      autoAssignSectionBackgroundsByOrder(draft);
+    }
     touchDraft();
   };
 
   const setCategoryBackgroundId = (category: MenuCategory, backgroundId: string) => {
     if (!draft) return;
     const normalized = backgroundId.trim();
+    if ((draft.meta.backgroundDisplayMode ?? "carousel") === "section") {
+      if (
+        normalized &&
+        !getSectionModeBackgroundEntries(draft).some((entry) => entry.id === normalized)
+      ) {
+        return;
+      }
+      if (
+        normalized &&
+        draft.categories.some(
+          (entry) =>
+            entry.id !== category.id &&
+            normalizeSectionBackgroundId(entry.backgroundId) === normalized
+        )
+      ) {
+        return;
+      }
+    }
     category.backgroundId = normalized;
     touchDraft();
   };
@@ -6551,14 +6789,24 @@ void preloadStartupAssets();
   const removeBackground = (id: string) => {
     if (!draft) return;
     draft.backgrounds = draft.backgrounds.filter((item) => item.id !== id);
-    const fallbackId = draft.backgrounds[0]?.id ?? "";
-    draft.categories = draft.categories.map((category) => ({
-      ...category,
-      backgroundId:
-        category.backgroundId === id || !category.backgroundId
-          ? fallbackId
-          : category.backgroundId
-    }));
+    if ((draft.meta.backgroundDisplayMode ?? "carousel") === "section") {
+      draft.categories = draft.categories.map((category) => ({
+        ...category,
+        backgroundId:
+          normalizeSectionBackgroundId(category.backgroundId) === id
+            ? ""
+            : normalizeSectionBackgroundId(category.backgroundId)
+      }));
+    } else {
+      const fallbackId = draft.backgrounds[0]?.id ?? "";
+      draft.categories = draft.categories.map((category) => ({
+        ...category,
+        backgroundId:
+          category.backgroundId === id || !category.backgroundId
+            ? fallbackId
+            : category.backgroundId
+      }));
+    }
     touchDraft();
   };
 
@@ -6568,7 +6816,10 @@ void preloadStartupAssets();
     const newSection = {
       id,
       name: createLocalized(draft.meta.locales),
-      backgroundId: draft.backgrounds[0]?.id ?? "",
+      backgroundId:
+        (draft.meta.backgroundDisplayMode ?? "carousel") === "section"
+          ? getNextUnusedSectionBackgroundId(draft)
+          : (draft.backgrounds[0]?.id ?? ""),
       items: []
     };
     draft.categories = [...draft.categories, newSection];
@@ -6596,6 +6847,7 @@ void preloadStartupAssets();
       name: createLocalized(draft.meta.locales),
       description: createLocalized(draft.meta.locales),
       longDescription: createLocalized(draft.meta.locales),
+      priceVisible: true,
       price: {
         amount: 0,
         currency: draft.meta.currency
@@ -6622,7 +6874,10 @@ void preloadStartupAssets();
     const newSection = {
       id,
       name: createLocalized(draft.meta.locales),
-      backgroundId: draft.backgrounds[0]?.id ?? "",
+      backgroundId:
+        (draft.meta.backgroundDisplayMode ?? "carousel") === "section"
+          ? getNextUnusedSectionBackgroundId(draft)
+          : (draft.backgrounds[0]?.id ?? ""),
       items: []
     };
     draft.categories = [...draft.categories, newSection];
@@ -6649,6 +6904,7 @@ void preloadStartupAssets();
       name: createLocalized(draft.meta.locales),
       description: createLocalized(draft.meta.locales),
       longDescription: createLocalized(draft.meta.locales),
+      priceVisible: true,
       price: {
         amount: 0,
         currency: draft.meta.currency
@@ -7039,13 +7295,6 @@ void preloadStartupAssets();
     handleFontChoice(input.value);
   };
 
-  const handleCustomFontNameInput = (event: Event) => {
-    if (!draft) return;
-    const input = event.currentTarget as HTMLInputElement;
-    draft.meta.fontFamily = input.value;
-    touchDraft();
-  };
-
   const handleCustomFontSourceInput = (event: Event) => {
     if (!draft) return;
     const target = event.currentTarget;
@@ -7072,19 +7321,6 @@ void preloadStartupAssets();
       draft.meta.fontRoles = {};
     }
     return draft.meta.fontRoles;
-  };
-
-  const setFontRoleFamily = (role: "identity" | "section" | "item", family: string) => {
-    if (!draft) return;
-    const roles = ensureFontRoles();
-    if (!roles) return;
-    const trimmed = family.trim();
-    const existing = roles[role] ?? {};
-    roles[role] = {
-      ...existing,
-      family: trimmed
-    };
-    touchDraft();
   };
 
   const setFontRoleSource = (role: "identity" | "section" | "item", source: string) => {
@@ -7117,18 +7353,16 @@ void preloadStartupAssets();
     touchDraft();
   };
 
+  const setItemPriceVisible = (item: MenuItem, visible: boolean) => {
+    if (item.priceVisible === visible) return;
+    item.priceVisible = visible;
+    touchDraft();
+  };
+
   const ensureItemFontConfig = (item: MenuItem) => {
     if (!item.typography) item.typography = {};
     if (!item.typography.item) item.typography.item = {};
     return item.typography.item;
-  };
-
-  const setItemFontFamily = (item: MenuItem, family: string) => {
-    const normalized = family.trim();
-    const fontConfig = ensureItemFontConfig(item);
-    if (fontConfig.family === normalized) return;
-    fontConfig.family = normalized;
-    touchDraft();
   };
 
   const setItemFontSource = (item: MenuItem, source: string) => {
@@ -7388,15 +7622,6 @@ void preloadStartupAssets();
                 </label>
                 {#if fontChoice === "custom"}
                   <label class="editor-field">
-                    <span>{t("fontCustomName")}</span>
-                    <input
-                      type="text"
-                      class="editor-input"
-                      value={draft.meta.fontFamily ?? ""}
-                      on:input={handleCustomFontNameInput}
-                    />
-                  </label>
-                  <label class="editor-field">
                     <span>{t("fontCustomSrc")}</span>
                     {#if fontAssetOptions.length}
                       <select
@@ -7414,7 +7639,7 @@ void preloadStartupAssets();
                         type="text"
                         class="editor-input"
                         value={draft.meta.fontSource ?? ""}
-                        list="asset-files"
+                        list="font-asset-files"
                         on:input={handleCustomFontSourceInput}
                       />
                     {/if}
@@ -7466,6 +7691,9 @@ void preloadStartupAssets();
               {selectedCategory}
               {selectedItem}
               {assetOptions}
+              {sectionBackgroundOptionsByCategory}
+              sectionBackgroundNeedsCoverage={sectionBackgroundNeedsCoverage}
+              sectionBackgroundHasDuplicates={sectionBackgroundHasDuplicates}
               {commonAllergenCatalog}
               {cycleEditLang}
               {ensureRestaurantName}
@@ -7501,10 +7729,9 @@ void preloadStartupAssets();
               {setItemRotationDirection}
               {setItemScrollAnimationMode}
               {setItemScrollAnimationSrc}
-              {setFontRoleFamily}
               {setFontRoleSource}
-              {setItemFontFamily}
               {setItemFontSource}
+              {setItemPriceVisible}
               {touchDraft}
             />
           {:else}
@@ -7525,6 +7752,9 @@ void preloadStartupAssets();
               {wizardDemoPreview}
               {wizardNeedsRootBackground}
               {assetOptions}
+              {sectionBackgroundOptionsByCategory}
+              sectionBackgroundNeedsCoverage={sectionBackgroundNeedsCoverage}
+              sectionBackgroundHasDuplicates={sectionBackgroundHasDuplicates}
               {isWizardStepValid}
               {goToStep}
               {applyTemplate}
@@ -7541,10 +7771,9 @@ void preloadStartupAssets();
               {setItemRotationDirection}
               {setItemScrollAnimationMode}
               {setItemScrollAnimationSrc}
-              {setFontRoleFamily}
               {setFontRoleSource}
-              {setItemFontFamily}
               {setItemFontSource}
+              {setItemPriceVisible}
               {handleLocalizedInput}
               {handleDescriptionInput}
               {getLocalizedValue}
@@ -7620,6 +7849,13 @@ void preloadStartupAssets();
 {#if assetOptions.length}
   <datalist id="asset-files">
     {#each assetOptions as option}
+      <option value={option.value} label={option.label}></option>
+    {/each}
+  </datalist>
+{/if}
+{#if fontAssetOptions.length}
+  <datalist id="font-asset-files">
+    {#each fontAssetOptions as option}
       <option value={option.value} label={option.label}></option>
     {/each}
   </datalist>
