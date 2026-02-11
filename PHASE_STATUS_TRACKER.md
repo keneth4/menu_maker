@@ -9,8 +9,8 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 - `DONE`: phase exit criteria completed
 
 ## Current phase
-- Active phase: `Phase 4 - Image loading optimization`
-- Started: `2026-02-09`
+- Active phase: `Phase 6 - Validation + docs sync`
+- Started: `2026-02-11`
 - Status: `IN_PROGRESS`
 
 ## Phase board
@@ -20,9 +20,9 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 1 | Data model + normalization (logo + rotation metadata) | DONE | Schema + normalization + save-zip/export packaging wiring completed for logo + rotation metadata paths. |
 | 2 | Editor/Wizard UX updates | DONE | Added identity mode selector + logo source control and dish rotation direction toggle in edit/wizard flows. |
 | 3 | Modal + rotation behavior update | DONE | Removed modal direction toggle and now use dish-level `rotationDirection` in preview + export runtime. |
-| 4 | Image loading optimization | IN_PROGRESS | Startup/detail load policy + derived-only runtime source usage. |
+| 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
-| 6 | Validation + docs sync | PENDING | Full gates + README and docs updates. |
+| 6 | Validation + docs sync | IN_PROGRESS | Final pass on tests/perf checks and docs updates. |
 
 ## Phase 0 checklist
 - [x] Create a phase tracker with status board.
@@ -141,3 +141,8 @@ Tracking checklist:
 - ZIP open flow in bridge mode now waits for `prepare-derived` during upload workflow (with progress), instead of deferring derivation silently in the background.
 - Assets tab now uses icon-based top/file actions and includes an in-panel progress bar that shows upload + derived-processing status for manual asset uploads.
 - Bumped dish derivative profile id to `ffmpeg-v6-item-contain-md-webp-lg-gif` so previously generated dish derivatives are reprocessed once under the latest pipeline.
+
+### 2026-02-11
+- Removed visible white/gray placeholder blocks while dish media streams in by switching to a transparent placeholder source.
+- Added per-card carousel loading spinner state in both preview and exported runtime so unresolved media shows an intentional loading affordance instead of an empty square.
+- Added per-source media readiness tracking in preview (`category + item + source`) to avoid stale loaded-state reuse when item media source paths change.

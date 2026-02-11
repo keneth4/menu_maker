@@ -13,7 +13,7 @@
     src: string;
   };
   const TRANSPARENT_PIXEL_SRC =
-    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
   const CAROUSEL_MEDIA_ACTIVE_RADIUS = 2;
 
   export let layoutMode = "desktop";
@@ -62,6 +62,7 @@
   let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy("focus-rows");
   let loadedBackgroundIndexSet = new Set<number>();
   let loadedCarouselMediaKeys = new Set<string>();
+  let readyCarouselMediaKeys = new Set<string>();
   let carouselMediaProjectSignature = "";
 
   const getCircularDistance = (activeIndex: number, sourceIndex: number, total: number) => {
@@ -75,7 +76,15 @@
   const shouldLoadCarouselMedia = (activeIndex: number, sourceIndex: number, total: number) =>
     getCircularDistance(activeIndex, sourceIndex, total) <= CAROUSEL_MEDIA_ACTIVE_RADIUS;
 
-  const getCarouselMediaKey = (categoryId: string, itemId: string) => `${categoryId}::${itemId}`;
+  const getCarouselMediaKey = (categoryId: string, itemId: string, source = "") =>
+    `${categoryId}::${itemId}::${source}`;
+
+  const markCarouselMediaReady = (mediaKey: string) => {
+    if (readyCarouselMediaKeys.has(mediaKey)) return;
+    const next = new Set(readyCarouselMediaKeys);
+    next.add(mediaKey);
+    readyCarouselMediaKeys = next;
+  };
 
   $: {
     const templateId = resolveTemplateId(activeProject?.meta.template);
@@ -88,12 +97,18 @@
   $: {
     const signature = activeProject
       ? activeProject.categories
-          .map((category) => `${category.id}:${category.items.map((item) => item.id).join(",")}`)
+          .map(
+            (category) =>
+              `${category.id}:${category.items
+                .map((item) => `${item.id}:${getCarouselImageSource(item).trim()}`)
+                .join(",")}`
+          )
           .join("|")
       : "";
     if (signature !== carouselMediaProjectSignature) {
       carouselMediaProjectSignature = signature;
       loadedCarouselMediaKeys = new Set<string>();
+      readyCarouselMediaKeys = new Set<string>();
     }
   }
 
@@ -115,7 +130,7 @@
         ) {
           return;
         }
-        const key = getCarouselMediaKey(category.id, entry.item.id);
+        const key = getCarouselMediaKey(category.id, entry.item.id, source);
         if (next.has(key)) return;
         next.add(key);
         changed = true;
@@ -275,16 +290,20 @@
                     entry.sourceIndex,
                     category.items.length
                   )}
-                  {@const mediaKey = getCarouselMediaKey(category.id, entry.item.id)}
                   {@const carouselSource = getCarouselImageSource(entry.item)}
+                  {@const mediaKey = getCarouselMediaKey(category.id, entry.item.id, carouselSource)}
                   {@const startupBlocked =
                     previewStartupLoading &&
                     startupBlockingSources.size > 0 &&
                     carouselSource.trim().length > 0 &&
                     !startupBlockingSources.has(carouselSource) &&
                     !loadedCarouselMediaKeys.has(mediaKey)}
-                  {@const mediaLoaded =
+                  {@const mediaShouldRender =
                     !startupBlocked && (loadedCarouselMediaKeys.has(mediaKey) || shouldLoadMedia)}
+                  {@const showMediaLoading =
+                    mediaShouldRender &&
+                    carouselSource.trim().length > 0 &&
+                    !readyCarouselMediaKeys.has(mediaKey)}
                   {@const srcSet = buildResponsiveSrcSetFromMedia(entry.item)}
                   <button
                     class={`carousel-card ${stateClass}`}
@@ -299,18 +318,27 @@
                     on:touchstart={() => prefetchDishDetail(category.id, entry.item.id)}
                     on:click={() => openDish(category.id, entry.item.id)}
                   >
-                    <div class="carousel-media">
+                    <div class={`carousel-media ${showMediaLoading ? "is-loading" : "is-loaded"}`}>
+                      <span class="carousel-media__loader" aria-hidden="true"></span>
                       <img
-                        src={mediaLoaded ? carouselSource : TRANSPARENT_PIXEL_SRC}
-                        srcset={mediaLoaded ? srcSet : undefined}
+                        src={mediaShouldRender ? carouselSource : TRANSPARENT_PIXEL_SRC}
+                        srcset={mediaShouldRender ? srcSet : undefined}
                         sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px"
                         alt={textOf(entry.item.name)}
                         draggable="false"
                         on:contextmenu|preventDefault
                         on:dragstart|preventDefault
+                        on:load={() =>
+                          mediaShouldRender &&
+                          carouselSource.trim().length > 0 &&
+                          markCarouselMediaReady(mediaKey)}
+                        on:error={() =>
+                          mediaShouldRender &&
+                          carouselSource.trim().length > 0 &&
+                          markCarouselMediaReady(mediaKey)}
                         loading="lazy"
                         decoding="async"
-                        fetchpriority={mediaLoaded ? "high" : "low"}
+                        fetchpriority={mediaShouldRender ? "high" : "low"}
                       />
                     </div>
                     <div class="carousel-text">

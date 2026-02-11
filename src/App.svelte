@@ -1674,19 +1674,64 @@ const wrapCarouselIndex = (value, count) => {
   if (count <= 0) return 0;
   return ((value % count) + count) % count;
 };
-const TRANSPARENT_PIXEL_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+const TRANSPARENT_PIXEL_SRC =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
 const CAROUSEL_MEDIA_ACTIVE_RADIUS = 2.25;
+const setCarouselCardMediaState = (card, state) => {
+  const media = card?.querySelector(".carousel-media");
+  if (!(media instanceof HTMLElement)) return;
+  media.classList.toggle("is-loading", state === "loading");
+  media.classList.toggle("is-loaded", state === "loaded");
+};
+const attachCarouselCardMediaListeners = (card, image) => {
+  if (image.dataset.mediaListenersAttached === "1") return;
+  image.addEventListener("load", () => {
+    if (image.dataset.mediaHydrated !== "1") return;
+    image.dataset.mediaLoaded = "1";
+    setCarouselCardMediaState(card, "loaded");
+  });
+  image.addEventListener("error", () => {
+    if (image.dataset.mediaHydrated !== "1") return;
+    image.dataset.mediaLoaded = "1";
+    image.removeAttribute("srcset");
+    image.src = TRANSPARENT_PIXEL_SRC;
+    setCarouselCardMediaState(card, "loaded");
+  });
+  image.dataset.mediaListenersAttached = "1";
+};
 const hydrateCarouselCardMedia = (card) => {
   const image = card?.querySelector(".carousel-media img");
   if (!(image instanceof HTMLImageElement)) return;
-  if (image.dataset.mediaLoaded === "1") return;
   const source = (image.dataset.mediaSrc || "").trim();
-  if (!source) return;
-  image.src = source;
+  if (!source) {
+    setCarouselCardMediaState(card, "loaded");
+    return;
+  }
+  if (image.dataset.mediaLoaded === "1" && image.dataset.mediaActiveSource === source) {
+    setCarouselCardMediaState(card, "loaded");
+    return;
+  }
+  if (image.dataset.mediaHydrated === "1" && image.dataset.mediaActiveSource === source) {
+    setCarouselCardMediaState(card, "loading");
+    return;
+  }
+  image.dataset.mediaHydrated = "1";
+  image.dataset.mediaLoaded = "0";
+  image.dataset.mediaActiveSource = source;
+  setCarouselCardMediaState(card, "loading");
+  attachCarouselCardMediaListeners(card, image);
   const srcSet = (image.dataset.mediaSrcset || "").trim();
-  if (srcSet) image.setAttribute("srcset", srcSet);
+  if (srcSet) {
+    image.setAttribute("srcset", srcSet);
+  } else {
+    image.removeAttribute("srcset");
+  }
   image.setAttribute("fetchpriority", "high");
-  image.dataset.mediaLoaded = "1";
+  image.src = source;
+  if (image.complete) {
+    image.dataset.mediaLoaded = "1";
+    setCarouselCardMediaState(card, "loaded");
+  }
 };
 const maybeHydrateCarouselCardMedia = (card, distance) => {
   if (distance > CAROUSEL_MEDIA_ACTIVE_RADIUS) return;
@@ -2885,7 +2930,8 @@ const buildCarousel = (category) => {
           const srcSet = buildSrcSet(entry.item);
           return \`
             <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
-              <div class="carousel-media">
+              <div class="carousel-media is-loaded">
+                <span class="carousel-media__loader" aria-hidden="true"></span>
                 <img src="\${TRANSPARENT_PIXEL_SRC}" data-media-src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'data-media-srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
               <div class="carousel-text">

@@ -1361,15 +1361,49 @@ body {
   aspect-ratio: 1 / 1;
   display: grid;
   place-items: center;
+  position: relative;
   overflow: hidden;
   margin-bottom: -10px;
+}
+
+.carousel-media__loader {
+  position: absolute;
+  width: clamp(14px, 3vw, 24px);
+  height: clamp(14px, 3vw, 24px);
+  border-radius: 999px;
+  border: 2px solid rgba(226, 232, 240, 0.18);
+  border-top-color: rgba(251, 191, 36, 0.95);
+  opacity: 0;
+  pointer-events: none;
+  animation: carousel-media-spin 0.9s linear infinite;
+  transition: opacity 160ms ease;
 }
 
 .carousel-media img {
   width: 85%;
   height: 85%;
   object-fit: contain;
+  opacity: 0;
   filter: drop-shadow(0 16px 26px rgba(2, 6, 23, 0.5));
+  transition: opacity 180ms ease;
+}
+
+.carousel-media.is-loading .carousel-media__loader {
+  opacity: 0.9;
+}
+
+.carousel-media.is-loaded .carousel-media__loader {
+  opacity: 0;
+}
+
+.carousel-media.is-loaded img {
+  opacity: 1;
+}
+
+@keyframes carousel-media-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .menu-preview img,
