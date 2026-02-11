@@ -107,6 +107,12 @@
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
       "cover": "/projects/ffmpeg-save-1770687996930-save/assets/derived/backgrounds/backery-outside-md.webp"
+    },
+    {
+      "slug": "cafebrunch-menu",
+      "name": "CafeBrunch Menu",
+      "template": "jukebox",
+      "cover": "/projects/cafebrunch-menu/assets/derived/backgrounds/backery-outside-2014d5-md.gif"
     }
   ]
 }

@@ -146,7 +146,11 @@ export default defineConfig({
               .replace(/^-+|-+$/g, "") || fallbackPrefix;
           return `${baseStem}-${hashString(relativePath)}`;
         };
-        const COMMAND_TIMEOUT_MS = 900000;
+        const parsedCommandTimeoutMs = Number(process.env.FFMPEG_COMMAND_TIMEOUT_MS ?? "300000");
+        const COMMAND_TIMEOUT_MS =
+          Number.isFinite(parsedCommandTimeoutMs) && parsedCommandTimeoutMs > 0
+            ? Math.max(30000, Math.round(parsedCommandTimeoutMs))
+            : 300000;
         const ITEM_DERIVED_SCALE = 2 / 3;
         const BACKGROUND_DERIVED_SCALE = 2 / 3;
         const DERIVED_FALLBACK_PROFILE_ID = "ffmpeg-v2-copy-fallback";
@@ -165,8 +169,15 @@ export default defineConfig({
           await new Promise<void>((resolve, reject) => {
             const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
             const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+            let stdout = "";
             let stderr = "";
             let timedOut = false;
+            let settled = false;
+            const settle = (fn: () => void) => {
+              if (settled) return;
+              settled = true;
+              fn();
+            };
             const timeout =
               timeoutMs > 0
                 ? setTimeout(() => {
@@ -174,21 +185,30 @@ export default defineConfig({
                     child.kill("SIGKILL");
                   }, timeoutMs)
                 : null;
+            child.stdout.on("data", (chunk) => {
+              stdout += String(chunk);
+            });
             child.stderr.on("data", (chunk) => {
               stderr += String(chunk);
             });
-            child.on("error", (error) => reject(error));
+            child.on("error", (error) => {
+              if (timeout) clearTimeout(timeout);
+              settle(() => reject(error));
+            });
             child.on("close", (code) => {
               if (timeout) clearTimeout(timeout);
               if (timedOut) {
-                reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+                settle(() => reject(new Error(`${command} timed out after ${timeoutMs}ms`)));
                 return;
               }
               if (code === 0) {
-                resolve();
+                settle(() => resolve());
                 return;
               }
-              reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
+              const details = (stderr.trim() || stdout.trim() || "no command output").slice(0, 2000);
+              settle(() =>
+                reject(new Error(`${command} exited with code ${code}: ${details}`))
+              );
             });
           });
         const isOutputStale = async (sourceFull: string, outputFull: string) => {
@@ -957,7 +977,18 @@ export default defineConfig({
                 );
                 return;
               }
+              const totalItems = (projectData.categories ?? []).reduce(
+                (sum, category) => sum + (category.items?.length ?? 0),
+                0
+              );
+              const startedAt = Date.now();
+              console.info(
+                `[prepare-derived] start project=${safeProject} backgrounds=${projectData.backgrounds?.length ?? 0} items=${totalItems}`
+              );
               const prepared = await prepareProjectDerivedAssets(safeProject, projectData);
+              console.info(
+                `[prepare-derived] done project=${safeProject} elapsedMs=${Date.now() - startedAt}`
+              );
               const projectDir = path.resolve(root, safeProject);
               await fs.mkdir(projectDir, { recursive: true });
               await fs.writeFile(path.join(projectDir, "menu.json"), JSON.stringify(prepared, null, 2));
