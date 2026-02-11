@@ -6735,7 +6735,12 @@ void preloadStartupAssets();
       {/if}
 
       {#if editorVisible && !editorLocked}
-        <div class="editor-backdrop" on:click={toggleEditor}></div>
+        <button
+          class="editor-backdrop"
+          type="button"
+          aria-label={t("closeEditor")}
+          on:click={toggleEditor}
+        ></button>
       {/if}
 
       <EditorShell

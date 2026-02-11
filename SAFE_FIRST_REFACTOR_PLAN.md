@@ -125,8 +125,8 @@ Containerization must not alter:
 ## Product requirement
 - Process uploaded/imported media into fixed-size derivatives at asset import time.
 - Keep original files for source-of-truth editing and future regeneration.
-- Save project zips must include both originals and generated derivatives.
-- Exported site zips must include derivatives only (no originals).
+- Save project zips must include originals only (derived media is regenerated on import/open).
+- Exported site zips must include derived startup media and required originals for detail-card media.
 
 ## Storage direction
 Project asset folder shape should evolve toward explicit originals vs generated derivatives:
@@ -134,10 +134,10 @@ Project asset folder shape should evolve toward explicit originals vs generated 
 public/projects/<slug>/assets/
   originals/
     backgrounds/
-    dishes/
+    items/
   derived/
     backgrounds/
-    dishes/
+    items/
 ```
 
 ## Derivative profiles (initial)
@@ -172,11 +172,11 @@ Dish derivatives:
 - Save project (`*.zip`):
   - include `menu.json`,
   - include `assets/originals/**`,
-  - include `assets/derived/**`,
+  - omit `assets/derived/**`,
   - keep mapping metadata needed to regenerate or remap paths safely.
 - Export site (`*-export.zip`):
-  - include only `assets/derived/**` + runtime shell files,
-  - rewrite all runtime media references to derivative paths,
+  - include `assets/derived/**` + required `assets/originals/**` + runtime shell files,
+  - rewrite startup/runtime carousel/background references to derivative paths while keeping detail-card originals,
   - fail export (or report explicit warning policy) when required derivative is missing.
 
 ## Suggested implementation order
@@ -287,8 +287,8 @@ Status:
 - Extract export runtime builder from `App.svelte`.
 - Add golden tests for export zip structure and key file content checks.
 - Enforce save/export packaging split:
-  - save includes originals + derivatives,
-  - export includes derivatives only.
+  - save includes originals only,
+  - export includes derived startup assets plus originals needed for detail rendering.
 
 Exit criteria:
 - exported zip file set unchanged (unless versioned),

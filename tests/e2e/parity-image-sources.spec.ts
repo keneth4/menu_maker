@@ -190,7 +190,14 @@ const readPreviewSources = async (page: Page) => {
   const firstCard = page.locator("button.carousel-card").first();
   await expect(firstCard).toBeVisible();
 
-  const carouselSrc = await firstCard.locator("img").getAttribute("src");
+  const firstCardImage = firstCard.locator("img");
+  const rawCarouselSrc = (await firstCardImage.getAttribute("src")) ?? "";
+  const isPlaceholder =
+    rawCarouselSrc.startsWith("data:image/svg+xml") ||
+    rawCarouselSrc.startsWith("data:image/gif;base64,R0lGODlhAQABA");
+  const carouselSrc = isPlaceholder
+    ? ((await firstCardImage.getAttribute("data-media-src")) ?? rawCarouselSrc)
+    : rawCarouselSrc;
   await firstCard.click();
   const modal = page.locator(".dish-modal");
   await expect(modal).toBeVisible();
@@ -201,7 +208,7 @@ const readPreviewSources = async (page: Page) => {
   return { carouselSrc: carouselSrc ?? "", detailSrc: detailSrc ?? "" };
 };
 
-test("preview and exported runtime resolve the same derived image variants", async ({
+test("preview and exported runtime resolve the same carousel/detail source policy", async ({
   page
 }, testInfo) => {
   const fixturePath = await writeJsonFixture(testInfo, createParityFixture());
@@ -212,7 +219,7 @@ test("preview and exported runtime resolve the same derived image variants", asy
 
   const previewSources = await readPreviewSources(page);
   expect(previewSources.carouselSrc).toContain("dish-md-der.webp");
-  expect(previewSources.detailSrc).toContain("dish-lg-der.webp");
+  expect(previewSources.detailSrc).toContain("dish-original.gif");
 
   const downloadPromise = page.waitForEvent("download");
   await page
@@ -230,7 +237,7 @@ test("preview and exported runtime resolve the same derived image variants", asy
     await page.goto(server.url);
     const exportedSources = await readPreviewSources(page);
     expect(exportedSources.carouselSrc).toContain("dish-md-der.webp");
-    expect(exportedSources.detailSrc).toContain("dish-lg-der.webp");
+    expect(exportedSources.detailSrc).toContain("dish-original.gif");
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

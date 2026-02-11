@@ -363,8 +363,6 @@ export default defineConfig({
             "libwebp",
             "-quality",
             "78",
-            "-alpha_quality",
-            "100",
             "-compression_level",
             "4",
             "-loop",

@@ -149,9 +149,12 @@ public/projects/
   <slug>/
     menu.json
     assets/
-      backgrounds/
-      dishes/
-      sounds/
+      originals/
+        backgrounds/
+        items/
+      derived/
+        backgrounds/
+        items/
 ```
 
 Repository policy:
@@ -170,11 +173,12 @@ Imported project paths are remapped to current slug conventions when needed.
 ### Save project (`Save project`)
 Creates a project zip containing:
 - `/<slug>/menu.json`
-- `/<slug>/assets/...`
+- `/<slug>/assets/originals/...`
 
 Notes:
-- asset paths are rewritten to portable `assets/...` references inside `menu.json`,
-- responsive export media fields are removed for project-save zips.
+- save zips keep source-of-truth originals only (derived files are omitted),
+- `menu.json` is rewritten to reference `assets/originals/**`,
+- derived metadata blocks are stripped from saved `menu.json` so imports can regenerate derivatives deterministically.
 
 ### Export static site (`Export site`)
 Creates `<slug>-export.zip` containing:
@@ -190,7 +194,10 @@ Creates `<slug>-export.zip` containing:
 - `README.txt`
 
 Export rules:
-- hero images can be auto-generated into responsive variants (`small`, `medium`, `large`),
+- bridge export runs `prepare-derived` (`ffmpeg`) before packaging,
+- exported media paths point to derived startup assets for backgrounds/carousel and originals for detail-card media,
+- export package includes `assets/derived/**` and `assets/originals/**` (required for detail interactions),
+- legacy paths like `assets/backgrounds/**` and `assets/dishes/**` are excluded,
 - exported app script inlines interaction runtime and menu payload,
 - startup preload uses a blocking first-view set plus deferred warmup for remaining assets,
 - export diagnostics include deterministic manifest + budget report data,

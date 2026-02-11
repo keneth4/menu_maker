@@ -9,9 +9,9 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 - `DONE`: phase exit criteria completed
 
 ## Current phase
-- Active phase: `Phase 6 - Validation + docs sync`
+- Active phase: `None (all planned phases complete)`
 - Started: `2026-02-11`
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 
 ## Phase board
 | Phase | Name | Status | Notes |
@@ -22,7 +22,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 3 | Modal + rotation behavior update | DONE | Removed modal direction toggle and now use dish-level `rotationDirection` in preview + export runtime. |
 | 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
-| 6 | Validation + docs sync | IN_PROGRESS | Final pass on tests/perf checks and docs updates. |
+| 6 | Validation + docs sync | DONE | Validation gates + docs/tracker sync completed for current architecture decisions. |
 
 ## Phase 0 checklist
 - [x] Create a phase tracker with status board.
@@ -54,8 +54,8 @@ Upload/import processing must generate fixed-size derived assets and keep origin
 Contract:
 - Keep originals under `assets/originals/**`.
 - Keep resized variants under `assets/derived/**`.
-- Save project zips include originals + derived.
-- Export zips include derived only.
+- Save project zips include originals only.
+- Export zips include derived startup assets plus originals required for detail rendering.
 - Backgrounds use common-screen fixed resolutions (`1280x720`, `1920x1080`) with `cover` fit.
 - Dishes use square fixed resolutions (`512x512`, `768x768`) with transparent `contain` fit.
 - Derivatives are generated through an `ffmpeg` processing pipeline (animation + alpha preserved).
@@ -66,9 +66,9 @@ Tracking checklist:
 - [x] Bridge preprocessing pipeline for animated and transparent assets (`ffmpeg`) during save/export.
 - [x] Ensure `ffmpeg` is available in local + container execution paths.
 - [x] Preview/export source selection switched to derived variants.
-- [x] Save packaging includes originals + derived.
-- [x] Export packaging includes derived only + rewrite validation.
-- [x] Bridge export integration fixture validates derived-only static exports with transparent GIF input.
+- [x] Save packaging includes originals only + strips derived metadata from `menu.json`.
+- [x] Export packaging includes derived startup assets + originals for detail rendering with rewrite validation.
+- [x] Bridge export integration fixture validates packaging contract with transparent GIF input.
 - [ ] Test coverage for animated-alpha inputs and packaging contracts.
 
 ## Drift inventory (2026-02-09)
@@ -146,3 +146,7 @@ Tracking checklist:
 - Removed visible white/gray placeholder blocks while dish media streams in by switching to a transparent placeholder source.
 - Added per-card carousel loading spinner state in both preview and exported runtime so unresolved media shows an intentional loading affordance instead of an empty square.
 - Added per-source media readiness tracking in preview (`category + item + source`) to avoid stale loaded-state reuse when item media source paths change.
+- Removed unsupported ffmpeg `-alpha_quality` flag from derive pipeline to avoid container runtime failures (`Unrecognized option 'alpha_quality'`).
+- Resolved dev-console Svelte a11y warnings in `App.svelte`, `DishModal.svelte`, and `AssetsManager.svelte` by using semantic interactive elements/roles.
+- Updated parity e2e to validate current source policy (derived carousel/background + original detail) and placeholder-aware source reading.
+- Synced roadmap/docs to implemented save/export contract and marked Phase 6 complete.

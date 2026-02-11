@@ -263,6 +263,11 @@ body {
   background: rgba(2, 6, 23, 0.6);
   backdrop-filter: blur(6px);
   z-index: 30;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  cursor: default;
 }
 
 .editor-panel {
@@ -1465,6 +1470,16 @@ body {
   padding: 20px;
 }
 
+.dish-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
 .dish-modal__card {
   width: min(440px, 90vw);
   border-radius: 24px;
@@ -1477,6 +1492,7 @@ body {
   color: #e2e8f0;
   max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  z-index: 1;
 }
 
 .dish-modal__header {

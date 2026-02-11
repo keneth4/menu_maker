@@ -117,8 +117,19 @@
     <p>{t("uploadHint")}</p>
     <div
       class={`asset-drop__zone ${assetProjectReadOnly ? "disabled" : ""}`}
+      role="button"
+      tabindex={assetProjectReadOnly ? -1 : 0}
+      aria-label={t("uploadAssets")}
       on:dragover={handleAssetDragOver}
       on:drop={handleAssetDrop}
+      on:click={() => !assetProjectReadOnly && assetUploadInput?.click()}
+      on:keydown={(event) => {
+        if (assetProjectReadOnly) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          assetUploadInput?.click();
+        }
+      }}
     >
       {t("dragDrop")}
     </div>

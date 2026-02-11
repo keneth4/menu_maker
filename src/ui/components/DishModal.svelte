@@ -30,8 +30,18 @@
   }
 </script>
 
-<div class="dish-modal" on:click={() => dispatch("close")}>
-  <div class="dish-modal__card" on:click|stopPropagation>
+<div
+  class="dish-modal"
+  role="dialog"
+  aria-modal="true"
+>
+  <button
+    class="dish-modal__backdrop"
+    type="button"
+    aria-label="Close"
+    on:click={() => dispatch("close")}
+  ></button>
+  <div class="dish-modal__card">
     <div class="dish-modal__header">
       <p class="dish-modal__title">{textOf(dish.name)}</p>
       <button class="dish-modal__close" type="button" on:click={() => dispatch("close")}>✕</button>
