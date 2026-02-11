@@ -23,14 +23,22 @@ export default defineConfig({
           await fs.mkdir(base, { recursive: true });
           await fs.mkdir(path.resolve(base, "originals", "backgrounds"), { recursive: true });
           await fs.mkdir(path.resolve(base, "originals", "items"), { recursive: true });
+          await fs.mkdir(path.resolve(base, "originals", "fonts"), { recursive: true });
           await fs.mkdir(path.resolve(base, "derived", "backgrounds"), { recursive: true });
           await fs.mkdir(path.resolve(base, "derived", "items"), { recursive: true });
           return base;
         };
         const sanitizeSlug = (value: string) => normalizeProjectSlug(value);
+        const mapLegacyAssetRelative = (value: string) => {
+          const normalized = value.replace(/^\/+/, "");
+          if (normalized.startsWith("fonts/") || normalized === "fonts") {
+            return `originals/fonts${normalized.slice("fonts".length)}`;
+          }
+          return normalized;
+        };
         const resolveAssetPath = async (project: string, targetPath: string) => {
           const base = await ensureProjectRoot(project);
-          const safePath = targetPath.replace(/^\/+/, "");
+          const safePath = mapLegacyAssetRelative(targetPath);
           const full = path.resolve(base, safePath);
           if (!full.startsWith(base)) {
             throw new Error("Invalid path");
@@ -111,9 +119,9 @@ export default defineConfig({
             return anyProjectMatch[1];
           }
           if (clean.startsWith("assets/")) {
-            return clean.slice("assets/".length);
+            return mapLegacyAssetRelative(clean.slice("assets/".length));
           }
-          return clean;
+          return mapLegacyAssetRelative(clean);
         };
         const toPublicAssetPath = (projectSlug: string, relativePath: string) =>
           `/projects/${projectSlug}/assets/${relativePath.replace(/^\/+/, "")}`;

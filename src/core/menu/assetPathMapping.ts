@@ -32,6 +32,18 @@ const mapDerivedMap = (
   };
 };
 
+const mapFontConfig = (
+  value: { family?: string; source?: string } | undefined,
+  mapPath: (value: string) => string
+) => {
+  if (!value) return value;
+  const source = mapPathValue(value.source, mapPath);
+  return {
+    ...(value.family !== undefined ? { family: value.family } : {}),
+    ...(source !== undefined ? { source } : {})
+  };
+};
+
 export const mapProjectAssetPaths = (
   project: MenuProject,
   mapPath: (value: string) => string
@@ -44,6 +56,21 @@ export const mapProjectAssetPaths = (
       : {}),
     ...(project.meta.logoSrc
       ? { logoSrc: mapPathValue(project.meta.logoSrc, mapPath) ?? project.meta.logoSrc }
+      : {}),
+    ...(project.meta.fontRoles
+      ? {
+          fontRoles: {
+            ...(project.meta.fontRoles.identity
+              ? { identity: mapFontConfig(project.meta.fontRoles.identity, mapPath) }
+              : {}),
+            ...(project.meta.fontRoles.section
+              ? { section: mapFontConfig(project.meta.fontRoles.section, mapPath) }
+              : {}),
+            ...(project.meta.fontRoles.item
+              ? { item: mapFontConfig(project.meta.fontRoles.item, mapPath) }
+              : {})
+          }
+        }
       : {})
   },
   backgrounds: project.backgrounds.map((bg) => ({
@@ -60,6 +87,7 @@ export const mapProjectAssetPaths = (
         ...item.media,
         hero360: mapPathValue(item.media.hero360, mapPath),
         originalHero360: mapPathValue(item.media.originalHero360, mapPath),
+        scrollAnimationSrc: mapPathValue(item.media.scrollAnimationSrc, mapPath),
         gallery: item.media.gallery?.map((entry) => mapPathValue(entry, mapPath) ?? entry),
         responsive: item.media.responsive
           ? {
@@ -75,7 +103,16 @@ export const mapProjectAssetPaths = (
             }
           : item.media.responsive,
         derived: mapDerivedMap(item.media.derived, mapPath)
-      }
+      },
+      ...(item.typography
+        ? {
+            typography: {
+              ...(item.typography.item
+                ? { item: mapFontConfig(item.typography.item, mapPath) }
+                : {})
+            }
+          }
+        : {})
     }))
   }))
 });

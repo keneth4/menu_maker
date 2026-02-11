@@ -19,6 +19,20 @@ const createProject = (): MenuProject => ({
     defaultLocale: "es",
     currency: "USD",
     fontSource: "/projects/demo-menu/assets/fonts/menu.woff2",
+    fontRoles: {
+      identity: {
+        family: "Identity",
+        source: "/projects/demo-menu/assets/fonts/identity.woff2"
+      },
+      section: {
+        family: "Section",
+        source: "assets/fonts/section.woff2"
+      },
+      item: {
+        family: "Item",
+        source: "/projects/demo-menu/assets/fonts/item.woff2"
+      }
+    },
     logoSrc: "/projects/demo-menu/assets/branding/logo.webp"
   },
   backgrounds: [
@@ -51,6 +65,7 @@ const createProject = (): MenuProject => ({
           media: {
             hero360: "/projects/demo-menu/assets/items/tostada.webp",
             originalHero360: "/projects/demo-menu/assets/originals/items/tostada.gif",
+            scrollAnimationSrc: "/projects/demo-menu/assets/items/tostada-wiggle.gif",
             gallery: ["/projects/demo-menu/assets/items/tostada-side.webp"],
             responsive: {
               small: "assets/items/tostada-sm.webp",
@@ -66,6 +81,12 @@ const createProject = (): MenuProject => ({
               large: {
                 webp: "/projects/demo-menu/assets/derived/items/tostada-lg.webp"
               }
+            }
+          },
+          typography: {
+            item: {
+              family: "Item Override",
+              source: "/projects/demo-menu/assets/fonts/item-override.woff2"
             }
           }
         }
@@ -92,9 +113,14 @@ describe("project zip helpers", () => {
 
     expect(collectProjectAssetPaths(project, normalize)).toEqual([
       "projects/demo-menu/assets/fonts/menu.woff2",
+      "projects/demo-menu/assets/fonts/identity.woff2",
+      "assets/fonts/section.woff2",
+      "projects/demo-menu/assets/fonts/item.woff2",
       "projects/demo-menu/assets/branding/logo.webp",
       "projects/demo-menu/assets/backgrounds/main.jpg",
-      "projects/demo-menu/assets/items/tostada.webp"
+      "projects/demo-menu/assets/items/tostada.webp",
+      "projects/demo-menu/assets/items/tostada-wiggle.gif",
+      "projects/demo-menu/assets/fonts/item-override.woff2"
     ]);
   });
 
@@ -132,10 +158,15 @@ describe("project zip helpers", () => {
     const project = createProject();
     expect(collectSaveProjectAssetPaths(project, normalize)).toEqual([
       "projects/demo-menu/assets/fonts/menu.woff2",
+      "projects/demo-menu/assets/fonts/identity.woff2",
+      "assets/fonts/section.woff2",
+      "projects/demo-menu/assets/fonts/item.woff2",
       "projects/demo-menu/assets/branding/logo.webp",
       "projects/demo-menu/assets/originals/backgrounds/main.gif",
       "projects/demo-menu/assets/originals/items/tostada.gif",
-      "projects/demo-menu/assets/items/tostada-side.webp"
+      "projects/demo-menu/assets/items/tostada-wiggle.gif",
+      "projects/demo-menu/assets/items/tostada-side.webp",
+      "projects/demo-menu/assets/fonts/item-override.woff2"
     ]);
   });
 
@@ -143,11 +174,16 @@ describe("project zip helpers", () => {
     const project = createProject();
     expect(collectExportProjectAssetPaths(project, normalize)).toEqual([
       "projects/demo-menu/assets/fonts/menu.woff2",
+      "projects/demo-menu/assets/fonts/identity.woff2",
+      "assets/fonts/section.woff2",
+      "projects/demo-menu/assets/fonts/item.woff2",
       "projects/demo-menu/assets/branding/logo.webp",
       "projects/demo-menu/assets/originals/backgrounds/main.gif",
       "projects/demo-menu/assets/derived/backgrounds/main-md.webp",
       "projects/demo-menu/assets/derived/backgrounds/main-lg.webp",
       "projects/demo-menu/assets/originals/items/tostada.gif",
+      "projects/demo-menu/assets/items/tostada-wiggle.gif",
+      "projects/demo-menu/assets/fonts/item-override.woff2",
       "projects/demo-menu/assets/derived/items/tostada-md.webp",
       "projects/demo-menu/assets/derived/items/tostada-md.gif",
       "projects/demo-menu/assets/derived/items/tostada-lg.webp"
@@ -164,6 +200,20 @@ describe("project zip helpers", () => {
     const rewritten = rewriteProjectForSaveZip(project, pairs, normalize);
 
     expect(rewritten.meta.fontSource).toBe("assets/fonts/menu.woff2");
+    expect(rewritten.meta.fontRoles).toEqual({
+      identity: {
+        family: "Identity",
+        source: "assets/fonts/identity.woff2"
+      },
+      section: {
+        family: "Section",
+        source: "assets/fonts/section.woff2"
+      },
+      item: {
+        family: "Item",
+        source: "assets/fonts/item.woff2"
+      }
+    });
     expect(rewritten.meta.logoSrc).toBe("assets/branding/logo.webp");
     expect(rewritten.backgrounds[0].src).toBe("assets/originals/backgrounds/main.gif");
     expect(rewritten.backgrounds[0].originalSrc).toBe("assets/originals/backgrounds/main.gif");
@@ -172,11 +222,20 @@ describe("project zip helpers", () => {
     expect(rewritten.categories[0].items[0].media.originalHero360).toBe(
       "assets/originals/items/tostada.gif"
     );
+    expect(rewritten.categories[0].items[0].media.scrollAnimationSrc).toBe(
+      "assets/items/tostada-wiggle.gif"
+    );
     expect(rewritten.categories[0].items[0].media.gallery).toEqual([
       "assets/items/tostada-side.webp"
     ]);
     expect(rewritten.categories[0].items[0].media.responsive).toBeUndefined();
     expect(rewritten.categories[0].items[0].media.derived).toBeUndefined();
+    expect(rewritten.categories[0].items[0].typography).toEqual({
+      item: {
+        family: "Item Override",
+        source: "assets/fonts/item-override.woff2"
+      }
+    });
   });
 
   it("builds menu and asset entries, skipping missing assets", async () => {
@@ -200,9 +259,14 @@ describe("project zip helpers", () => {
 
     const names = entries.map((entry) => entry.name);
     expect(names).toContain("demo-menu/assets/fonts/menu.woff2");
+    expect(names).toContain("demo-menu/assets/fonts/identity.woff2");
+    expect(names).toContain("demo-menu/assets/fonts/section.woff2");
+    expect(names).toContain("demo-menu/assets/fonts/item.woff2");
     expect(names).toContain("demo-menu/assets/branding/logo.webp");
     expect(names).toContain("demo-menu/assets/originals/items/tostada.gif");
+    expect(names).toContain("demo-menu/assets/items/tostada-wiggle.gif");
     expect(names).toContain("demo-menu/assets/items/tostada-side.webp");
+    expect(names).toContain("demo-menu/assets/fonts/item-override.woff2");
     expect(names).not.toContain("demo-menu/assets/originals/backgrounds/main.gif");
     expect(missing).toEqual([]);
   });

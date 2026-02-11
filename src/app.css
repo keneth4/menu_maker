@@ -150,11 +150,6 @@ body {
   color: #fecaca;
 }
 
-.app-shell.full {
-  --app-pad: 14px;
-  padding: var(--app-pad);
-}
-
 .split-layout {
   display: grid;
   gap: 20px;
@@ -163,6 +158,7 @@ body {
 }
 
 .preview-panel {
+  display: grid;
   min-height: 80vh;
   min-height: 80dvh;
   overflow: hidden;
@@ -171,35 +167,30 @@ body {
 
 .editor-panel {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: auto;
-  width: min(520px, 92vw);
+  left: 50%;
+  top: 24px;
+  width: min(50vw, 860px);
+  max-width: calc(100vw - 48px);
+  max-height: calc(100dvh - 48px);
   background: rgba(2, 6, 23, 0.98);
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
   padding: 20px;
   overflow-y: auto;
   overflow-x: hidden;
-  transform: translateX(100%);
-  transition: transform 250ms ease;
-  box-shadow: -20px 0 40px rgba(2, 6, 23, 0.55);
+  transform: translate(-50%, 20px) scale(0.985);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 250ms ease, opacity 220ms ease;
+  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.56);
   z-index: 40;
+  color: #e2e8f0;
 }
 
-.editor-panel.open {
-  transform: translateX(0);
-}
-
-.editor-panel.locked {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  transform: translateX(0);
-  border-radius: 24px;
-  background: rgba(15, 23, 42, 0.6);
-  border-left: none;
-  box-shadow: none;
+.editor-panel.open.desktop-card {
+  transform: translate(-50%, 0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .editor-panel__header {
@@ -260,18 +251,14 @@ body {
 .editor-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.6);
-  backdrop-filter: blur(6px);
+  background: rgba(2, 6, 23, 0.32);
+  backdrop-filter: blur(2px);
   z-index: 30;
   border: 0;
   margin: 0;
   padding: 0;
   width: 100%;
   cursor: default;
-}
-
-.editor-panel {
-  color: #e2e8f0;
 }
 
 .editor-eyebrow {
@@ -349,6 +336,28 @@ body {
   gap: 16px;
   min-width: 0;
   width: 100%;
+}
+
+@media (max-width: 899px) {
+  .editor-panel.mobile-sheet {
+    left: 0;
+    top: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px
+      calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(100%);
+    opacity: 1;
+  }
+
+  .editor-panel.open.mobile-sheet {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 }
 
 .editor-toolbar {
@@ -495,15 +504,6 @@ body {
   place-items: stretch;
 }
 
-.preview-panel.full {
-  display: grid;
-}
-
-.preview-panel.split {
-  display: grid;
-  justify-items: stretch;
-}
-
 /* EXPORT_SHARED_STYLES_START */
 
 .menu-preview {
@@ -517,7 +517,7 @@ body {
   background: rgba(2, 6, 23, 0.9);
   display: flex;
   flex-direction: column;
-  font-family: var(--menu-font, "Fraunces", "Georgia", serif);
+  font-family: var(--menu-font-ui, var(--menu-font, "Fraunces", "Georgia", serif));
 }
 
 .menu-background {
@@ -558,6 +558,7 @@ body {
 
 .menu-title-block {
   flex: 1;
+  font-family: var(--menu-font-identity, var(--menu-font-ui, "Fraunces", "Georgia", serif));
 }
 
 .menu-lang {
@@ -779,6 +780,7 @@ body {
 }
 
 .section-nav__label {
+  font-family: var(--menu-font-section, var(--menu-font-ui, "Fraunces", "Georgia", serif));
   font-size: 0.52rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -801,6 +803,7 @@ body {
 }
 
 .focus-rows-hint__label {
+  font-family: var(--menu-font-section, var(--menu-font-ui, "Fraunces", "Georgia", serif));
   font-size: 0.52rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -893,6 +896,7 @@ body {
 }
 
 .menu-section__title {
+  font-family: var(--menu-font-section, var(--menu-font-ui, "Fraunces", "Georgia", serif));
   margin: 0;
   font-size: 0.75rem;
 }
@@ -1279,6 +1283,10 @@ body {
 }
 
 .carousel-card {
+  font-family: var(
+    --item-font,
+    var(--menu-font-item, var(--menu-font-ui, "Fraunces", "Georgia", serif))
+  );
   --fade: 1;
   width: var(--carousel-card);
   min-width: var(--carousel-card);
@@ -1481,6 +1489,10 @@ body {
 }
 
 .dish-modal__card {
+  font-family: var(
+    --item-font,
+    var(--menu-font-item, var(--menu-font-ui, "Fraunces", "Georgia", serif))
+  );
   width: min(440px, 90vw);
   border-radius: 24px;
   background: rgba(15, 23, 42, 0.95);
@@ -2576,11 +2588,6 @@ body {
 @media (min-width: 900px) {
   .split-layout {
     grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .split-layout.split {
-    grid-template-columns: minmax(520px, 2fr) minmax(320px, 1fr);
     align-items: start;
   }
 }

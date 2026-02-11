@@ -65,6 +65,40 @@ const normalizeBackgroundCarouselSeconds = (value: unknown) => {
   return Math.min(60, Math.max(2, Math.round(parsed)));
 };
 
+const normalizeBackgroundDisplayMode = (value: unknown): "carousel" | "section" =>
+  value === "section" ? "section" : "carousel";
+
+const normalizeFontConfig = (value: unknown) => {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const family = normalizeOptionalText(source.family);
+  const fontSource = normalizeOptionalText(source.source);
+  if (family === undefined && fontSource === undefined) {
+    return undefined;
+  }
+  return {
+    ...(family !== undefined ? { family } : {}),
+    ...(fontSource !== undefined ? { source: fontSource } : {})
+  };
+};
+
+const normalizeFontRoles = (value: unknown) => {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const identity = normalizeFontConfig(source.identity);
+  const section = normalizeFontConfig(source.section);
+  const item = normalizeFontConfig(source.item);
+  if (!identity && !section && !item) return undefined;
+  return {
+    ...(identity ? { identity } : {}),
+    ...(section ? { section } : {}),
+    ...(item ? { item } : {})
+  };
+};
+
+const normalizeScrollAnimationMode = (value: unknown): "hero360" | "alternate" =>
+  value === "alternate" ? "alternate" : "hero360";
+
 export const normalizeProject = (value: MenuProject): MenuProject => {
   const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
   value.meta.locales = locales;
@@ -92,9 +126,13 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
   value.meta.backgroundCarouselSeconds = normalizeBackgroundCarouselSeconds(
     value.meta.backgroundCarouselSeconds
   );
+  value.meta.backgroundDisplayMode = normalizeBackgroundDisplayMode(
+    value.meta.backgroundDisplayMode
+  );
+  value.meta.fontRoles = normalizeFontRoles(value.meta.fontRoles);
 
   const defaultLocale = value.meta.defaultLocale ?? "en";
-  value.backgrounds = (value.backgrounds ?? []).map((asset) => {
+  const normalizedBackgrounds = (value.backgrounds ?? []).map((asset) => {
     const src = normalizeOptionalText(asset.src) ?? "";
     const originalSrc = normalizeOptionalText(asset.originalSrc) ?? src;
     return {
@@ -104,44 +142,67 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
       derived: normalizeDerivedMap(asset.derived)
     };
   });
-  value.categories = (value.categories ?? []).map((category) => ({
-    ...category,
-    items: (category.items ?? []).map((item) => ({
-      ...item,
-      media: {
-        ...(item.media ?? {}),
-        hero360: normalizeOptionalText(item.media?.hero360) ?? "",
-        originalHero360:
-          normalizeOptionalText(item.media?.originalHero360) ??
-          normalizeOptionalText(item.media?.hero360) ??
-          "",
-        rotationDirection: normalizeRotationDirection(item.media?.rotationDirection),
-        gallery:
-          item.media?.gallery
-            ?.map((entry) => normalizeOptionalText(entry))
-            .filter((entry): entry is string => entry !== undefined) ?? [],
-        responsive: item.media?.responsive
-          ? {
-              ...(normalizeOptionalText(item.media.responsive.small) !== undefined
-                ? { small: normalizeOptionalText(item.media.responsive.small) }
-                : {}),
-              ...(normalizeOptionalText(item.media.responsive.medium) !== undefined
-                ? { medium: normalizeOptionalText(item.media.responsive.medium) }
-                : {}),
-              ...(normalizeOptionalText(item.media.responsive.large) !== undefined
-                ? { large: normalizeOptionalText(item.media.responsive.large) }
-                : {})
-            }
-          : undefined,
-        derived: normalizeDerivedMap(item.media?.derived)
-      },
-      allergens: normalizeAllergenEntries(
-        (item as { allergens?: unknown }).allergens,
-        locales,
-        defaultLocale
-      )
-    }))
-  }));
+  value.backgrounds = normalizedBackgrounds;
+  const backgroundIdSet = new Set(
+    normalizedBackgrounds.map((background) => background.id).filter(Boolean)
+  );
+  const fallbackBackgroundId = normalizedBackgrounds.find((background) => background.id)?.id;
+  value.categories = (value.categories ?? []).map((category) => {
+    const normalizedBackgroundId = normalizeOptionalText(
+      (category as { backgroundId?: unknown }).backgroundId
+    );
+    const backgroundId =
+      normalizedBackgroundId && backgroundIdSet.has(normalizedBackgroundId)
+        ? normalizedBackgroundId
+        : fallbackBackgroundId;
+    return {
+      ...category,
+      ...(backgroundId ? { backgroundId } : {}),
+      items: (category.items ?? []).map((item) => {
+        const normalizedItemFont = normalizeFontConfig(
+          (item as { typography?: { item?: unknown } }).typography?.item
+        );
+        return {
+          ...item,
+          media: {
+            ...(item.media ?? {}),
+            hero360: normalizeOptionalText(item.media?.hero360) ?? "",
+            originalHero360:
+              normalizeOptionalText(item.media?.originalHero360) ??
+              normalizeOptionalText(item.media?.hero360) ??
+              "",
+            rotationDirection: normalizeRotationDirection(item.media?.rotationDirection),
+            scrollAnimationMode: normalizeScrollAnimationMode(item.media?.scrollAnimationMode),
+            scrollAnimationSrc: normalizeOptionalText(item.media?.scrollAnimationSrc) ?? "",
+            gallery:
+              item.media?.gallery
+                ?.map((entry) => normalizeOptionalText(entry))
+                .filter((entry): entry is string => entry !== undefined) ?? [],
+            responsive: item.media?.responsive
+              ? {
+                  ...(normalizeOptionalText(item.media.responsive.small) !== undefined
+                    ? { small: normalizeOptionalText(item.media.responsive.small) }
+                    : {}),
+                  ...(normalizeOptionalText(item.media.responsive.medium) !== undefined
+                    ? { medium: normalizeOptionalText(item.media.responsive.medium) }
+                    : {}),
+                  ...(normalizeOptionalText(item.media.responsive.large) !== undefined
+                    ? { large: normalizeOptionalText(item.media.responsive.large) }
+                    : {})
+                }
+              : undefined,
+            derived: normalizeDerivedMap(item.media?.derived)
+          },
+          ...(normalizedItemFont ? { typography: { item: normalizedItemFont } } : {}),
+          allergens: normalizeAllergenEntries(
+            (item as { allergens?: unknown }).allergens,
+            locales,
+            defaultLocale
+          )
+        };
+      })
+    };
+  });
 
   value.meta.template = LEGACY_TEMPLATE_MAP[value.meta.template] ?? value.meta.template;
   if (!value.meta.template) {

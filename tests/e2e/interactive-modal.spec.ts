@@ -15,6 +15,13 @@ const openProjectFromLanding = async (page: Page, fixturePath: string) => {
   await chooser.setFiles(fixturePath);
 };
 
+const closeEditorIfOpen = async (page: Page) => {
+  const closeButton = page.getByRole("button", { name: /cerrar editor|close editor/i }).first();
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click();
+  }
+};
+
 test("interactive modal enables drag-to-rotate canvas for sample project", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => {
@@ -25,7 +32,7 @@ test("interactive modal enables drag-to-rotate canvas for sample project", async
   await page.goto("/");
   await openProjectFromLanding(page, sampleMenuPath);
 
-  await page.getByRole("button", { name: /cerrar editor|close editor/i }).first().click();
+  await closeEditorIfOpen(page);
 
   const firstDishCard = page.locator("button.carousel-card").first();
   await expect(firstDishCard).toBeVisible();

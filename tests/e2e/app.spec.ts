@@ -91,6 +91,10 @@ const openProjectFromLanding = async (page: Page, fixturePath: string) => {
   await chooser.setFiles(fixturePath);
 };
 
+const openEditor = async (page: Page) => {
+  await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
+};
+
 const getProjectNameInput = (page: Page) =>
   page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
@@ -108,10 +112,12 @@ test("landing shows Menu Maker header", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /menu maker/i })).toBeVisible();
 });
 
-test("create project opens editor shell", async ({ page }) => {
+test("create project starts with editor closed and opens on toggle", async ({ page }) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
+  await openEditor(page);
   await expect(page.getByText(/centro de control del proyecto|project control center/i)).toBeVisible();
 });
 
@@ -121,6 +127,7 @@ test("open project from JSON file", async ({ page }, testInfo) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
+  await openEditor(page);
   await expect(getProjectNameInput(page)).toHaveValue("JSON Smoke Project");
 });
 
@@ -130,6 +137,7 @@ test("open project from ZIP file", async ({ page }, testInfo) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
+  await openEditor(page);
   await expect(getProjectNameInput(page)).toHaveValue("ZIP Smoke Project");
 });
 
@@ -146,6 +154,7 @@ test("save project and export static site create zip downloads", async ({ page }
   await disableBridgeMode(page);
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
 
   const saveDownloadPromise = page.waitForEvent("download");
   page.once("dialog", (dialog) => dialog.accept("phase0-save.zip"));
@@ -175,4 +184,104 @@ test("save project and export static site create zip downloads", async ({ page }
     budgets: { checks: Array<{ status: string }> };
   };
   expect(report.budgets.checks.filter((check) => check.status === "fail")).toEqual([]);
+});
+
+test("desktop editor opens as centered card and closes on backdrop click", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
+  await openEditor(page);
+  await expect(page.locator(".editor-panel.open.desktop-card")).toBeVisible();
+  await expect(page.locator(".editor-backdrop")).toBeVisible();
+
+  await page.locator(".editor-backdrop").click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
+});
+
+test("desktop editor card width is around 50vw and constrained to viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const metrics = await page.evaluate(() => {
+    const editor = document.querySelector(".editor-panel") as HTMLElement | null;
+    if (!editor) return null;
+    const rect = editor.getBoundingClientRect();
+    return {
+      width: rect.width,
+      left: rect.left,
+      right: rect.right,
+      viewportWidth: window.innerWidth
+    };
+  });
+
+  expect(metrics).not.toBeNull();
+  expect(metrics!.width).toBeGreaterThan(700);
+  expect(metrics!.width).toBeLessThan(740);
+  expect(metrics!.left).toBeGreaterThanOrEqual(0);
+  expect(metrics!.right).toBeLessThanOrEqual(metrics!.viewportWidth);
+});
+
+test("mobile editor opens as full-screen sheet and closes with close button", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await expect(page.locator(".editor-panel.open.mobile-sheet")).toBeVisible();
+  const metrics = await page.evaluate(() => {
+    const editor = document.querySelector(".editor-panel") as HTMLElement | null;
+    if (!editor) return null;
+    const rect = editor.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  expect(metrics).not.toBeNull();
+  expect(Math.abs(metrics!.width - metrics!.viewportWidth)).toBeLessThanOrEqual(2);
+  expect(Math.abs(metrics!.height - metrics!.viewportHeight)).toBeLessThanOrEqual(2);
+
+  await page.getByRole("button", { name: /cerrar editor|close editor/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
+});
+
+test("preview stays full width when desktop editor card opens", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+
+  const before = await page.evaluate(() => {
+    const preview = document.querySelector(".menu-preview") as HTMLElement | null;
+    const panel = document.querySelector(".preview-panel") as HTMLElement | null;
+    if (!preview || !panel) return null;
+    return {
+      previewWidth: preview.getBoundingClientRect().width,
+      panelWidth: panel.getBoundingClientRect().width
+    };
+  });
+  expect(before).not.toBeNull();
+
+  await openEditor(page);
+  const after = await page.evaluate(() => {
+    const preview = document.querySelector(".menu-preview") as HTMLElement | null;
+    const panel = document.querySelector(".preview-panel") as HTMLElement | null;
+    if (!preview || !panel) return null;
+    return {
+      previewWidth: preview.getBoundingClientRect().width,
+      panelWidth: panel.getBoundingClientRect().width
+    };
+  });
+  expect(after).not.toBeNull();
+  expect(Math.abs(after!.previewWidth - after!.panelWidth)).toBeLessThanOrEqual(2);
+  expect(Math.abs(after!.previewWidth - before!.previewWidth)).toBeLessThanOrEqual(2);
 });

@@ -12,11 +12,19 @@ const buildProjectFixture = (): MenuProject =>
       defaultLocale: "es",
       currency: "MXN"
     },
-    backgrounds: [],
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "Main",
+        src: "/projects/sample-cafebrunch-menu/assets/backgrounds/coffe-drops.gif",
+        type: "image"
+      }
+    ],
     categories: [
       {
         id: "cat-1",
         name: { es: "Postres" },
+        backgroundId: "bg-missing",
         items: [
           {
             id: "dish-1",
@@ -55,11 +63,15 @@ describe("normalizeProject", () => {
     expect(normalized.meta.fontSource).toBe("");
     expect(normalized.meta.currencyPosition).toBe("left");
     expect(normalized.meta.backgroundCarouselSeconds).toBe(9);
+    expect(normalized.meta.backgroundDisplayMode).toBe("carousel");
     expect(normalized.meta.template).toBe("focus-rows");
+    expect(normalized.categories[0].backgroundId).toBe("bg-1");
     expect(normalized.categories[0].items[0].media.originalHero360).toBe(
       "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
     );
     expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
+    expect(normalized.categories[0].items[0].media.scrollAnimationMode).toBe("hero360");
+    expect(normalized.categories[0].items[0].media.scrollAnimationSrc).toBe("");
 
     const allergens = normalized.categories[0].items[0].allergens ?? [];
     expect(allergens).toHaveLength(2);
@@ -89,6 +101,38 @@ describe("normalizeProject", () => {
     expect(normalized.meta.identityMode).toBe("text");
     expect(normalized.meta.logoSrc).toBe("/projects/demo/assets/logo.webp");
     expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
+  });
+
+  it("normalizes section background mode, animation mode, and font configs", () => {
+    const project = buildProjectFixture();
+    (project.meta as { backgroundDisplayMode?: string }).backgroundDisplayMode = "per-section";
+    project.meta.fontRoles = {
+      identity: { family: "  Display  ", source: "  assets/fonts/display.woff2  " },
+      section: { family: "  " },
+      item: { source: "  " }
+    };
+    (project.categories[0].items[0].media as { scrollAnimationMode?: string }).scrollAnimationMode =
+      "wiggle";
+    project.categories[0].items[0].media.scrollAnimationSrc = "  assets/items/wiggle.gif  ";
+    project.categories[0].items[0].typography = {
+      item: { family: "  Item Sans  ", source: "  assets/fonts/item.woff2  " }
+    };
+
+    const normalized = normalizeProject(project);
+
+    expect(normalized.meta.backgroundDisplayMode).toBe("carousel");
+    expect(normalized.meta.fontRoles).toEqual({
+      identity: { family: "Display", source: "assets/fonts/display.woff2" },
+      section: { family: "" },
+      item: { source: "" }
+    });
+    expect(normalized.categories[0].items[0].media.scrollAnimationMode).toBe("hero360");
+    expect(normalized.categories[0].items[0].media.scrollAnimationSrc).toBe(
+      "assets/items/wiggle.gif"
+    );
+    expect(normalized.categories[0].items[0].typography).toEqual({
+      item: { family: "Item Sans", source: "assets/fonts/item.woff2" }
+    });
   });
 
   it("normalizes background carousel timing into a safe seconds range", () => {

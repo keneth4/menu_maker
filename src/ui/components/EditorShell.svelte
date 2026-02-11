@@ -1,7 +1,7 @@
 <script lang="ts">
   export let t: (key: string) => string = (key) => key;
   export let editorVisible = false;
-  export let editorLocked = false;
+  export let editorPresentation: "desktop-card" | "mobile-sheet" = "desktop-card";
   export let uiLang: "es" | "en" = "es";
   export let editorTab: "info" | "assets" | "edit" | "wizard" = "info";
 
@@ -11,7 +11,7 @@
   export let toggleEditor: () => void = () => {};
 </script>
 
-<aside class="editor-panel {editorVisible ? 'open' : ''} {editorLocked ? 'locked' : ''}">
+<aside class="editor-panel {editorVisible ? 'open' : ''} {editorPresentation}">
   <div class="editor-panel__header">
     <div>
       <p class="editor-eyebrow">{t("studioTitle")}</p>
@@ -47,16 +47,14 @@
           EN
         </button>
       </div>
-      {#if !editorLocked}
-        <button
-          class="editor-close"
-          type="button"
-          aria-label={t("closeEditor")}
-          on:click={toggleEditor}
-        >
-          ✕
-        </button>
-      {/if}
+      <button
+        class="editor-close"
+        type="button"
+        aria-label={t("closeEditor")}
+        on:click={toggleEditor}
+      >
+        ✕
+      </button>
     </div>
   </div>
 

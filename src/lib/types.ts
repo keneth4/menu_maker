@@ -4,6 +4,11 @@ export type LocalizedText = {
   [locale: LocaleCode]: string;
 };
 
+export type FontConfig = {
+  family?: string;
+  source?: string;
+};
+
 export type MediaAsset = {
   id: string;
   label: string;
@@ -35,6 +40,8 @@ export type MenuItem = {
     hero360?: string;
     originalHero360?: string;
     rotationDirection?: "cw" | "ccw";
+    scrollAnimationMode?: "hero360" | "alternate";
+    scrollAnimationSrc?: string;
     gallery?: string[];
     responsive?: {
       small?: string;
@@ -42,6 +49,9 @@ export type MenuItem = {
       large?: string;
     };
     derived?: DerivedMediaMap;
+  };
+  typography?: {
+    item?: FontConfig;
   };
 };
 
@@ -57,6 +67,7 @@ export type DerivedMediaMap = {
 export type MenuCategory = {
   id: string;
   name: LocalizedText;
+  backgroundId?: string;
   items: MenuItem[];
 };
 
@@ -83,12 +94,18 @@ export type MenuProject = {
     logoSrc?: string;
     fontFamily?: string;
     fontSource?: string;
+    fontRoles?: {
+      identity?: FontConfig;
+      section?: FontConfig;
+      item?: FontConfig;
+    };
     template: string;
     locales: LocaleCode[];
     defaultLocale: LocaleCode;
     currency: string;
     currencyPosition?: "left" | "right";
     backgroundCarouselSeconds?: number;
+    backgroundDisplayMode?: "carousel" | "section";
   };
   backgrounds: MediaAsset[];
   categories: MenuCategory[];

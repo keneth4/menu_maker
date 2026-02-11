@@ -5,6 +5,7 @@
   export let dish: MenuItem;
   export let interactiveEnabled = false;
   export let detailRotateHint = "";
+  export let itemFontStyle = "";
   export let modalMediaHost: HTMLDivElement | null = null;
   export let modalMediaImage: HTMLImageElement | null = null;
 
@@ -41,7 +42,7 @@
     aria-label="Close"
     on:click={() => dispatch("close")}
   ></button>
-  <div class="dish-modal__card">
+  <div class="dish-modal__card" style={itemFontStyle}>
     <div class="dish-modal__header">
       <p class="dish-modal__title">{textOf(dish.name)}</p>
       <button class="dish-modal__close" type="button" on:click={() => dispatch("close")}>✕</button>

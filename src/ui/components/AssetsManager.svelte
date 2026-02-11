@@ -43,7 +43,7 @@
   export let moveEntry: (entry: AssetEntry) => void = () => {};
   export let deleteEntry: (entry: AssetEntry) => void = () => {};
 
-  const LOCKED_ROOTS = new Set(["originals/backgrounds", "originals/items"]);
+  const LOCKED_ROOTS = new Set(["originals/backgrounds", "originals/items", "originals/fonts"]);
   const isLockedRoot = (path: string) => LOCKED_ROOTS.has(path);
 </script>
 

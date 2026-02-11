@@ -31,7 +31,7 @@
   export let wizardItem: MenuItem | null = null;
   export let wizardDemoPreview = false;
   export let wizardNeedsRootBackground = false;
-  export let assetOptions: string[] = [];
+  export let assetOptions: Array<{ value: string; label: string }> = [];
 
   export let isWizardStepValid: (index: number) => boolean = () => false;
   export let goToStep: (index: number) => void = () => {};
@@ -41,6 +41,9 @@
   ) => Promise<void> | void = () => {};
   export let addBackground: () => void = () => {};
   export let removeBackground: (id: string) => void = () => {};
+  export let setBackgroundDisplayMode: (mode: "carousel" | "section") => void = () => {};
+  export let setCategoryBackgroundId: (category: MenuCategory, backgroundId: string) => void = () =>
+    {};
   export let addWizardCategory: () => void = () => {};
   export let removeWizardCategory: (id: string) => void = () => {};
   export let addWizardDish: () => void = () => {};
@@ -51,6 +54,21 @@
     item: MenuItem,
     direction: "cw" | "ccw"
   ) => void = () => {};
+  export let setItemScrollAnimationMode: (
+    item: MenuItem,
+    mode: "hero360" | "alternate"
+  ) => void = () => {};
+  export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
+  export let setFontRoleFamily: (
+    role: "identity" | "section" | "item",
+    family: string
+  ) => void = () => {};
+  export let setFontRoleSource: (
+    role: "identity" | "section" | "item",
+    source: string
+  ) => void = () => {};
+  export let setItemFontFamily: (item: MenuItem, family: string) => void = () => {};
+  export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
   export let handleLocalizedInput: (
     localized: Record<string, string>,
     lang: string,
@@ -67,6 +85,11 @@
   export let goNextStep: () => void = () => {};
   export let exportStaticSite: () => Promise<void> | void = () => {};
   export let touchDraft: () => void = () => {};
+
+  let mediaAssetOptions: Array<{ value: string; label: string }> = [];
+  let fontAssetOptions: Array<{ value: string; label: string }> = [];
+  $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
+  $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -106,9 +129,15 @@
 
   const handleWizardItemAssetInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
     item.media.hero360 = target.value;
     touchDraft();
+  };
+
+  const handleWizardItemScrollSrcInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setItemScrollAnimationSrc(item, target.value);
   };
 </script>
 
@@ -205,15 +234,15 @@
             {#if draft.meta.identityMode === "logo"}
               <label class="editor-field">
                 <span>{t("logoAsset")}</span>
-                {#if assetOptions.length}
+                {#if mediaAssetOptions.length}
                   <select
                     class="editor-select"
                     value={draft.meta.logoSrc ?? ""}
                     on:change={handleLogoSrcEvent}
                   >
                     <option value=""></option>
-                    {#each assetOptions as path}
-                      <option value={path}>{path}</option>
+                    {#each mediaAssetOptions as option}
+                      <option value={option.value}>{option.label}</option>
                     {/each}
                   </select>
                 {:else}
@@ -227,6 +256,65 @@
                 {/if}
               </label>
             {/if}
+            <label class="editor-field">
+              <span>{t("backgroundDisplayMode")}</span>
+              <select
+                class="editor-select"
+                value={draft.meta.backgroundDisplayMode ?? "carousel"}
+                on:change={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  setBackgroundDisplayMode(target.value === "section" ? "section" : "carousel");
+                }}
+              >
+                <option value="carousel">{t("backgroundDisplayCarousel")}</option>
+                <option value="section">{t("backgroundDisplaySection")}</option>
+              </select>
+            </label>
+            <label class="editor-field">
+              <span>{t("fontRoleIdentity")}</span>
+              <input
+                type="text"
+                class="editor-input"
+                value={draft.meta.fontRoles?.identity?.family ?? ""}
+                on:input={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLInputElement)) return;
+                  setFontRoleFamily("identity", target.value);
+                }}
+              />
+            </label>
+            <label class="editor-field">
+              <span>{t("fontRoleIdentitySrc")}</span>
+              {#if fontAssetOptions.length}
+                <select
+                  class="editor-select"
+                  value={draft.meta.fontRoles?.identity?.source ?? ""}
+                  on:change={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLSelectElement)) return;
+                    setFontRoleSource("identity", target.value);
+                  }}
+                >
+                  <option value=""></option>
+                  {#each fontAssetOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={draft.meta.fontRoles?.identity?.source ?? ""}
+                  list="asset-files"
+                  on:input={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLInputElement)) return;
+                    setFontRoleSource("identity", target.value);
+                  }}
+                />
+              {/if}
+            </label>
           </div>
         {/if}
         <button class="editor-outline" type="button" on:click={addBackground}>
@@ -247,15 +335,15 @@
                 </label>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
-                  {#if assetOptions.length}
+                  {#if mediaAssetOptions.length}
                     <select
                       class="editor-select"
                       value={bg.src}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
                       <option value=""></option>
-                      {#each assetOptions as path}
-                        <option value={path}>{path}</option>
+                      {#each mediaAssetOptions as option}
+                        <option value={option.value}>{option.label}</option>
                       {/each}
                     </select>
                   {:else}
@@ -311,6 +399,27 @@
                       handleLocalizedInput(category.name, wizardLang, event)}
                   />
                 </label>
+                {#if (draft.meta.backgroundDisplayMode ?? "carousel") === "section"}
+                  <label class="editor-field">
+                    <span>{t("sectionBackground")}</span>
+                    <select
+                      class="editor-select"
+                      value={category.backgroundId ?? draft.backgrounds[0]?.id ?? ""}
+                      on:change={(event) => {
+                        const target = event.currentTarget;
+                        if (!(target instanceof HTMLSelectElement)) return;
+                        setCategoryBackgroundId(category, target.value);
+                      }}
+                    >
+                      <option value=""></option>
+                      {#each draft.backgrounds as background}
+                        <option value={background.id}>
+                          {background.label || `${t("backgroundLabel")} ${background.id}`}
+                        </option>
+                      {/each}
+                    </select>
+                  </label>
+                {/if}
                 <button
                   class="editor-outline danger"
                   type="button"
@@ -347,6 +456,50 @@
                 </option>
               {/each}
             </select>
+          </label>
+          <label class="editor-field">
+            <span>{t("fontRoleItem")}</span>
+            <input
+              type="text"
+              class="editor-input"
+              value={draft.meta.fontRoles?.item?.family ?? ""}
+              on:input={(event) => {
+                const target = event.currentTarget;
+                if (!(target instanceof HTMLInputElement)) return;
+                setFontRoleFamily("item", target.value);
+              }}
+            />
+          </label>
+          <label class="editor-field">
+            <span>{t("fontRoleItemSrc")}</span>
+            {#if fontAssetOptions.length}
+              <select
+                class="editor-select"
+                value={draft.meta.fontRoles?.item?.source ?? ""}
+                on:change={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  setFontRoleSource("item", target.value);
+                }}
+              >
+                <option value=""></option>
+                {#each fontAssetOptions as option}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+            {:else}
+              <input
+                type="text"
+                class="editor-input"
+                value={draft.meta.fontRoles?.item?.source ?? ""}
+                list="asset-files"
+                on:input={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLInputElement)) return;
+                  setFontRoleSource("item", target.value);
+                }}
+              />
+            {/if}
           </label>
           <div class="edit-actions">
             <button class="editor-outline" type="button" on:click={addWizardDish}>
@@ -399,13 +552,115 @@
             </label>
             <label class="editor-field">
               <span>{t("asset360")}</span>
+              {#if mediaAssetOptions.length}
+                <select
+                  class="editor-select"
+                  value={wizardItem.media.hero360}
+                  on:change={(event) => handleWizardItemAssetInput(wizardItem, event)}
+                >
+                  <option value=""></option>
+                  {#each mediaAssetOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={wizardItem.media.hero360}
+                  list="asset-files"
+                  on:input={(event) => handleWizardItemAssetInput(wizardItem, event)}
+                />
+              {/if}
+            </label>
+            <label class="editor-field">
+              <span>{t("itemScrollAnimationMode")}</span>
+              <select
+                class="editor-select"
+                value={wizardItem.media.scrollAnimationMode ?? "hero360"}
+                on:change={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  setItemScrollAnimationMode(
+                    wizardItem,
+                    target.value === "alternate" ? "alternate" : "hero360"
+                  );
+                }}
+              >
+                <option value="hero360">{t("itemScrollAnimationModeHero")}</option>
+                <option value="alternate">{t("itemScrollAnimationModeAlternate")}</option>
+              </select>
+            </label>
+            {#if (wizardItem.media.scrollAnimationMode ?? "hero360") === "alternate"}
+              <label class="editor-field">
+                <span>{t("itemScrollAnimationSrc")}</span>
+                {#if mediaAssetOptions.length}
+                  <select
+                    class="editor-select"
+                    value={wizardItem.media.scrollAnimationSrc ?? ""}
+                    on:change={(event) => handleWizardItemScrollSrcInput(wizardItem, event)}
+                  >
+                    <option value=""></option>
+                    {#each mediaAssetOptions as option}
+                      <option value={option.value}>{option.label}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <input
+                    type="text"
+                    class="editor-input"
+                    value={wizardItem.media.scrollAnimationSrc ?? ""}
+                    list="asset-files"
+                    on:input={(event) => handleWizardItemScrollSrcInput(wizardItem, event)}
+                  />
+                {/if}
+              </label>
+            {/if}
+            <label class="editor-field">
+              <span>{t("itemFontOverrideName")}</span>
               <input
                 type="text"
                 class="editor-input"
-                value={wizardItem.media.hero360}
-                list="asset-files"
-                on:input={(event) => handleWizardItemAssetInput(wizardItem, event)}
+                value={wizardItem.typography?.item?.family ?? ""}
+                on:input={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLInputElement)) return;
+                  setItemFontFamily(wizardItem, target.value);
+                }}
               />
+            </label>
+            <label class="editor-field">
+              <span>{t("itemFontOverrideSrc")}</span>
+              {#if fontAssetOptions.length}
+                <select
+                  class="editor-select"
+                  value={wizardItem.typography?.item?.source ?? ""}
+                  on:change={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLSelectElement)) return;
+                    setItemFontSource(wizardItem, target.value);
+                  }}
+                >
+                  <option value=""></option>
+                  {#each fontAssetOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={wizardItem.typography?.item?.source ?? ""}
+                  list="asset-files"
+                  on:input={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLInputElement)) return;
+                    setItemFontSource(wizardItem, target.value);
+                  }}
+                />
+              {/if}
+            </label>
+            <div class="editor-field">
               <div class="edit-item__rotation">
                 <button
                   class="editor-outline editor-toggle-direction"
@@ -423,7 +678,7 @@
                 </button>
                 <small class="editor-hint">{t("rotationChooseHint")}</small>
               </div>
-            </label>
+            </div>
           {/if}
         </div>
       {/if}

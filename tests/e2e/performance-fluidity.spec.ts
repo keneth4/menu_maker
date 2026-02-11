@@ -105,6 +105,13 @@ const openProjectFromLanding = async (page: Page, fixturePath: string) => {
   await chooser.setFiles(fixturePath);
 };
 
+const closeEditorIfOpen = async (page: Page) => {
+  const closeButton = page.getByRole("button", { name: /cerrar editor|close editor/i }).first();
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click();
+  }
+};
+
 const writeJsonFixture = async (testInfo: TestInfo, fixture: PerformanceFixture) => {
   const fixturePath = testInfo.outputPath("performance-smoke.json");
   await writeFile(fixturePath, JSON.stringify(fixture, null, 2), "utf8");
@@ -171,7 +178,7 @@ test("performance smoke keeps startup and modal interaction responsive", async (
   expect(previewStats.severeHiccups).toBeLessThan(10);
   expect(previewStats.maxDelta).toBeLessThan(240);
 
-  await page.getByRole("button", { name: /cerrar editor|close editor/i }).first().click();
+  await closeEditorIfOpen(page);
   const activeCard = page.locator(".menu-preview .carousel-card.active").first();
   await expect(activeCard).toBeVisible({ timeout: 60000 });
   await activeCard.click();

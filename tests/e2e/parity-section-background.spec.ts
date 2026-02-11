@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { readZip } from "../../src/lib/zip";
 
-type ParityFixture = {
+type SectionBackgroundFixture = {
   meta: {
     slug: string;
     name: string;
@@ -18,11 +18,13 @@ type ParityFixture = {
     defaultLocale: string;
     currency: string;
     currencyPosition: "left" | "right";
+    backgroundDisplayMode: "carousel" | "section";
   };
   backgrounds: Array<{ id: string; label: string; src: string; type: "image" }>;
   categories: Array<{
     id: string;
     name: Record<string, string>;
+    backgroundId: string;
     items: Array<{
       id: string;
       name: Record<string, string>;
@@ -31,17 +33,7 @@ type ParityFixture = {
       price: { amount: number; currency: string };
       allergens: Array<{ label: Record<string, string> }>;
       vegan: boolean;
-      media: {
-        hero360: string;
-        originalHero360?: string;
-        scrollAnimationMode?: "hero360" | "alternate";
-        scrollAnimationSrc?: string;
-        responsive?: { small?: string; medium?: string; large?: string };
-        derived?: {
-          medium?: string | { webp?: string; gif?: string };
-          large?: string | { webp?: string; gif?: string };
-        };
-      };
+      media: { hero360: string };
     }>;
   }>;
   sound: {
@@ -80,74 +72,14 @@ const openEditorIfClosed = async (page: Page) => {
   }
 };
 
-const writeJsonFixture = async (testInfo: TestInfo, project: ParityFixture) => {
+const writeJsonFixture = async (testInfo: TestInfo, project: SectionBackgroundFixture) => {
   const fixturePath = testInfo.outputPath(`${project.meta.slug}.json`);
   await writeFile(fixturePath, JSON.stringify(project, null, 2), "utf8");
   return fixturePath;
 };
 
-const createParityFixture = (): ParityFixture => ({
-  meta: {
-    slug: "parity-image-sources",
-    name: "Parity Image Sources",
-    restaurantName: { es: "Parity", en: "Parity" },
-    title: { es: "Parity Menu", en: "Parity Menu" },
-    fontFamily: "Fraunces",
-    fontSource: "",
-    template: "focus-rows",
-    locales: ["es", "en"],
-    defaultLocale: "es",
-    currency: "USD",
-    currencyPosition: "left"
-  },
-  backgrounds: [],
-  categories: [
-    {
-      id: "cat-1",
-      name: { es: "Uno", en: "One" },
-      items: [
-        {
-          id: "dish-1",
-          name: { es: "Platillo", en: "Dish" },
-          description: { es: "Desc", en: "Desc" },
-          longDescription: { es: "Long", en: "Long" },
-          price: { amount: 10, currency: "USD" },
-          allergens: [],
-          vegan: false,
-          media: {
-            hero360: "/projects/parity-image-sources/assets/dishes/dish-original.gif",
-            originalHero360: "/projects/parity-image-sources/assets/dishes/dish-original.gif",
-            scrollAnimationMode: "alternate",
-            scrollAnimationSrc: "/projects/parity-image-sources/assets/dishes/dish-wiggle.gif",
-            responsive: {
-              small: "/projects/parity-image-sources/assets/dishes/dish-sm.webp",
-              medium: "/projects/parity-image-sources/assets/dishes/dish-md.webp",
-              large: "/projects/parity-image-sources/assets/dishes/dish-lg.webp"
-            },
-            derived: {
-              medium: {
-                webp: "/projects/parity-image-sources/assets/dishes/dish-md-der.webp",
-                gif: "/projects/parity-image-sources/assets/dishes/dish-md-der.gif"
-              },
-              large: {
-                webp: "/projects/parity-image-sources/assets/dishes/dish-lg-der.webp"
-              }
-            }
-          }
-        }
-      ]
-    }
-  ],
-  sound: {
-    enabled: false,
-    theme: "bar-amber",
-    volume: 0.5,
-    map: {}
-  }
-});
-
 const writeZipToTempDir = async (zipBytes: Buffer) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "menu-export-parity-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "menu-export-section-bg-"));
   const entries = readZip(
     zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength)
   );
@@ -208,40 +140,103 @@ const startStaticServer = async (rootDir: string) => {
   };
 };
 
-const readPreviewSources = async (page: Page) => {
-  const firstCard = page.locator("button.carousel-card").first();
-  await expect(firstCard).toBeVisible();
+const ACTIVE_BG_SELECTOR = ".menu-background.active";
 
-  const firstCardImage = firstCard.locator("img");
-  const rawCarouselSrc = (await firstCardImage.getAttribute("src")) ?? "";
-  const isPlaceholder =
-    rawCarouselSrc.startsWith("data:image/svg+xml") ||
-    rawCarouselSrc.startsWith("data:image/gif;base64,R0lGODlhAQABA");
-  const carouselSrc = isPlaceholder
-    ? ((await firstCardImage.getAttribute("data-media-src")) ?? rawCarouselSrc)
-    : rawCarouselSrc;
-  await firstCard.click();
-  const modal = page.locator(".dish-modal");
-  await expect(modal).toBeVisible();
-  const detailSrc = await modal.locator(".dish-modal__media img").first().getAttribute("src");
-  await modal.locator(".dish-modal__close").click();
-  await expect(modal).not.toBeVisible();
+const getActiveBackgroundSource = async (page: Page) =>
+  await page.locator(ACTIVE_BG_SELECTOR).first().getAttribute("data-bg-src");
 
-  return { carouselSrc: carouselSrc ?? "", detailSrc: detailSrc ?? "" };
+const goToNextSection = async (page: Page) => {
+  await page.locator(".section-nav__btn.next").click();
 };
 
-test("preview and exported runtime resolve the same carousel/detail source policy", async ({
-  page
-}, testInfo) => {
-  const fixturePath = await writeJsonFixture(testInfo, createParityFixture());
+const createFixture = (): SectionBackgroundFixture => {
+  const bgA =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23ef4444'/%3E%3C/svg%3E";
+  const bgB =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%230ea5e9'/%3E%3C/svg%3E";
+  const itemGif =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+  return {
+    meta: {
+      slug: "parity-section-background",
+      name: "Section Background Parity",
+      restaurantName: { es: "Parity", en: "Parity" },
+      title: { es: "Parity Menu", en: "Parity Menu" },
+      fontFamily: "Fraunces",
+      fontSource: "",
+      template: "jukebox",
+      locales: ["es", "en"],
+      defaultLocale: "es",
+      currency: "USD",
+      currencyPosition: "left",
+      backgroundDisplayMode: "section"
+    },
+    backgrounds: [
+      { id: "bg-a", label: "A", src: bgA, type: "image" },
+      { id: "bg-b", label: "B", src: bgB, type: "image" }
+    ],
+    categories: [
+      {
+        id: "cat-a",
+        name: { es: "Uno", en: "One" },
+        backgroundId: "bg-a",
+        items: [
+          {
+            id: "item-a",
+            name: { es: "Item A", en: "Item A" },
+            description: { es: "Desc A", en: "Desc A" },
+            longDescription: { es: "", en: "" },
+            price: { amount: 10, currency: "USD" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: itemGif }
+          }
+        ]
+      },
+      {
+        id: "cat-b",
+        name: { es: "Dos", en: "Two" },
+        backgroundId: "bg-b",
+        items: [
+          {
+            id: "item-b",
+            name: { es: "Item B", en: "Item B" },
+            description: { es: "Desc B", en: "Desc B" },
+            longDescription: { es: "", en: "" },
+            price: { amount: 12, currency: "USD" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: itemGif }
+          }
+        ]
+      }
+    ],
+    sound: {
+      enabled: false,
+      theme: "bar-amber",
+      volume: 0.5,
+      map: {}
+    }
+  };
+};
+
+test("section background mode stays in parity between preview and export", async ({ page }, testInfo) => {
+  const fixture = createFixture();
+  const fixturePath = await writeJsonFixture(testInfo, fixture);
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
   await closeEditorIfOpen(page);
 
-  const previewSources = await readPreviewSources(page);
-  expect(previewSources.carouselSrc).toContain("dish-wiggle.gif");
-  expect(previewSources.detailSrc).toContain("dish-original.gif");
+  await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+  await expect(page.locator(ACTIVE_BG_SELECTOR)).toBeVisible();
+  await expect(await getActiveBackgroundSource(page)).toBe(fixture.backgrounds[0].src);
+
+  await goToNextSection(page);
+  await expect
+    .poll(async () => await getActiveBackgroundSource(page))
+    .toBe(fixture.backgrounds[1].src);
 
   await openEditorIfClosed(page);
   const downloadPromise = page.waitForEvent("download");
@@ -258,9 +253,13 @@ test("preview and exported runtime resolve the same carousel/detail source polic
 
   try {
     await page.goto(server.url);
-    const exportedSources = await readPreviewSources(page);
-    expect(exportedSources.carouselSrc).toContain("dish-wiggle.gif");
-    expect(exportedSources.detailSrc).toContain("dish-original.gif");
+    await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+    await expect(await getActiveBackgroundSource(page)).toBe(fixture.backgrounds[0].src);
+
+    await goToNextSection(page);
+    await expect
+      .poll(async () => await getActiveBackgroundSource(page))
+      .toBe(fixture.backgrounds[1].src);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });

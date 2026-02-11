@@ -84,6 +84,10 @@ const getLegacyResponsiveSource = (item: MenuItem, variant: ResponsiveVariant) =
 
 const getHeroSource = (item: MenuItem) => normalizeSource(item.media.hero360);
 const getOriginalHeroSource = (item: MenuItem) => normalizeSource(item.media.originalHero360);
+const getAlternateScrollSource = (item: MenuItem) =>
+  item.media.scrollAnimationMode === "alternate"
+    ? normalizeSource(item.media.scrollAnimationSrc)
+    : null;
 
 const pickImageSourceByVariantOrder = (
   item: MenuItem,
@@ -103,6 +107,9 @@ export const buildResponsiveSrcSetForMenuItem = (
   item: MenuItem,
   options: ImageSourcePolicyOptions = {}
 ) => {
+  if (getAlternateScrollSource(item)) {
+    return undefined;
+  }
   const preferredFormats = normalizeFormatPreference(options.preferredDerivedFormats);
   const entries = SRCSET_VARIANT_ORDER.map((variant) => ({
     src:
@@ -128,6 +135,8 @@ export const getCarouselImageSourceForMenuItem = (
   item: MenuItem,
   options: ImageSourcePolicyOptions = {}
 ) => {
+  const alternate = getAlternateScrollSource(item);
+  if (alternate) return alternate;
   const preferredFormats = normalizeFormatPreference(options.preferredDerivedFormats);
   return pickImageSourceByVariantOrder(item, CAROUSEL_VARIANT_PRIORITY, preferredFormats);
 };
@@ -182,6 +191,10 @@ export const buildExportRuntimeImageSourceHelpers = (
     `};`,
     `const readLegacyResponsiveSource = (item, variant) =>`,
     `  normalizeImageSource(item?.media?.responsive?.[variant]);`,
+    `const readAlternateScrollSource = (item) =>`,
+    `  item?.media?.scrollAnimationMode === "alternate"`,
+    `    ? normalizeImageSource(item?.media?.scrollAnimationSrc)`,
+    `    : null;`,
     `const readOriginalHeroSource = (item) =>`,
     `  normalizeImageSource(item?.media?.originalHero360);`,
     `const pickPrioritySource = (item, priority) => {`,
@@ -192,6 +205,7 @@ export const buildExportRuntimeImageSourceHelpers = (
     `  return normalizeImageSource(item?.media?.hero360) || "";`,
     `};`,
     `const buildSrcSet = (item) => {`,
+    `  if (readAlternateScrollSource(item)) return "";`,
     `  const entries = SRCSET_VARIANT_ORDER.map((variant) => ({`,
     `    src: readDerivedVariantSource(item, variant) || readLegacyResponsiveSource(item, variant),`,
     `    width: RESPONSIVE_IMAGE_WIDTHS[variant]`,
@@ -203,7 +217,8 @@ export const buildExportRuntimeImageSourceHelpers = (
     `  });`,
     `  return Array.from(unique.entries()).map(([src, width]) => src + " " + width + "w").join(", ");`,
     `};`,
-    `const getCarouselImageSrc = (item) => pickPrioritySource(item, CAROUSEL_VARIANT_PRIORITY);`,
+    `const getCarouselImageSrc = (item) =>`,
+    `  readAlternateScrollSource(item) || pickPrioritySource(item, CAROUSEL_VARIANT_PRIORITY);`,
     `const getDetailImageSrc = (item) =>`,
     `  readOriginalHeroSource(item) || pickPrioritySource(item, DETAIL_VARIANT_PRIORITY);`
   ].join("\n");

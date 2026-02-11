@@ -16,7 +16,6 @@
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
   const CAROUSEL_MEDIA_ACTIVE_RADIUS = 2;
 
-  export let layoutMode = "desktop";
   export let effectivePreview = "device";
   export let activeProject: MenuProject;
   export let previewStartupLoading = false;
@@ -30,6 +29,7 @@
   export let carouselActive: Record<string, number> = {};
   export let deviceMode: "mobile" | "desktop" = "desktop";
   export let previewFontStack = "";
+  export let previewFontVars = "";
 
   export let t: (key: string) => string = (key) => key;
   export let textOf: (value: Record<string, string> | undefined, fallback?: string) => string =
@@ -57,6 +57,7 @@
     itemId: string,
     includeNeighbors?: boolean
   ) => void = () => {};
+  export let getItemFontStyle: (item: MenuItem) => string = () => "";
 
   let activeTemplateCapabilities: TemplateCapabilities = getTemplateCapabilities("focus-rows");
   let activeTemplateStrategy: TemplateStrategy = getTemplateStrategy("focus-rows");
@@ -142,13 +143,13 @@
   }
 </script>
 
-<section class="preview-panel {layoutMode}">
+<section class="preview-panel">
   <section class="preview-shell {effectivePreview}">
     <section
       class={`menu-preview template-${activeTemplateCapabilities.id} ${
         previewStartupLoading ? "is-loading" : ""
       }`}
-      style={`--menu-font:${previewFontStack};`}
+      style={previewFontVars || `--menu-font:${previewFontStack};`}
     >
       <div class={`menu-startup-loader ${previewStartupLoading ? "active" : ""}`}>
         <div class="menu-startup-loader__card">
@@ -305,14 +306,15 @@
                     carouselSource.trim().length > 0 &&
                     !readyCarouselMediaKeys.has(mediaKey)}
                   {@const srcSet = buildResponsiveSrcSetFromMedia(entry.item)}
+                  {@const itemFontStyle = getItemFontStyle(entry.item)}
                   <button
                     class={`carousel-card ${stateClass}`}
                     type="button"
-                    style={activeTemplateStrategy.getCardStyle(
+                    style={`${activeTemplateStrategy.getCardStyle(
                       activeIndex,
                       entry.sourceIndex,
                       category.items.length
-                    )}
+                    )}${itemFontStyle}`}
                     on:pointerenter={() => prefetchDishDetail(category.id, entry.item.id)}
                     on:focus={() => prefetchDishDetail(category.id, entry.item.id)}
                     on:touchstart={() => prefetchDishDetail(category.id, entry.item.id)}

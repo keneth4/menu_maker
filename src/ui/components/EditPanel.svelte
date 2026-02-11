@@ -16,7 +16,7 @@
   export let selectedItemId = "";
   export let selectedCategory: MenuCategory | null = null;
   export let selectedItem: MenuItem | null = null;
-  export let assetOptions: string[] = [];
+  export let assetOptions: Array<{ value: string; label: string }> = [];
   export let commonAllergenCatalog: CommonAllergen[] = [];
 
   export let cycleEditLang: () => void = () => {};
@@ -37,6 +37,9 @@
   export let addBackground: () => void = () => {};
   export let moveBackground: (id: string, direction: -1 | 1) => void = () => {};
   export let removeBackground: (id: string) => void = () => {};
+  export let setBackgroundDisplayMode: (mode: "carousel" | "section") => void = () => {};
+  export let setCategoryBackgroundId: (category: MenuCategory, backgroundId: string) => void = () =>
+    {};
   export let backgroundCarouselSeconds = 9;
   export let setBackgroundCarouselSeconds: (seconds: number) => void = () => {};
   export let goPrevDish: () => void = () => {};
@@ -67,7 +70,27 @@
     item: MenuItem,
     direction: "cw" | "ccw"
   ) => void = () => {};
+  export let setItemScrollAnimationMode: (
+    item: MenuItem,
+    mode: "hero360" | "alternate"
+  ) => void = () => {};
+  export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
+  export let setFontRoleFamily: (
+    role: "identity" | "section" | "item",
+    family: string
+  ) => void = () => {};
+  export let setFontRoleSource: (
+    role: "identity" | "section" | "item",
+    source: string
+  ) => void = () => {};
+  export let setItemFontFamily: (item: MenuItem, family: string) => void = () => {};
+  export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
   export let touchDraft: () => void = () => {};
+
+  let mediaAssetOptions: Array<{ value: string; label: string }> = [];
+  let fontAssetOptions: Array<{ value: string; label: string }> = [];
+  $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
+  $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -99,9 +122,45 @@
 
   const handleDishAssetInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
     item.media.hero360 = target.value;
     touchDraft();
+  };
+
+  const handleItemScrollAnimationSourceInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setItemScrollAnimationSrc(item, target.value);
+  };
+
+  const handleRoleFontFamilyInput = (
+    role: "identity" | "section" | "item",
+    event: Event
+  ) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    setFontRoleFamily(role, target.value);
+  };
+
+  const handleRoleFontSourceInput = (
+    role: "identity" | "section" | "item",
+    event: Event
+  ) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setFontRoleSource(role, target.value);
+  };
+
+  const handleItemFontFamilyInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    setItemFontFamily(item, target.value);
+  };
+
+  const handleItemFontSourceInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    setItemFontSource(item, target.value);
   };
 
   const handleDishPriceInput = (item: MenuItem, event: Event) => {
@@ -200,15 +259,15 @@
           <p class="edit-block__title">{t("logoAsset")}</p>
           <label class="editor-field">
             <span>{t("wizardSrc")}</span>
-            {#if assetOptions.length}
+            {#if mediaAssetOptions.length}
               <select
                 class="editor-select"
                 value={draft.meta.logoSrc ?? ""}
                 on:change={handleLogoSrcEvent}
               >
                 <option value=""></option>
-                {#each assetOptions as path}
-                  <option value={path}>{path}</option>
+                {#each mediaAssetOptions as option}
+                  <option value={option.value}>{option.label}</option>
                 {/each}
               </select>
             {:else}
@@ -255,8 +314,131 @@
           />
         </label>
       </div>
+      <div class="edit-block">
+        <p class="edit-block__title">{t("fontRoleIdentity")}</p>
+        <label class="editor-field">
+          <span>{t("fontCustomName")}</span>
+          <input
+            type="text"
+            class="editor-input"
+            value={draft.meta.fontRoles?.identity?.family ?? ""}
+            on:input={(event) => handleRoleFontFamilyInput("identity", event)}
+          />
+        </label>
+        <label class="editor-field">
+          <span>{t("fontCustomSrc")}</span>
+          {#if fontAssetOptions.length}
+            <select
+              class="editor-select"
+              value={draft.meta.fontRoles?.identity?.source ?? ""}
+              on:change={(event) => handleRoleFontSourceInput("identity", event)}
+            >
+              <option value=""></option>
+              {#each fontAssetOptions as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+          {:else}
+            <input
+              type="text"
+              class="editor-input"
+              value={draft.meta.fontRoles?.identity?.source ?? ""}
+              list="asset-files"
+              on:input={(event) => handleRoleFontSourceInput("identity", event)}
+            />
+          {/if}
+        </label>
+      </div>
+      <div class="edit-block">
+        <p class="edit-block__title">{t("fontRoleSection")}</p>
+        <label class="editor-field">
+          <span>{t("fontCustomName")}</span>
+          <input
+            type="text"
+            class="editor-input"
+            value={draft.meta.fontRoles?.section?.family ?? ""}
+            on:input={(event) => handleRoleFontFamilyInput("section", event)}
+          />
+        </label>
+        <label class="editor-field">
+          <span>{t("fontCustomSrc")}</span>
+          {#if fontAssetOptions.length}
+            <select
+              class="editor-select"
+              value={draft.meta.fontRoles?.section?.source ?? ""}
+              on:change={(event) => handleRoleFontSourceInput("section", event)}
+            >
+              <option value=""></option>
+              {#each fontAssetOptions as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+          {:else}
+            <input
+              type="text"
+              class="editor-input"
+              value={draft.meta.fontRoles?.section?.source ?? ""}
+              list="asset-files"
+              on:input={(event) => handleRoleFontSourceInput("section", event)}
+            />
+          {/if}
+        </label>
+      </div>
+      <div class="edit-block">
+        <p class="edit-block__title">{t("fontRoleItem")}</p>
+        <label class="editor-field">
+          <span>{t("fontCustomName")}</span>
+          <input
+            type="text"
+            class="editor-input"
+            value={draft.meta.fontRoles?.item?.family ?? ""}
+            on:input={(event) => handleRoleFontFamilyInput("item", event)}
+          />
+        </label>
+        <label class="editor-field">
+          <span>{t("fontCustomSrc")}</span>
+          {#if fontAssetOptions.length}
+            <select
+              class="editor-select"
+              value={draft.meta.fontRoles?.item?.source ?? ""}
+              on:change={(event) => handleRoleFontSourceInput("item", event)}
+            >
+              <option value=""></option>
+              {#each fontAssetOptions as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </select>
+          {:else}
+            <input
+              type="text"
+              class="editor-input"
+              value={draft.meta.fontRoles?.item?.source ?? ""}
+              list="asset-files"
+              on:input={(event) => handleRoleFontSourceInput("item", event)}
+            />
+          {/if}
+        </label>
+      </div>
     {:else if editPanel === "background"}
       <div class="edit-block">
+        <label class="editor-field">
+          <span>{t("backgroundDisplayMode")}</span>
+          <select
+            class="editor-select"
+            value={draft.meta.backgroundDisplayMode ?? "carousel"}
+            on:change={(event) => {
+              const target = event.currentTarget;
+              if (!(target instanceof HTMLSelectElement)) return;
+              setBackgroundDisplayMode(target.value === "section" ? "section" : "carousel");
+            }}
+          >
+            <option value="carousel">{t("backgroundDisplayCarousel")}</option>
+            <option value="section">{t("backgroundDisplaySection")}</option>
+          </select>
+        </label>
+      </div>
+      <div class="edit-block">
+        {#if (draft.meta.backgroundDisplayMode ?? "carousel") === "carousel"}
         <label class="editor-field">
           <span>{t("backgroundCarouselDuration")}</span>
           <div class="background-duration-field">
@@ -273,6 +455,7 @@
           </div>
           <small class="editor-hint">{t("backgroundCarouselDurationHint")}</small>
         </label>
+        {/if}
         <div class="edit-actions">
           <button class="editor-outline" type="button" on:click={addBackground}>
             {t("wizardAddBg")}
@@ -330,15 +513,15 @@
                 </label>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
-                  {#if assetOptions.length}
+                  {#if mediaAssetOptions.length}
                     <select
                       class="editor-select"
                       value={bg.src}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
                       <option value=""></option>
-                      {#each assetOptions as path}
-                        <option value={path}>{path}</option>
+                      {#each mediaAssetOptions as option}
+                        <option value={option.value}>{option.label}</option>
                       {/each}
                     </select>
                   {:else}
@@ -398,6 +581,27 @@
                 handleLocalizedInput(selectedCategory.name, editLang, event)}
             />
           </label>
+          {#if (draft.meta.backgroundDisplayMode ?? "carousel") === "section"}
+            <label class="editor-field">
+              <span>{t("sectionBackground")}</span>
+              <select
+                class="editor-select"
+                value={selectedCategory.backgroundId ?? draft.backgrounds[0]?.id ?? ""}
+                on:change={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  setCategoryBackgroundId(selectedCategory, target.value);
+                }}
+              >
+                <option value=""></option>
+                {#each draft.backgrounds as background}
+                  <option value={background.id}>
+                    {background.label || `${t("backgroundLabel")} ${background.id}`}
+                  </option>
+                {/each}
+              </select>
+            </label>
+          {/if}
         </div>
       {/if}
 
@@ -459,15 +663,73 @@
                     alt={textOf(selectedItem.name)}
                   />
                 </div>
-                <label class="editor-field edit-item__source">
+                <div class="editor-field edit-item__source">
                   <span>{t("asset360")}</span>
-                  <input
-                    type="text"
-                    class="editor-input"
-                    value={selectedItem.media.hero360}
-                    list="asset-files"
-                    on:input={(event) => handleDishAssetInput(selectedItem, event)}
-                  />
+                  {#if mediaAssetOptions.length}
+                    <select
+                      class="editor-select"
+                      value={selectedItem.media.hero360}
+                      on:change={(event) => handleDishAssetInput(selectedItem, event)}
+                    >
+                      <option value=""></option>
+                      {#each mediaAssetOptions as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={selectedItem.media.hero360}
+                      list="asset-files"
+                      on:input={(event) => handleDishAssetInput(selectedItem, event)}
+                    />
+                  {/if}
+                  <label class="editor-field">
+                    <span>{t("itemScrollAnimationMode")}</span>
+                    <select
+                      class="editor-select"
+                      value={selectedItem.media.scrollAnimationMode ?? "hero360"}
+                      on:change={(event) => {
+                        const target = event.currentTarget;
+                        if (!(target instanceof HTMLSelectElement)) return;
+                        setItemScrollAnimationMode(
+                          selectedItem,
+                          target.value === "alternate" ? "alternate" : "hero360"
+                        );
+                      }}
+                    >
+                      <option value="hero360">{t("itemScrollAnimationModeHero")}</option>
+                      <option value="alternate">{t("itemScrollAnimationModeAlternate")}</option>
+                    </select>
+                  </label>
+                  {#if (selectedItem.media.scrollAnimationMode ?? "hero360") === "alternate"}
+                    <label class="editor-field">
+                      <span>{t("itemScrollAnimationSrc")}</span>
+                      {#if mediaAssetOptions.length}
+                        <select
+                          class="editor-select"
+                          value={selectedItem.media.scrollAnimationSrc ?? ""}
+                          on:change={(event) =>
+                            handleItemScrollAnimationSourceInput(selectedItem, event)}
+                        >
+                          <option value=""></option>
+                          {#each mediaAssetOptions as option}
+                            <option value={option.value}>{option.label}</option>
+                          {/each}
+                        </select>
+                      {:else}
+                        <input
+                          type="text"
+                          class="editor-input"
+                          value={selectedItem.media.scrollAnimationSrc ?? ""}
+                          list="asset-files"
+                          on:input={(event) =>
+                            handleItemScrollAnimationSourceInput(selectedItem, event)}
+                        />
+                      {/if}
+                    </label>
+                  {/if}
                   <div class="edit-item__rotation">
                     <button
                       class="editor-outline editor-toggle-direction"
@@ -485,7 +747,7 @@
                     </button>
                     <small class="editor-hint">{t("rotationChooseHint")}</small>
                   </div>
-                </label>
+                </div>
               </div>
               <div class="edit-item__content">
                 <label class="editor-field">
@@ -526,6 +788,38 @@
                     value={selectedItem.price.amount}
                     on:input={(event) => handleDishPriceInput(selectedItem, event)}
                   />
+                </label>
+                <label class="editor-field">
+                  <span>{t("itemFontOverrideName")}</span>
+                  <input
+                    type="text"
+                    class="editor-input"
+                    value={selectedItem.typography?.item?.family ?? ""}
+                    on:input={(event) => handleItemFontFamilyInput(selectedItem, event)}
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>{t("itemFontOverrideSrc")}</span>
+                  {#if fontAssetOptions.length}
+                    <select
+                      class="editor-select"
+                      value={selectedItem.typography?.item?.source ?? ""}
+                      on:change={(event) => handleItemFontSourceInput(selectedItem, event)}
+                    >
+                      <option value=""></option>
+                      {#each fontAssetOptions as option}
+                        <option value={option.value}>{option.label}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <input
+                      type="text"
+                      class="editor-input"
+                      value={selectedItem.typography?.item?.source ?? ""}
+                      list="asset-files"
+                      on:input={(event) => handleItemFontSourceInput(selectedItem, event)}
+                    />
+                  {/if}
                 </label>
                 <div class="editor-field">
                   <span>{t("commonAllergens")}</span>

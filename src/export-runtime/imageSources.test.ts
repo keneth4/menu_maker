@@ -88,4 +88,31 @@ describe("image source policy", () => {
     expect(getCarouselImageSourceForMenuItem(fromOriginal)).toBe("only-original.gif");
     expect(getDetailImageSourceForMenuItem(fromOriginal)).toBe("only-original.gif");
   });
+
+  it("uses alternate scroll source for carousel while keeping detail source policy", () => {
+    const item = withDerivedMedia(createMenuItem(), {
+      medium: "derived-md.webp",
+      large: "derived-lg.webp"
+    });
+    item.media.scrollAnimationMode = "alternate";
+    item.media.scrollAnimationSrc = "wiggle.webp";
+    item.media.originalHero360 = "original-detail.gif";
+
+    expect(getCarouselImageSourceForMenuItem(item)).toBe("wiggle.webp");
+    expect(buildResponsiveSrcSetForMenuItem(item)).toBeUndefined();
+    expect(getDetailImageSourceForMenuItem(item)).toBe("original-detail.gif");
+  });
+
+  it("falls back to default carousel source when alternate mode has no source", () => {
+    const item = withDerivedMedia(createMenuItem(), {
+      medium: "derived-md.webp"
+    });
+    item.media.scrollAnimationMode = "alternate";
+    item.media.scrollAnimationSrc = "   ";
+
+    expect(getCarouselImageSourceForMenuItem(item)).toBe("derived-md.webp");
+    expect(buildResponsiveSrcSetForMenuItem(item)).toBe(
+      "legacy-sm.webp 480w, derived-md.webp 960w, legacy-lg.webp 1440w"
+    );
+  });
 });

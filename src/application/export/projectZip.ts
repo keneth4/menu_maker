@@ -11,6 +11,13 @@ export type ProjectAssetPair = {
   zipPath: string;
 };
 
+const collectFontConfigSource = (
+  assets: Set<string>,
+  fontConfig?: { family?: string; source?: string }
+) => {
+  if (fontConfig?.source) assets.add(fontConfig.source);
+};
+
 export const collectProjectAssetPaths = (
   project: MenuProject,
   normalizePath: (value: string) => string
@@ -19,6 +26,9 @@ export const collectProjectAssetPaths = (
   if (project.meta.fontSource) {
     assets.add(project.meta.fontSource);
   }
+  collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.section);
+  collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) {
     assets.add(project.meta.logoSrc);
   }
@@ -28,6 +38,8 @@ export const collectProjectAssetPaths = (
   project.categories.forEach((category) => {
     category.items.forEach((item) => {
       if (item.media.hero360) assets.add(item.media.hero360);
+      if (item.media.scrollAnimationSrc) assets.add(item.media.scrollAnimationSrc);
+      collectFontConfigSource(assets, item.typography?.item);
     });
   });
   return Array.from(assets)
@@ -69,6 +81,9 @@ export const collectExportProjectAssetPaths = (
 ) => {
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
+  collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.section);
+  collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
 
   project.backgrounds.forEach((bg) => {
@@ -89,6 +104,8 @@ export const collectExportProjectAssetPaths = (
   project.categories.forEach((category) => {
     category.items.forEach((item) => {
       if (item.media.originalHero360) assets.add(item.media.originalHero360);
+      if (item.media.scrollAnimationSrc) assets.add(item.media.scrollAnimationSrc);
+      collectFontConfigSource(assets, item.typography?.item);
       const derivedSources = new Set<string>();
       collectDerivedPaths(derivedSources, item.media.derived);
       if (derivedSources.size > 0) {
@@ -111,6 +128,9 @@ export const collectSaveProjectAssetPaths = (
 ) => {
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
+  collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.section);
+  collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
 
   project.backgrounds.forEach((bg) => {
@@ -128,9 +148,11 @@ export const collectSaveProjectAssetPaths = (
       } else if (item.media.hero360) {
         assets.add(item.media.hero360);
       }
+      if (item.media.scrollAnimationSrc) assets.add(item.media.scrollAnimationSrc);
       item.media.gallery?.forEach((entry) => {
         if (entry) assets.add(entry);
       });
+      collectFontConfigSource(assets, item.typography?.item);
     });
   });
 
@@ -174,9 +196,31 @@ export const rewriteProjectForSaveZip = (
     const normalized = normalizePath(value);
     return sourceToRelative.get(normalized) ?? value;
   };
+  const rewriteFontConfig = (value?: { family?: string; source?: string }) => {
+    if (!value) return value;
+    return {
+      ...(value.family !== undefined ? { family: value.family } : {}),
+      ...(value.source !== undefined
+        ? { source: rewriteSource(value.source) ?? value.source }
+        : {})
+    };
+  };
   if (exportProject.meta.fontSource) {
     exportProject.meta.fontSource =
       rewriteSource(exportProject.meta.fontSource) ?? exportProject.meta.fontSource;
+  }
+  if (exportProject.meta.fontRoles) {
+    exportProject.meta.fontRoles = {
+      ...(exportProject.meta.fontRoles.identity
+        ? { identity: rewriteFontConfig(exportProject.meta.fontRoles.identity) }
+        : {}),
+      ...(exportProject.meta.fontRoles.section
+        ? { section: rewriteFontConfig(exportProject.meta.fontRoles.section) }
+        : {}),
+      ...(exportProject.meta.fontRoles.item
+        ? { item: rewriteFontConfig(exportProject.meta.fontRoles.item) }
+        : {})
+    };
   }
   if (exportProject.meta.logoSrc) {
     exportProject.meta.logoSrc = rewriteSource(exportProject.meta.logoSrc) ?? exportProject.meta.logoSrc;
@@ -203,11 +247,20 @@ export const rewriteProjectForSaveZip = (
         ...mediaBase,
         hero360: rewrittenOriginalHero ?? item.media.hero360,
         originalHero360: rewrittenOriginalHero,
+        scrollAnimationSrc:
+          rewriteSource(item.media.scrollAnimationSrc) ?? item.media.scrollAnimationSrc,
         gallery: item.media.gallery?.map((entry) => rewriteSource(entry) ?? entry),
       };
       return {
         ...item,
-        media
+        media,
+        ...(item.typography?.item
+          ? {
+              typography: {
+                item: rewriteFontConfig(item.typography.item)
+              }
+            }
+          : {})
       };
     })
   }));

@@ -1,4 +1,4 @@
-import { expect, test, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { createZipBlob, readZip } from "../../src/lib/zip";
 import type { MenuProject } from "../../src/lib/types";
@@ -74,6 +74,15 @@ const writeBridgeFixtureZip = async (testInfo: TestInfo, slug: string) => {
   return fixturePath;
 };
 
+const openEditorIfClosed = async (page: Page) => {
+  const isOpen = await page
+    .locator(".editor-panel")
+    .evaluate((element) => element.classList.contains("open"));
+  if (!isOpen) {
+    await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
+  }
+};
+
 test("bridge export generates derived assets and keeps originals for detail rendering", async ({
   page,
   request
@@ -109,6 +118,7 @@ test("bridge export generates derived assets and keeps originals for detail rend
     page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
   ]);
   await chooser.setFiles(fixturePath);
+  await openEditorIfClosed(page);
   const projectNameInput = page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
     .locator("input");
@@ -201,6 +211,7 @@ test("bridge save zip keeps originals and strips derived metadata", async ({ pag
     page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
   ]);
   await chooser.setFiles(fixturePath);
+  await openEditorIfClosed(page);
   const projectNameInput = page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
     .locator("input");

@@ -1,8 +1,8 @@
 <svelte:head>
   <title>{t("appTitle")}</title>
-  {#if builtInFontHref}
-    <link rel="stylesheet" href={builtInFontHref} />
-  {/if}
+  {#each builtInFontHrefs as href (href)}
+    <link rel="stylesheet" href={href} />
+  {/each}
 </svelte:head>
 
 <script lang="ts">
@@ -114,8 +114,9 @@
   let activeProject: MenuProject | null = null;
   let showLanding = true;
   let previewFontStack = "";
+  let previewFontVars = "";
   let fontFaceCss = "";
-  let builtInFontHref = "";
+  let builtInFontHrefs: string[] = [];
   let fontStyleEl: HTMLStyleElement | null = null;
   let editorOpen = false;
   let previewMode: "device" | "mobile" | "full" = "device";
@@ -212,7 +213,8 @@
   }[] = [];
   let fsError = "";
   let rootFiles: string[] = [];
-  let assetOptions: string[] = [];
+  let assetOptions: { value: string; label: string }[] = [];
+  let fontAssetOptions: { value: string; label: string }[] = [];
   let rootLabel = "";
   let assetProjectReadOnly = false;
   let expandedPaths: Record<string, boolean> = {};
@@ -228,6 +230,7 @@
   let previewBackgrounds: { id: string; src: string }[] = [];
   let loadedPreviewBackgroundIndexes: number[] = [];
   let activeBackgroundIndex = 0;
+  let sectionBackgroundIndexByCategory: Record<string, number> = {};
   let backgroundRotationTimer: ReturnType<typeof setInterval> | null = null;
   let backgroundRotationCount = 0;
   let backgroundRotationIntervalMs = 0;
@@ -253,7 +256,11 @@
     TEMPLATE_DEMO_PROJECT_SLUG,
     "demo"
   ]);
-  const USER_MANAGED_ASSET_ROOTS = ["originals/backgrounds", "originals/items"] as const;
+  const USER_MANAGED_ASSET_ROOTS = [
+    "originals/backgrounds",
+    "originals/items",
+    "originals/fonts"
+  ] as const;
   const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 9;
   const MIN_BACKGROUND_CAROUSEL_SECONDS = 2;
   const MAX_BACKGROUND_CAROUSEL_SECONDS = 60;
@@ -283,6 +290,8 @@
       relative === "originals/backgrounds" ||
       relative.startsWith("originals/items/") ||
       relative === "originals/items" ||
+      relative.startsWith("originals/fonts/") ||
+      relative === "originals/fonts" ||
       relative.startsWith("derived/")
     ) {
       return relative;
@@ -295,6 +304,9 @@
     }
     if (relative.startsWith("dishes/") || relative === "dishes") {
       return joinAssetFolderPath("originals/items", relative.slice("dishes".length));
+    }
+    if (relative.startsWith("fonts/") || relative === "fonts") {
+      return joinAssetFolderPath("originals/fonts", relative.slice("fonts".length));
     }
     return relative;
   };
@@ -325,6 +337,48 @@
 
   const isManagedAssetSourcePath = (value: string) =>
     isManagedAssetRelativePath(mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(value)));
+
+  const getAssetDisplayName = (value: string) => {
+    const normalized = normalizeAssetFolderPath(value);
+    const name = normalized.split("/").filter(Boolean).pop();
+    return name || normalized;
+  };
+
+  const getAssetDisplayContext = (value: string) => {
+    const relative = toAssetRelativeForUi(value);
+    const parts = normalizeAssetFolderPath(relative).split("/").filter(Boolean);
+    if (parts.length <= 1) return "";
+    const dirParts = parts.slice(0, -1);
+    if (dirParts.length <= 2) {
+      return dirParts.join("/");
+    }
+    return dirParts.slice(-2).join("/");
+  };
+
+  const buildAssetOptions = (sources: string[]) => {
+    const unique = Array.from(
+      new Set(
+        sources
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+    const names = unique.map((value) => getAssetDisplayName(value));
+    const nameCounts = names.reduce<Map<string, number>>((acc, name) => {
+      acc.set(name, (acc.get(name) ?? 0) + 1);
+      return acc;
+    }, new Map<string, number>());
+
+    return unique
+      .map((value) => {
+        const name = getAssetDisplayName(value);
+        const needsContext = (nameCounts.get(name) ?? 0) > 1;
+        const context = needsContext ? getAssetDisplayContext(value) : "";
+        const label = context ? `${name} (${context})` : name;
+        return { value, label };
+      })
+      .sort((left, right) => left.label.localeCompare(right.label));
+  };
 
   const RESPONSIVE_IMAGE_WIDTHS = {
     small: 480,
@@ -390,36 +444,65 @@
         src: asset.src,
         group: "Fondos"
       })) ?? [];
-    const dishes = draft.categories.flatMap((category) =>
+    const items = draft.categories.flatMap((category) =>
       category.items
-        .filter((item) => item.media.hero360)
-        .map((item) => ({
-          id: `dish-${item.id}`,
-          label: getLocalizedValue(item.name, editLang, draft.meta.defaultLocale),
-          src: item.media.hero360 ?? "",
-          group: "Platillos"
-        }))
+        .flatMap((item) =>
+          [item.media.hero360 ?? "", item.media.scrollAnimationSrc ?? ""]
+            .filter(Boolean)
+            .map((source, index) => ({
+              id: `item-${item.id}-${index}`,
+              label: getLocalizedValue(item.name, editLang, draft.meta.defaultLocale),
+              src: source,
+              group: "Items"
+            }))
+        )
     );
-    const fonts = draft.meta.fontSource
-      ? [
-          {
-            id: "font-source",
-            label: draft.meta.fontFamily ?? "Font",
-            src: draft.meta.fontSource ?? "",
-            group: "Fuentes"
-          }
-        ]
-      : [];
-    projectAssets = [...backgrounds, ...dishes, ...fonts];
+    const fontCandidates = [
+      { id: "font-interface", label: draft.meta.fontFamily ?? "Interface", src: draft.meta.fontSource ?? "" },
+      {
+        id: "font-identity",
+        label: draft.meta.fontRoles?.identity?.family ?? "Identity",
+        src: draft.meta.fontRoles?.identity?.source ?? ""
+      },
+      {
+        id: "font-section",
+        label: draft.meta.fontRoles?.section?.family ?? "Section",
+        src: draft.meta.fontRoles?.section?.source ?? ""
+      },
+      {
+        id: "font-item-default",
+        label: draft.meta.fontRoles?.item?.family ?? "Item",
+        src: draft.meta.fontRoles?.item?.source ?? ""
+      },
+      ...draft.categories.flatMap((category) =>
+        category.items
+          .map((item) => ({
+            id: `font-item-${item.id}`,
+            label: getLocalizedValue(item.name, editLang, draft.meta.defaultLocale) || item.id,
+            src: item.typography?.item?.source ?? ""
+          }))
+          .filter((entry) => entry.src)
+      )
+    ].filter((entry) => entry.src);
+    const fonts = fontCandidates.map((entry) => ({
+      ...entry,
+      group: "Fonts"
+    }));
+    projectAssets = [...backgrounds, ...items, ...fonts];
   }
 
-  $: assetOptions = (
-    rootFiles.length
-      ? rootFiles
-      : editorTab === "wizard" && wizardDemoPreview
-        ? []
-        : projectAssets.map((asset) => asset.src).filter(Boolean)
-  ).filter((path) => isManagedAssetSourcePath(path));
+  $: assetOptions = buildAssetOptions(
+    (
+      rootFiles.length
+        ? rootFiles
+        : editorTab === "wizard" && wizardDemoPreview
+          ? []
+          : projectAssets.map((asset) => asset.src).filter(Boolean)
+    ).filter((path) => isManagedAssetSourcePath(path))
+  );
+  $: fontAssetOptions = assetOptions.filter((option) =>
+    mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(option.value)).startsWith("originals/fonts/")
+  );
   $: rootLabel = rootHandle
     ? rootHandle.name
     : bridgeAvailable
@@ -547,10 +630,9 @@
 
   $: effectivePreview =
     previewMode === "device" ? (deviceMode === "mobile" ? "mobile" : "full") : previewMode;
-  $: editorLocked = deviceMode === "desktop" && effectivePreview === "mobile";
-  $: layoutMode = editorLocked ? "split" : "full";
-  $: editorVisible = editorLocked ? true : editorOpen;
-  $: showEditorToggle = !editorLocked;
+  $: editorVisible = editorOpen;
+  $: showEditorToggle = true;
+  $: editorPresentation = deviceMode === "mobile" ? "mobile-sheet" : "desktop-card";
   $: isBlankMenu =
     !!activeProject &&
     !activeProject.meta.template &&
@@ -732,10 +814,9 @@
     draft?.meta.slug || activeSlug || "nuevo-proyecto"
   );
   $: previewFontStack = activeProject ? buildFontStack(activeProject.meta.fontFamily) : "";
-  $: fontFaceCss = activeProject
-    ? buildFontFaceCss(activeProject.meta.fontFamily, activeProject.meta.fontSource)
-    : "";
-  $: builtInFontHref = activeProject ? getBuiltinFontHref(activeProject.meta.fontFamily) : "";
+  $: previewFontVars = activeProject ? buildPreviewFontVarStyle(activeProject) : "";
+  $: fontFaceCss = activeProject ? buildProjectFontFaceCss(activeProject) : "";
+  $: builtInFontHrefs = activeProject ? collectProjectBuiltinFontHrefs(activeProject) : [];
   $: previewBackgrounds =
     activeProject?.backgrounds
       ?.filter((item) => item.src && item.src.trim().length > 0)
@@ -743,6 +824,16 @@
         id: item.id || `bg-${index}`,
         src: item.src
       })) ?? [];
+  $: {
+    const lookup = new Map(previewBackgrounds.map((background, index) => [background.id, index]));
+    const fallbackIndex = previewBackgrounds.length > 0 ? 0 : -1;
+    const next: Record<string, number> = {};
+    (activeProject?.categories ?? []).forEach((category) => {
+      const mapped = lookup.get(category.backgroundId ?? "");
+      next[category.id] = mapped ?? fallbackIndex;
+    });
+    sectionBackgroundIndexByCategory = next;
+  }
   $: {
     const count = previewBackgrounds.length;
     const nextIndexes: number[] = [];
@@ -790,6 +881,8 @@
 
   const getBackgroundRotationIntervalMs = (value: MenuProject | null) =>
     normalizeBackgroundCarouselSeconds(value?.meta.backgroundCarouselSeconds) * 1000;
+  const isSectionBackgroundMode = (value: MenuProject | null) =>
+    value?.meta.backgroundDisplayMode === "section";
 
   const clearBackgroundRotation = () => {
     if (backgroundRotationTimer) {
@@ -801,6 +894,15 @@
   };
 
   const syncBackgroundRotation = (count: number, intervalMs: number) => {
+    if (isSectionBackgroundMode(activeProject)) {
+      clearBackgroundRotation();
+      if (count < 1) {
+        activeBackgroundIndex = 0;
+      } else if (activeBackgroundIndex >= count) {
+        activeBackgroundIndex = 0;
+      }
+      return;
+    }
     if (count < 2) {
       clearBackgroundRotation();
       activeBackgroundIndex = 0;
@@ -826,6 +928,22 @@
 
   $: if (typeof window !== "undefined") {
     syncBackgroundRotation(previewBackgrounds.length, getBackgroundRotationIntervalMs(activeProject));
+  }
+  $: if (activeProject && isSectionBackgroundMode(activeProject)) {
+    const activeCategoryId =
+      getActiveSectionCategoryId() ?? activeProject.categories[0]?.id ?? null;
+    if (!activeCategoryId) {
+      activeBackgroundIndex = 0;
+    } else {
+      const mappedIndex = sectionBackgroundIndexByCategory[activeCategoryId];
+      if (
+        typeof mappedIndex === "number" &&
+        mappedIndex >= 0 &&
+        mappedIndex !== activeBackgroundIndex
+      ) {
+        activeBackgroundIndex = mappedIndex;
+      }
+    }
   }
 
   const touchDraft = () => {
@@ -992,7 +1110,9 @@
     showcase.meta.logoSrc = draft.meta.logoSrc;
     showcase.meta.fontFamily = draft.meta.fontFamily;
     showcase.meta.fontSource = draft.meta.fontSource;
+    showcase.meta.fontRoles = draft.meta.fontRoles;
     showcase.meta.backgroundCarouselSeconds = draft.meta.backgroundCarouselSeconds;
+    showcase.meta.backgroundDisplayMode = draft.meta.backgroundDisplayMode;
     return showcase;
   };
 
@@ -1006,12 +1126,14 @@
       logoSrc: "",
       fontFamily: "Fraunces",
       fontSource: "",
+      fontRoles: {},
       template: "focus-rows",
       locales: ["es", "en"],
       defaultLocale: "es",
       currency: "MXN",
       currencyPosition: "left",
-      backgroundCarouselSeconds: DEFAULT_BACKGROUND_CAROUSEL_SECONDS
+      backgroundCarouselSeconds: DEFAULT_BACKGROUND_CAROUSEL_SECONDS,
+      backgroundDisplayMode: "carousel"
     },
     backgrounds: [],
     categories: [],
@@ -1523,6 +1645,8 @@ const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
 let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
 const fontFamily = DATA.meta.fontFamily || "Fraunces";
 const fontSource = DATA.meta.fontSource || "";
+const backgroundDisplayMode = DATA.meta.backgroundDisplayMode === "section" ? "section" : "carousel";
+const fontRoles = DATA.meta.fontRoles || {};
 const builtInFontSources = {
   Fraunces: "https://fonts.googleapis.com/css2?family=Fraunces:wght@400;500;700&display=swap",
   Cinzel: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap",
@@ -1532,9 +1656,17 @@ const builtInFontSources = {
     "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap",
   Poppins: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap"
 };
-const builtInFontHref = builtInFontSources[fontFamily] || "";
 const backgrounds = (DATA.backgrounds || []).filter(
   (item) => item?.src && String(item.src).trim().length > 0
+);
+const backgroundIndexById = new Map(
+  backgrounds.map((background, index) => [background.id || "", index])
+);
+const sectionBackgroundByCategoryId = new Map(
+  (DATA.categories || []).map((category) => {
+    const mapped = backgroundIndexById.get(category?.backgroundId || "");
+    return [category.id, mapped ?? (backgrounds.length > 0 ? 0 : -1)];
+  })
 );
 const normalizeBackgroundCarouselSeconds = (value) => {
   const parsed = Number(value);
@@ -1544,8 +1676,9 @@ const normalizeBackgroundCarouselSeconds = (value) => {
 const backgroundRotationMs = normalizeBackgroundCarouselSeconds(DATA.meta.backgroundCarouselSeconds) * 1000;
 let activeBackgroundIndex = 0;
 let backgroundTimer;
-let fontInjected = false;
-let fontLinkInjected = false;
+let applyBackgroundState = () => {};
+const injectedFontFaceKeys = new Set();
+const injectedFontLinks = new Set();
 const app = document.getElementById("app");
 const modal = document.getElementById("dish-modal");
 const modalContent = document.getElementById("dish-modal-content");
@@ -1620,34 +1753,119 @@ const getFontStack = (family) => {
   const primary = cleaned ? '"' + cleaned + '", ' : "";
   return primary + '"Fraunces", "Georgia", serif';
 };
+const normalizeFontConfig = (config) => ({
+  family: String(config?.family || "").trim(),
+  source: String(config?.source || "").trim()
+});
+const getRoleFontConfig = (role) => {
+  const interfaceFont = normalizeFontConfig({ family: fontFamily, source: fontSource });
+  const roleFont = normalizeFontConfig(fontRoles?.[role]);
+  return {
+    family: roleFont.family || interfaceFont.family,
+    source: roleFont.source || interfaceFont.source
+  };
+};
+const getItemFontConfig = (item) => {
+  const fallback = getRoleFontConfig("item");
+  const itemConfig = normalizeFontConfig(item?.typography?.item);
+  return {
+    family: itemConfig.family || fallback.family,
+    source: itemConfig.source || fallback.source
+  };
+};
+const collectRuntimeFontConfigs = () => {
+  const configs = [];
+  const seen = new Set();
+  const pushConfig = (config) => {
+    const normalized = normalizeFontConfig(config);
+    if (!normalized.family) return;
+    const key = normalized.family + "::" + normalized.source;
+    if (seen.has(key)) return;
+    seen.add(key);
+    configs.push(normalized);
+  };
+  pushConfig({ family: fontFamily, source: fontSource });
+  pushConfig(getRoleFontConfig("identity"));
+  pushConfig(getRoleFontConfig("section"));
+  pushConfig(getRoleFontConfig("item"));
+  (DATA.categories || []).forEach((category) => {
+    (category.items || []).forEach((item) => {
+      pushConfig(getItemFontConfig(item));
+    });
+  });
+  return configs;
+};
 const ensureFont = () => {
-  if (fontSource && !fontInjected) {
-    const ext = fontSource.split(".").pop()?.toLowerCase();
-    let format = "";
-    if (ext === "woff2") format = "woff2";
-    if (ext === "woff") format = "woff";
-    if (ext === "otf") format = "opentype";
-    if (ext === "ttf") format = "truetype";
-    const formatLine = format ? ' format("' + format + '")' : "";
-    const style = document.createElement("style");
-    style.textContent =
-      '@font-face { font-family: "' +
-      fontFamily +
-      '"; src: url("' +
-      fontSource +
-      '")' +
-      formatLine +
-      '; font-display: swap; }';
-    document.head.appendChild(style);
-    fontInjected = true;
-  }
-  if (!fontSource && builtInFontHref && !fontLinkInjected) {
+  collectRuntimeFontConfigs().forEach((config) => {
+    if (!config.family) return;
+    if (config.source) {
+      const faceKey = config.family + "::" + config.source;
+      if (injectedFontFaceKeys.has(faceKey)) return;
+      const ext = config.source.split(".").pop()?.toLowerCase();
+      let format = "";
+      if (ext === "woff2") format = "woff2";
+      if (ext === "woff") format = "woff";
+      if (ext === "otf") format = "opentype";
+      if (ext === "ttf") format = "truetype";
+      const formatLine = format ? ' format("' + format + '")' : "";
+      const style = document.createElement("style");
+      style.textContent =
+        '@font-face { font-family: "' +
+        config.family +
+        '"; src: url("' +
+        config.source +
+        '")' +
+        formatLine +
+        '; font-display: swap; }';
+      document.head.appendChild(style);
+      injectedFontFaceKeys.add(faceKey);
+      return;
+    }
+    const builtInFontHref = builtInFontSources[config.family] || "";
+    if (!builtInFontHref || injectedFontLinks.has(builtInFontHref)) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = builtInFontHref;
     document.head.appendChild(link);
-    fontLinkInjected = true;
-  }
+    injectedFontLinks.add(builtInFontHref);
+  });
+};
+const getPreviewFontVars = () => {
+  const identityFont = getRoleFontConfig("identity");
+  const sectionFont = getRoleFontConfig("section");
+  const itemFont = getRoleFontConfig("item");
+  return (
+    "--menu-font:" +
+    getFontStack(fontFamily) +
+    ";--menu-font-ui:" +
+    getFontStack(fontFamily) +
+    ";--menu-font-identity:" +
+    getFontStack(identityFont.family) +
+    ";--menu-font-section:" +
+    getFontStack(sectionFont.family) +
+    ";--menu-font-item:" +
+    getFontStack(itemFont.family) +
+    ";"
+  );
+};
+const getItemFontStyle = (item) => {
+  const itemFont = getItemFontConfig(item);
+  if (!itemFont.family) return "";
+  return "--item-font:" + getFontStack(itemFont.family) + ";";
+};
+const getSectionBackgroundIndexByCategoryId = (categoryId) => {
+  const index = sectionBackgroundByCategoryId.get(categoryId);
+  if (typeof index === "number" && index >= 0) return index;
+  return backgrounds.length > 0 ? 0 : -1;
+};
+const syncBackgroundForSectionIndex = (index) => {
+  if (backgroundDisplayMode !== "section") return;
+  const category = DATA.categories[index];
+  if (!category) return;
+  const mappedIndex = getSectionBackgroundIndexByCategoryId(category.id);
+  if (mappedIndex < 0 || mappedIndex === activeBackgroundIndex) return;
+  activeBackgroundIndex = mappedIndex;
+  applyBackgroundState();
 };
 
 const getFocusRowItems = (items) =>
@@ -2574,99 +2792,100 @@ const setupInteractiveModalMedia = async (asset) => {
 const instructionCopy = {
   en: {
     loadingLabel: "Loading assets",
-    tapHint: "Tap or click a dish for details",
+    tapHint: "Tap or click an item for details",
     assetDisclaimer:
       "Assets belong to their owners. Do not copy or reuse this content without permission.",
     jukeboxHint: "Scroll vertically to spin the disc. Horizontal to switch sections.",
-    focusRowsHint: "Scroll vertically for sections. Horizontally for dishes.",
+    focusRowsHint: "Scroll vertically for sections. Horizontally for items.",
     rotateHintTouch: "Swipe horizontally on the image to rotate",
     rotateHintMouse: "Drag horizontally with the mouse to rotate",
     rotateToggle: "Reverse rotation"
   },
   es: {
     loadingLabel: "Cargando assets",
-    tapHint: "Toca o haz clic en un platillo para ver detalles",
+    tapHint: "Toca o haz clic en un item para ver detalles",
     assetDisclaimer:
       "Los assets pertenecen a sus propietarios. No copies ni reutilices este contenido sin autorización.",
     jukeboxHint: "Desliza vertical para girar el disco. Horizontal para cambiar sección.",
-    focusRowsHint: "Desliza vertical para secciones. Horizontal para platillos.",
+    focusRowsHint: "Desliza vertical para secciones. Horizontal para items.",
     rotateHintTouch: "Desliza horizontal sobre la imagen para girar",
     rotateHintMouse: "Arrastra horizontal con el mouse para girar",
     rotateToggle: "Invertir giro"
   },
   fr: {
     loadingLabel: "Chargement des assets",
-    tapHint: "Touchez ou cliquez sur un plat pour voir les détails",
+    tapHint: "Touchez ou cliquez sur un élément pour voir les détails",
     assetDisclaimer:
       "Les assets appartiennent à leurs propriétaires. Ne copiez ni ne réutilisez ce contenu sans autorisation.",
     jukeboxHint:
       "Faites défiler verticalement pour faire tourner le disque. Horizontalement pour changer de section.",
-    focusRowsHint: "Faites défiler verticalement pour les sections. Horizontalement pour les plats.",
+    focusRowsHint:
+      "Faites défiler verticalement pour les sections. Horizontalement pour les éléments.",
     rotateHintTouch: "Balayez horizontalement l'image pour faire tourner",
     rotateHintMouse: "Faites glisser horizontalement avec la souris pour faire tourner",
     rotateToggle: "Inverser la rotation"
   },
   pt: {
     loadingLabel: "Carregando assets",
-    tapHint: "Toque ou clique em um prato para ver detalhes",
+    tapHint: "Toque ou clique em um item para ver detalhes",
     assetDisclaimer:
       "Os assets pertencem aos seus proprietários. Não copie nem reutilize este conteúdo sem autorização.",
     jukeboxHint: "Deslize verticalmente para girar o disco. Horizontalmente para mudar de seção.",
-    focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para pratos.",
+    focusRowsHint: "Deslize verticalmente para seções. Horizontalmente para itens.",
     rotateHintTouch: "Deslize horizontalmente na imagem para girar",
     rotateHintMouse: "Arraste horizontalmente com o mouse para girar",
     rotateToggle: "Inverter rotação"
   },
   it: {
     loadingLabel: "Caricamento assets",
-    tapHint: "Tocca o fai clic su un piatto per vedere i dettagli",
+    tapHint: "Tocca o fai clic su un articolo per vedere i dettagli",
     assetDisclaimer:
       "Gli assets appartengono ai rispettivi proprietari. Non copiare o riutilizzare questo contenuto senza autorizzazione.",
     jukeboxHint: "Scorri verticalmente per far girare il disco. Orizzontalmente per cambiare sezione.",
-    focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per i piatti.",
+    focusRowsHint: "Scorri verticalmente per le sezioni. Orizzontalmente per gli articoli.",
     rotateHintTouch: "Scorri orizzontalmente sull'immagine per ruotare",
     rotateHintMouse: "Trascina orizzontalmente con il mouse per ruotare",
     rotateToggle: "Inverti rotazione"
   },
   de: {
     loadingLabel: "Assets werden geladen",
-    tapHint: "Tippe oder klicke auf ein Gericht, um Details zu sehen",
+    tapHint: "Tippe oder klicke auf ein Element, um Details zu sehen",
     assetDisclaimer:
       "Assets gehören ihren Eigentümern. Bitte nicht ohne Genehmigung kopieren oder wiederverwenden.",
     jukeboxHint: "Vertikal scrollen, um die Scheibe zu drehen. Horizontal, um die Sektion zu wechseln.",
-    focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Gerichte.",
+    focusRowsHint: "Vertikal für Sektionen scrollen. Horizontal für Elemente.",
     rotateHintTouch: "Wische horizontal über das Bild, um zu drehen",
     rotateHintMouse: "Ziehe horizontal mit der Maus, um zu drehen",
     rotateToggle: "Drehrichtung umkehren"
   },
   ja: {
     loadingLabel: "アセットを読み込み中",
-    tapHint: "料理をタップまたはクリックして詳細を見る",
+    tapHint: "アイテムをタップまたはクリックして詳細を見る",
     assetDisclaimer:
       "アセットは各所有者に帰属します。許可なく複製・再利用しないでください。",
     jukeboxHint: "縦スクロールでディスクを回転。横スクロールでセクション切替。",
-    focusRowsHint: "縦スクロールでセクション。横スクロールで料理。",
+    focusRowsHint: "縦スクロールでセクション。横スクロールでアイテム。",
     rotateHintTouch: "画像上で横にスワイプして回転",
     rotateHintMouse: "画像上で横にドラッグして回転",
     rotateToggle: "回転方向を反転"
   },
   ko: {
     loadingLabel: "에셋 로딩 중",
-    tapHint: "요리를 탭하거나 클릭해 상세 정보를 확인하세요",
+    tapHint: "아이템을 탭하거나 클릭해 상세 정보를 확인하세요",
     assetDisclaimer:
       "에셋은 각 소유자에게 귀속됩니다. 허가 없이 복사하거나 재사용하지 마세요.",
     jukeboxHint: "세로 스크롤로 디스크를 회전. 가로 스크롤로 섹션 전환.",
-    focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 요리.",
+    focusRowsHint: "세로 스크롤로 섹션. 가로 스크롤로 아이템.",
     rotateHintTouch: "이미지에서 가로로 스와이프해 회전",
     rotateHintMouse: "마우스로 가로로 드래그해 회전",
     rotateToggle: "회전 방향 반전"
   },
   zh: {
     loadingLabel: "正在加载素材",
-    tapHint: "点按或点击菜品查看详情",
+    tapHint: "点按或点击项目查看详情",
     assetDisclaimer: "素材归其所有者所有。未经许可请勿复制或再利用。",
     jukeboxHint: "纵向滚动旋转转盘，横向滚动切换分类。",
-    focusRowsHint: "纵向滚动浏览分类，横向滚动浏览菜品。",
+    focusRowsHint: "纵向滚动浏览分类，横向滚动浏览项目。",
     rotateHintTouch: "在图片上横向滑动以旋转",
     rotateHintMouse: "用鼠标横向拖动以旋转",
     rotateToggle: "反向旋转"
@@ -2929,7 +3148,7 @@ const buildCarousel = (category) => {
         .map((entry) => {
           const srcSet = buildSrcSet(entry.item);
           return \`
-            <button class="carousel-card" type="button" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
+            <button class="carousel-card" type="button" style="\${getItemFontStyle(entry.item)}" data-item="\${entry.item.id}" data-source="\${entry.sourceIndex}">
               <div class="carousel-media is-loaded">
                 <span class="carousel-media__loader" aria-hidden="true"></span>
                 <img src="\${TRANSPARENT_PIXEL_SRC}" data-media-src="\${getCarouselImageSrc(entry.item)}" \${srcSet ? 'data-media-srcset="' + srcSet + '"' : ""} sizes="(max-width: 640px) 64vw, (max-width: 1200px) 34vw, 260px" alt="\${textOf(entry.item.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" loading="lazy" decoding="async" fetchpriority="low" />
@@ -3027,7 +3246,14 @@ const render = () => {
   \`;
   const preview = app.querySelector(".menu-preview");
   if (preview) {
+    const identityFont = getRoleFontConfig("identity");
+    const sectionFont = getRoleFontConfig("section");
+    const itemFont = getRoleFontConfig("item");
     preview.style.setProperty("--menu-font", getFontStack(fontFamily));
+    preview.style.setProperty("--menu-font-ui", getFontStack(fontFamily));
+    preview.style.setProperty("--menu-font-identity", getFontStack(identityFont.family));
+    preview.style.setProperty("--menu-font-section", getFontStack(sectionFont.family));
+    preview.style.setProperty("--menu-font-item", getFontStack(itemFont.family));
     preview.addEventListener("contextmenu", (event) => event.preventDefault());
     preview.addEventListener("dragstart", (event) => {
       const target = event.target;
@@ -3036,7 +3262,7 @@ const render = () => {
       }
     });
   }
-  const applyBackgroundState = () => {
+  applyBackgroundState = () => {
     const layers = Array.from(app.querySelectorAll(".menu-background"));
     const warmIndexes = [];
     if (backgrounds.length > 0) {
@@ -3059,6 +3285,19 @@ const render = () => {
     if (backgroundTimer) {
       window.clearInterval(backgroundTimer);
       backgroundTimer = undefined;
+    }
+    if (backgroundDisplayMode === "section") {
+      const scroll = app.querySelector(".menu-scroll");
+      if (scroll) {
+        const sectionIndex = isJukeboxTemplate()
+          ? getClosestHorizontalSectionIndex(scroll)
+          : getClosestSectionIndex(scroll);
+        if (sectionIndex >= 0) {
+          syncBackgroundForSectionIndex(sectionIndex);
+        }
+      }
+      applyBackgroundState();
+      return;
     }
     if (backgrounds.length < 2) {
       applyBackgroundState();
@@ -3229,10 +3468,12 @@ const shiftSection = (direction) => {
   const next = (current + direction + sections.length) % sections.length;
   if (isJukeboxTemplate()) {
     centerSectionHorizontally(container, next, "smooth");
+    syncBackgroundForSectionIndex(next);
     return;
   }
   centerSection(container, next, "smooth");
   applySectionFocus(container);
+  syncBackgroundForSectionIndex(next);
 };
 
 const isEditableKeyboardTarget = (target) => {
@@ -3542,6 +3783,7 @@ const bindCards = () => {
       const allergens = getAllergenValues(dish).join(", ");
       const asset = getInteractiveDetailAsset(dish);
       detailRotateDirection = getDishRotateDirection(dish);
+      modalContent.style.cssText = getItemFontStyle(dish);
       modalContent.innerHTML = \`
         <div class="dish-modal__header">
           <p class="dish-modal__title">\${textOf(dish.name)}</p>
@@ -3601,6 +3843,7 @@ const applySectionFocus = (container) => {
   const centerY = container.scrollTop + container.clientHeight / 2;
   const maxDistance = Math.max(container.clientHeight * 0.6, 1);
   const closestIndex = getClosestSectionIndex(container);
+  syncBackgroundForSectionIndex(closestIndex);
   sections.forEach((section, index) => {
     const sectionCenter = section.offsetTop + section.offsetHeight / 2;
     const distance = Math.abs(sectionCenter - centerY);
@@ -3625,6 +3868,7 @@ const bindSectionFocus = () => {
         const closestIndex = getClosestHorizontalSectionIndex(scroll);
         if (closestIndex >= 0) {
           centerSectionHorizontally(scroll, closestIndex, "smooth");
+          syncBackgroundForSectionIndex(closestIndex);
         }
       }, 170);
     };
@@ -4064,7 +4308,7 @@ void preloadStartupAssets();
     if (deviceMode === "mobile" && previewMode === "device") {
       screen.orientation?.unlock?.();
     }
-    if (previewMode === "device" && !editorLocked) {
+    if (previewMode === "device") {
       editorOpen = false;
     }
     void syncCarousels();
@@ -5172,20 +5416,20 @@ void preloadStartupAssets();
   const startCreateProject = async () => {
     await createNewProject();
     setEditorTab("info");
-    editorOpen = true;
+    editorOpen = false;
     showLanding = false;
   };
 
   const startWizard = async () => {
     await createNewProject({ forWizard: true });
     setEditorTab("wizard");
-    editorOpen = true;
+    editorOpen = false;
     showLanding = false;
   };
 
   const startOpenProject = () => {
     setEditorTab("info");
-    editorOpen = true;
+    editorOpen = false;
     showLanding = false;
     openProjectDialog();
   };
@@ -5347,6 +5591,7 @@ void preloadStartupAssets();
     const centerY = container.scrollTop + container.clientHeight / 2;
     const maxDistance = Math.max(container.clientHeight * 0.6, 1);
     const closestIndex = getClosestSectionIndex(container);
+    syncSectionBackgroundByIndex(closestIndex);
 
     sections.forEach((section, index) => {
       const sectionCenter = section.offsetTop + section.offsetHeight / 2;
@@ -5380,6 +5625,7 @@ void preloadStartupAssets();
         const closestIndex = getClosestHorizontalSectionIndex(container);
         if (closestIndex >= 0) {
           centerSectionHorizontally(container, closestIndex, "smooth");
+          syncSectionBackgroundByIndex(closestIndex);
         }
       }, activeTemplateCapabilities.sectionSnapDelayMs);
       return;
@@ -5445,6 +5691,16 @@ void preloadStartupAssets();
     container.scrollTo({ left: targetLeft, behavior });
   };
 
+  const syncSectionBackgroundByIndex = (index: number) => {
+    if (!activeProject || !isSectionBackgroundMode(activeProject)) return;
+    const categoryId = activeProject.categories[index]?.id;
+    if (!categoryId) return;
+    const mappedIndex = sectionBackgroundIndexByCategory[categoryId];
+    if (typeof mappedIndex !== "number" || mappedIndex < 0) return;
+    if (mappedIndex === activeBackgroundIndex) return;
+    activeBackgroundIndex = mappedIndex;
+  };
+
   const shiftSection = (direction: number) => {
     const container = document.querySelector<HTMLElement>(".menu-preview .menu-scroll");
     if (!container) return;
@@ -5458,10 +5714,12 @@ void preloadStartupAssets();
     const next = (current + direction + sections.length) % sections.length;
     if (activeTemplateCapabilities.sectionSnapAxis === "horizontal") {
       centerSectionHorizontally(container, next, "smooth");
+      syncSectionBackgroundByIndex(next);
       return;
     }
     centerSection(container, next, "smooth");
     applySectionFocus(container);
+    syncSectionBackgroundByIndex(next);
   };
 
   const isKeyboardEditableTarget = (target: EventTarget | null) => {
@@ -5801,16 +6059,108 @@ void preloadStartupAssets();
     return `${primary}"Fraunces", "Georgia", serif`;
   };
 
-  const getBuiltinFontHref = (family?: string) => {
-    if (!family) return "";
-    return builtInFontSources[family] ?? "";
+  const normalizeFontConfigInput = (
+    value?: { family?: string; source?: string } | null
+  ): { family: string; source: string } => ({
+    family: (value?.family ?? "").trim(),
+    source: (value?.source ?? "").trim()
+  });
+
+  const getProjectInterfaceFontConfig = (value: MenuProject) =>
+    normalizeFontConfigInput({
+      family: value.meta.fontFamily,
+      source: value.meta.fontSource
+    });
+
+  const getProjectRoleFontConfig = (
+    value: MenuProject,
+    role: "identity" | "section" | "item"
+  ) => normalizeFontConfigInput(value.meta.fontRoles?.[role]);
+
+  const resolveProjectRoleFontConfig = (
+    value: MenuProject,
+    role: "identity" | "section" | "item"
+  ) => {
+    const interfaceFont = getProjectInterfaceFontConfig(value);
+    const roleFont = getProjectRoleFontConfig(value, role);
+    return {
+      family: roleFont.family || interfaceFont.family,
+      source: roleFont.source || interfaceFont.source
+    };
   };
 
-  const buildFontFaceCss = (family?: string, source?: string) => {
-    if (!family || !source) return "";
-    const format = getFontFormat(source);
-    const formatLine = format ? ` format("${format}")` : "";
-    return `@font-face { font-family: "${family}"; src: url("${source}")${formatLine}; font-display: swap; }`;
+  const collectProjectFontConfigs = (value: MenuProject) => {
+    const configs: Array<{ family: string; source: string }> = [];
+    const pushConfig = (config?: { family?: string; source?: string } | null) => {
+      const normalized = normalizeFontConfigInput(config);
+      if (!normalized.family) return;
+      const signature = `${normalized.family}::${normalized.source}`;
+      if (configs.some((entry) => `${entry.family}::${entry.source}` === signature)) return;
+      configs.push(normalized);
+    };
+
+    pushConfig(getProjectInterfaceFontConfig(value));
+    pushConfig(resolveProjectRoleFontConfig(value, "identity"));
+    pushConfig(resolveProjectRoleFontConfig(value, "section"));
+    pushConfig(resolveProjectRoleFontConfig(value, "item"));
+    value.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const itemFont = normalizeFontConfigInput(item.typography?.item);
+        if (!itemFont.family) return;
+        const fallbackItem = resolveProjectRoleFontConfig(value, "item");
+        pushConfig({
+          family: itemFont.family || fallbackItem.family,
+          source: itemFont.source || fallbackItem.source
+        });
+      });
+    });
+
+    return configs;
+  };
+
+  const collectProjectBuiltinFontHrefs = (value: MenuProject) => {
+    const hrefSet = new Set<string>();
+    collectProjectFontConfigs(value).forEach((config) => {
+      if (config.source) return;
+      const href = builtInFontSources[config.family];
+      if (!href) return;
+      hrefSet.add(href);
+    });
+    return Array.from(hrefSet);
+  };
+
+  const buildProjectFontFaceCss = (value: MenuProject) =>
+    collectProjectFontConfigs(value)
+      .map((config) => {
+        if (!config.family || !config.source) return "";
+        const format = getFontFormat(config.source);
+        const formatLine = format ? ` format("${format}")` : "";
+        return `@font-face { font-family: "${config.family}"; src: url("${config.source}")${formatLine}; font-display: swap; }`;
+      })
+      .filter(Boolean)
+      .join("\n");
+
+  const buildPreviewFontVarStyle = (value: MenuProject) => {
+    const interfaceFont = getProjectInterfaceFontConfig(value);
+    const identityFont = resolveProjectRoleFontConfig(value, "identity");
+    const sectionFont = resolveProjectRoleFontConfig(value, "section");
+    const itemFont = resolveProjectRoleFontConfig(value, "item");
+    return [
+      `--menu-font:${buildFontStack(interfaceFont.family)};`,
+      `--menu-font-ui:${buildFontStack(interfaceFont.family)};`,
+      `--menu-font-identity:${buildFontStack(identityFont.family)};`,
+      `--menu-font-section:${buildFontStack(sectionFont.family)};`,
+      `--menu-font-item:${buildFontStack(itemFont.family)};`
+    ].join("");
+  };
+
+  const getItemFontStyle = (item: MenuItem) => {
+    if (!activeProject) return "";
+    const itemConfig = normalizeFontConfigInput(item.typography?.item);
+    const fallback = resolveProjectRoleFontConfig(activeProject, "item");
+    const family = itemConfig.family || fallback.family;
+    if (!family) return "";
+    return `--item-font:${buildFontStack(family)};`;
   };
 
   const createFolder = async () => {
@@ -6155,6 +6505,25 @@ void preloadStartupAssets();
         type: "image"
       }
     ];
+    draft.categories = draft.categories.map((category) => ({
+      ...category,
+      backgroundId: category.backgroundId || id
+    }));
+    touchDraft();
+  };
+
+  const setBackgroundDisplayMode = (mode: "carousel" | "section") => {
+    if (!draft) return;
+    const nextMode = mode === "section" ? "section" : "carousel";
+    if (draft.meta.backgroundDisplayMode === nextMode) return;
+    draft.meta.backgroundDisplayMode = nextMode;
+    touchDraft();
+  };
+
+  const setCategoryBackgroundId = (category: MenuCategory, backgroundId: string) => {
+    if (!draft) return;
+    const normalized = backgroundId.trim();
+    category.backgroundId = normalized;
     touchDraft();
   };
 
@@ -6182,6 +6551,14 @@ void preloadStartupAssets();
   const removeBackground = (id: string) => {
     if (!draft) return;
     draft.backgrounds = draft.backgrounds.filter((item) => item.id !== id);
+    const fallbackId = draft.backgrounds[0]?.id ?? "";
+    draft.categories = draft.categories.map((category) => ({
+      ...category,
+      backgroundId:
+        category.backgroundId === id || !category.backgroundId
+          ? fallbackId
+          : category.backgroundId
+    }));
     touchDraft();
   };
 
@@ -6191,6 +6568,7 @@ void preloadStartupAssets();
     const newSection = {
       id,
       name: createLocalized(draft.meta.locales),
+      backgroundId: draft.backgrounds[0]?.id ?? "",
       items: []
     };
     draft.categories = [...draft.categories, newSection];
@@ -6227,8 +6605,11 @@ void preloadStartupAssets();
       media: {
         hero360: "",
         originalHero360: "",
-        rotationDirection: "ccw"
-      }
+        rotationDirection: "ccw",
+        scrollAnimationMode: "hero360",
+        scrollAnimationSrc: ""
+      },
+      typography: {}
     };
     category.items = [...category.items, newDish];
     selectedItemId = id;
@@ -6241,6 +6622,7 @@ void preloadStartupAssets();
     const newSection = {
       id,
       name: createLocalized(draft.meta.locales),
+      backgroundId: draft.backgrounds[0]?.id ?? "",
       items: []
     };
     draft.categories = [...draft.categories, newSection];
@@ -6276,8 +6658,11 @@ void preloadStartupAssets();
       media: {
         hero360: "",
         originalHero360: "",
-        rotationDirection: "ccw"
-      }
+        rotationDirection: "ccw",
+        scrollAnimationMode: "hero360",
+        scrollAnimationSrc: ""
+      },
+      typography: {}
     };
     category.items = [...category.items, newDish];
     wizardItemId = id;
@@ -6663,8 +7048,9 @@ void preloadStartupAssets();
 
   const handleCustomFontSourceInput = (event: Event) => {
     if (!draft) return;
-    const input = event.currentTarget as HTMLInputElement;
-    draft.meta.fontSource = input.value;
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    draft.meta.fontSource = target.value;
     touchDraft();
   };
 
@@ -6677,6 +7063,79 @@ void preloadStartupAssets();
   const setLogoSrc = (src: string) => {
     if (!draft) return;
     draft.meta.logoSrc = src;
+    touchDraft();
+  };
+
+  const ensureFontRoles = () => {
+    if (!draft) return null;
+    if (!draft.meta.fontRoles) {
+      draft.meta.fontRoles = {};
+    }
+    return draft.meta.fontRoles;
+  };
+
+  const setFontRoleFamily = (role: "identity" | "section" | "item", family: string) => {
+    if (!draft) return;
+    const roles = ensureFontRoles();
+    if (!roles) return;
+    const trimmed = family.trim();
+    const existing = roles[role] ?? {};
+    roles[role] = {
+      ...existing,
+      family: trimmed
+    };
+    touchDraft();
+  };
+
+  const setFontRoleSource = (role: "identity" | "section" | "item", source: string) => {
+    if (!draft) return;
+    const roles = ensureFontRoles();
+    if (!roles) return;
+    const trimmed = source.trim();
+    const existing = roles[role] ?? {};
+    roles[role] = {
+      ...existing,
+      source: trimmed
+    };
+    touchDraft();
+  };
+
+  const setItemScrollAnimationMode = (
+    item: MenuItem,
+    mode: "hero360" | "alternate"
+  ) => {
+    const normalized = mode === "alternate" ? "alternate" : "hero360";
+    if (item.media.scrollAnimationMode === normalized) return;
+    item.media.scrollAnimationMode = normalized;
+    touchDraft();
+  };
+
+  const setItemScrollAnimationSrc = (item: MenuItem, source: string) => {
+    const normalized = source.trim();
+    if (item.media.scrollAnimationSrc === normalized) return;
+    item.media.scrollAnimationSrc = normalized;
+    touchDraft();
+  };
+
+  const ensureItemFontConfig = (item: MenuItem) => {
+    if (!item.typography) item.typography = {};
+    if (!item.typography.item) item.typography.item = {};
+    return item.typography.item;
+  };
+
+  const setItemFontFamily = (item: MenuItem, family: string) => {
+    const normalized = family.trim();
+    const fontConfig = ensureItemFontConfig(item);
+    if (fontConfig.family === normalized) return;
+    fontConfig.family = normalized;
+    touchDraft();
+  };
+
+  const setItemFontSource = (item: MenuItem, source: string) => {
+    const normalized = source.trim();
+    const fontConfig = ensureItemFontConfig(item);
+    if (fontConfig.source === normalized) return;
+    fontConfig.source = normalized;
     touchDraft();
   };
 
@@ -6696,7 +7155,7 @@ void preloadStartupAssets();
   };
 </script>
 
-<main class="min-h-screen app-shell {layoutMode}">
+<main class="min-h-screen app-shell">
   <input
     class="sr-only"
     type="file"
@@ -6722,7 +7181,7 @@ void preloadStartupAssets();
       {t("loadingProject")}
     </div>
   {:else if activeProject}
-    <div class="split-layout {layoutMode}">
+    <div class="split-layout">
       {#if showEditorToggle}
         <button
           class="menu-fab"
@@ -6734,7 +7193,7 @@ void preloadStartupAssets();
         </button>
       {/if}
 
-      {#if editorVisible && !editorLocked}
+      {#if editorVisible && editorPresentation === "desktop-card"}
         <button
           class="editor-backdrop"
           type="button"
@@ -6746,7 +7205,7 @@ void preloadStartupAssets();
       <EditorShell
         {t}
         {editorVisible}
-        {editorLocked}
+        {editorPresentation}
         {uiLang}
         {editorTab}
         setUiLang={(lang) => (uiLang = lang)}
@@ -6939,13 +7398,26 @@ void preloadStartupAssets();
                   </label>
                   <label class="editor-field">
                     <span>{t("fontCustomSrc")}</span>
-                    <input
-                      type="text"
-                      class="editor-input"
-                      value={draft.meta.fontSource ?? ""}
-                      list="asset-files"
-                      on:input={handleCustomFontSourceInput}
-                    />
+                    {#if fontAssetOptions.length}
+                      <select
+                        class="editor-select"
+                        value={draft.meta.fontSource ?? ""}
+                        on:change={handleCustomFontSourceInput}
+                      >
+                        <option value=""></option>
+                        {#each fontAssetOptions as option}
+                          <option value={option.value}>{option.label}</option>
+                        {/each}
+                      </select>
+                    {:else}
+                      <input
+                        type="text"
+                        class="editor-input"
+                        value={draft.meta.fontSource ?? ""}
+                        list="asset-files"
+                        on:input={handleCustomFontSourceInput}
+                      />
+                    {/if}
                   </label>
                 {/if}
               </div>
@@ -7005,6 +7477,8 @@ void preloadStartupAssets();
               {addBackground}
               {moveBackground}
               {removeBackground}
+              {setBackgroundDisplayMode}
+              {setCategoryBackgroundId}
               backgroundCarouselSeconds={normalizeBackgroundCarouselSeconds(
                 draft.meta.backgroundCarouselSeconds
               )}
@@ -7025,6 +7499,12 @@ void preloadStartupAssets();
               {setIdentityMode}
               {setLogoSrc}
               {setItemRotationDirection}
+              {setItemScrollAnimationMode}
+              {setItemScrollAnimationSrc}
+              {setFontRoleFamily}
+              {setFontRoleSource}
+              {setItemFontFamily}
+              {setItemFontSource}
               {touchDraft}
             />
           {:else}
@@ -7050,6 +7530,8 @@ void preloadStartupAssets();
               {applyTemplate}
               {addBackground}
               {removeBackground}
+              {setBackgroundDisplayMode}
+              {setCategoryBackgroundId}
               {addWizardCategory}
               {removeWizardCategory}
               {addWizardDish}
@@ -7057,6 +7539,12 @@ void preloadStartupAssets();
               {setIdentityMode}
               {setLogoSrc}
               {setItemRotationDirection}
+              {setItemScrollAnimationMode}
+              {setItemScrollAnimationSrc}
+              {setFontRoleFamily}
+              {setFontRoleSource}
+              {setItemFontFamily}
+              {setItemFontSource}
               {handleLocalizedInput}
               {handleDescriptionInput}
               {getLocalizedValue}
@@ -7069,7 +7557,6 @@ void preloadStartupAssets();
       </EditorShell>
 
       <PreviewCanvas
-        {layoutMode}
         {effectivePreview}
         {activeProject}
         bind:locale
@@ -7083,6 +7570,7 @@ void preloadStartupAssets();
         {carouselActive}
         {deviceMode}
         {previewFontStack}
+        {previewFontVars}
         {t}
         {textOf}
         {getLoadingLabel}
@@ -7102,6 +7590,7 @@ void preloadStartupAssets();
         {handleCarouselTouchEnd}
         {openDish}
         {prefetchDishDetail}
+        {getItemFontStyle}
       />
     </div>
   {/if}
@@ -7115,6 +7604,7 @@ void preloadStartupAssets();
       {dish}
       interactiveEnabled={Boolean(interactiveAsset && supportsInteractiveMedia())}
       detailRotateHint={getDetailRotateHint(locale)}
+      itemFontStyle={getItemFontStyle(dish)}
       bind:modalMediaHost
       bind:modalMediaImage
       {textOf}
@@ -7129,8 +7619,8 @@ void preloadStartupAssets();
 
 {#if assetOptions.length}
   <datalist id="asset-files">
-    {#each assetOptions as path}
-      <option value={path}></option>
+    {#each assetOptions as option}
+      <option value={option.value} label={option.label}></option>
     {/each}
   </datalist>
 {/if}
