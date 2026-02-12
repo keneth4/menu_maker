@@ -752,7 +752,7 @@
                       handleLongDescriptionInput(selectedItem, editLang, event)}
                   ></textarea>
                 </label>
-                <label class="editor-field">
+                <label class="editor-field editor-inline">
                   <span>{t("showPrice")}</span>
                   <input
                     type="checkbox"

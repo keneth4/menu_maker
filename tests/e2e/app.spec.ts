@@ -344,6 +344,65 @@ test("item show price toggle hides price in carousel and detail modal", async ({
   await expect(page.locator(".dish-modal__price")).toHaveCount(0);
 });
 
+test("show price checkbox row uses inline layout in edit and wizard item forms", async ({
+  page
+}, testInfo) => {
+  const transparentGif =
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+  const project: ProjectFixture = {
+    ...makeProjectFixture("Show Price Layout", "show-price-layout"),
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "Main",
+        src:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%230ea5e9'/%3E%3C/svg%3E",
+        type: "image"
+      }
+    ],
+    categories: [
+      {
+        id: "cat-1",
+        name: { es: "Sección", en: "Section" },
+        items: [
+          {
+            id: "item-1",
+            name: { es: "Item 1", en: "Item 1" },
+            description: { es: "Desc", en: "Desc" },
+            longDescription: { es: "", en: "" },
+            priceVisible: true,
+            price: { amount: 25, currency: "MXN" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: transparentGif }
+          }
+        ]
+      }
+    ]
+  };
+  const fixturePath = await writeJsonFixture(testInfo, project);
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  const tabs = page.locator(".editor-tabs");
+  await tabs.getByRole("button", { name: /editar|edit/i }).click();
+  const editShowPriceRow = page.locator(
+    ".edit-item__content label.editor-field.editor-inline",
+    { hasText: /mostrar precio|show price/i }
+  );
+  await expect(editShowPriceRow).toHaveCount(1);
+  await expect(editShowPriceRow.locator('input[type="checkbox"]')).toHaveCount(1);
+
+  await tabs.getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-step").nth(3).click();
+  const wizardShowPriceRow = page.locator(".wizard-body label.editor-field.editor-inline", {
+    hasText: /mostrar precio|show price/i
+  });
+  await expect(wizardShowPriceRow).toHaveCount(1);
+  await expect(wizardShowPriceRow.locator('input[type="checkbox"]')).toHaveCount(1);
+});
+
 test("detail modal cue is interactive-only and follows visible/hidden lifecycle", async ({
   page
 }, testInfo) => {

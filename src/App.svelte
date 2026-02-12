@@ -4209,7 +4209,20 @@ void preloadStartupAssets();
           .map((bg) => normalizePath(bg.src || ""))
           .filter((source) => source.length > 0)
       );
-      const fontSource = normalizePath(exportProject.meta.fontSource || "");
+      const fontSources = new Set<string>();
+      const collectFontSource = (value?: string) => {
+        const normalized = normalizePath(value || "");
+        if (normalized) fontSources.add(normalized);
+      };
+      collectFontSource(exportProject.meta.fontSource);
+      collectFontSource(exportProject.meta.fontRoles?.identity?.source);
+      collectFontSource(exportProject.meta.fontRoles?.section?.source);
+      collectFontSource(exportProject.meta.fontRoles?.item?.source);
+      exportProject.categories.forEach((category) => {
+        category.items.forEach((item) => {
+          collectFontSource(item.typography?.item?.source);
+        });
+      });
       exportProject.categories.forEach((category) => {
         category.items.forEach((item) => {
           const hero = normalizePath(item.media.hero360 || "");
@@ -4295,8 +4308,17 @@ void preloadStartupAssets();
           ...(large ? { large } : {})
         };
       };
+      const rewriteFontConfig = (value?: { family?: string; source?: string }) => {
+        if (!value) return value;
+        return {
+          ...(value.family !== undefined ? { family: value.family } : {}),
+          ...(value.source !== undefined
+            ? { source: getMappedSource(value.source) ?? value.source }
+            : {})
+        };
+      };
       const getSourceRole = (sourcePath: string): ExportAssetManifestEntry["role"] => {
-        if (fontSource && sourcePath === fontSource) return "font";
+        if (fontSources.has(sourcePath)) return "font";
         if (backgroundSources.has(sourcePath)) return "background";
         if (heroSources.has(sourcePath)) return "hero";
         return "other";
@@ -4382,6 +4404,20 @@ void preloadStartupAssets();
           exportProject.meta.fontSource = mapped;
         }
       }
+      if (exportProject.meta.fontRoles) {
+        exportProject.meta.fontRoles = {
+          ...exportProject.meta.fontRoles,
+          ...(exportProject.meta.fontRoles.identity
+            ? { identity: rewriteFontConfig(exportProject.meta.fontRoles.identity) }
+            : {}),
+          ...(exportProject.meta.fontRoles.section
+            ? { section: rewriteFontConfig(exportProject.meta.fontRoles.section) }
+            : {}),
+          ...(exportProject.meta.fontRoles.item
+            ? { item: rewriteFontConfig(exportProject.meta.fontRoles.item) }
+            : {})
+        };
+      }
       if (exportProject.meta.logoSrc) {
         const normalized = normalizePath(exportProject.meta.logoSrc);
         const mapped = sourceToExportPath.get(normalized);
@@ -4415,9 +4451,16 @@ void preloadStartupAssets();
           }
           if (rewrittenResponsive) nextMedia.responsive = rewrittenResponsive;
           if (rewrittenDerived) nextMedia.derived = rewrittenDerived;
+          const nextTypography = item.typography?.item
+            ? {
+                ...item.typography,
+                item: rewriteFontConfig(item.typography.item)
+              }
+            : item.typography;
           return {
             ...item,
-            media: nextMedia
+            media: nextMedia,
+            ...(nextTypography ? { typography: nextTypography } : {})
           };
         })
       }));
