@@ -4,7 +4,6 @@
 
   export let dish: MenuItem;
   export let interactiveEnabled = false;
-  export let detailRotateHint = "";
   export let itemFontStyle = "";
   export let modalMediaHost: HTMLDivElement | null = null;
   export let modalMediaImage: HTMLImageElement | null = null;
@@ -77,7 +76,6 @@
             </svg>
           </span>
         </div>
-        <p class="dish-modal__media-note">{detailRotateHint}</p>
       {/if}
       {#if detailMediaLoading}
         <div class="dish-modal__media-loading" aria-hidden="true">

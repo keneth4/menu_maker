@@ -152,7 +152,7 @@
   let modalMediaCleanup: (() => void) | null = null;
   let modalMediaToken = 0;
   let detailRotateDirection: 1 | -1 = -1;
-  const ROTATE_CUE_RESHOW_IDLE_MS = 2000;
+  const ROTATE_CUE_RESHOW_IDLE_MS = 3000;
   const ROTATE_CUE_LOOP_MS = 5000;
   const DEBUG_INTERACTIVE_CENTER =
     typeof window !== "undefined" &&
@@ -1829,7 +1829,7 @@ const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
 const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 const INTERACTIVE_GIF_MAX_FRAMES = 72;
 const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
-const ROTATE_CUE_RESHOW_IDLE_MS = 2000;
+const ROTATE_CUE_RESHOW_IDLE_MS = 3000;
 const ROTATE_CUE_LOOP_MS = 5000;
 const DEBUG_INTERACTIVE_CENTER = new URLSearchParams(window.location.search).has("debugRotate");
 const interactiveDetailBytesCache = new Map();
@@ -2179,10 +2179,6 @@ const getInteractiveDetailAsset = (item) => {
   return null;
 };
 const supportsInteractiveMedia = () => "ImageDecoder" in window;
-const getDetailRotateHint = () => {
-  const isTouch = window.matchMedia("(pointer: coarse)").matches;
-  return getInstructionCopy(isTouch ? "rotateHintTouch" : "rotateHintMouse");
-};
 const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "cw" ? -1 : 1);
 const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
   const readForegroundCenterFromBitmap = (bitmap) => {
@@ -4007,7 +4003,6 @@ const bindCards = () => {
         </div>
         <div class="dish-modal__media">
           \${asset && supportsInteractiveMedia() ? '<div class="dish-modal__rotate-cue" aria-hidden="true"><span class="dish-modal__rotate-cue-gesture"><svg class="dish-modal__rotate-cue-gesture-main" data-icon="gesture-swipe-horizontal" viewBox="0 0 24 24" role="presentation" focusable="false" aria-hidden="true"><path d="M6 1L3 4l3 3V5h3v2l3-3l-3-3v2H6zm5 7a1 1 0 0 0-1 1v10l-3.2-1.72h-.22c-.28 0-.55.11-.74.32l-.74.77l4.9 4.2c.26.28.62.43 1 .43h6.5a1.5 1.5 0 0 0 1.5-1.5v-4.36c0-.58-.32-1.11-.85-1.35l-4.94-2.19l-1.21-.13V9a1 1 0 0 0-1-1"></path></svg><svg class="dish-modal__rotate-cue-gesture-ghost" data-icon="gesture-swipe-horizontal" viewBox="0 0 24 24" role="presentation" focusable="false" aria-hidden="true"><path d="M6 1L3 4l3 3V5h3v2l3-3l-3-3v2H6zm5 7a1 1 0 0 0-1 1v10l-3.2-1.72h-.22c-.28 0-.55.11-.74.32l-.74.77l4.9 4.2c.26.28.62.43 1 .43h6.5a1.5 1.5 0 0 0 1.5-1.5v-4.36c0-.58-.32-1.11-.85-1.35l-4.94-2.19l-1.21-.13V9a1 1 0 0 0-1-1"></path></svg></span></div>' : ""}
-          \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p>" : ""}
           <img src="\${getDetailImageSrc(dish)}" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
         <div class="dish-modal__content">
@@ -4627,11 +4622,6 @@ void preloadStartupAssets();
 
   const supportsInteractiveMedia = () =>
     typeof window !== "undefined" && "ImageDecoder" in window;
-
-  const getDetailRotateHint = (lang: string) => {
-    const key = deviceMode === "mobile" ? "rotateHintTouch" : "rotateHintMouse";
-    return getInstructionCopy(key, lang);
-  };
 
   const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
 
@@ -7919,7 +7909,6 @@ void preloadStartupAssets();
     <DishModal
       {dish}
       interactiveEnabled={Boolean(interactiveAsset && supportsInteractiveMedia())}
-      detailRotateHint={getDetailRotateHint(locale)}
       itemFontStyle={getItemFontStyle(dish)}
       bind:modalMediaHost
       bind:modalMediaImage

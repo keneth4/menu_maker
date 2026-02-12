@@ -166,19 +166,27 @@ const dragDetailCanvasHorizontally = async (page: Page) => {
 };
 
 const assertRotationCueLifecycle = async (page: Page) => {
-  await expect(page.locator(".dish-modal__media .dish-modal__rotate-cue")).toHaveCount(1);
+  const cue = page.locator(".dish-modal__media .dish-modal__rotate-cue");
+  await expect(cue).toHaveCount(1);
   await expect(page.locator(".dish-modal__media .dish-modal__rotate-cue-gesture")).toHaveCount(1);
   const cueMain = page.locator(".dish-modal__rotate-cue-gesture-main");
   await expect(
     page.locator('.dish-modal__rotate-cue-gesture-main[data-icon="gesture-swipe-horizontal"]')
   ).toHaveCount(1);
+  await expect(page.locator(".dish-modal__media-note")).toHaveCount(0);
   await expect(page.locator(".dish-modal__rotate-cue-disc")).toHaveCount(0);
   await expect(page.locator(".dish-modal__rotate-cue-orbit")).toHaveCount(0);
   await expect(page.locator(".dish-modal__media")).toHaveAttribute("data-cue-state", "visible");
-  await expect(page.locator(".dish-modal__rotate-cue")).toHaveClass(/is-looping/);
+  await expect(cue).toHaveClass(/is-looping/);
+  const cueBox = await cue.first().boundingBox();
+  expect(cueBox).not.toBeNull();
+  expect(cueBox!.width).toBeGreaterThan(160);
   await expect
     .poll(async () => await cueMain.evaluate((element) => getComputedStyle(element).animationDuration))
     .toContain("5s");
+  await expect
+    .poll(async () => await cueMain.evaluate((element) => getComputedStyle(element).filter))
+    .toContain("drop-shadow");
   await expect
     .poll(
       async () => await cueMain.evaluate((element) => getComputedStyle(element).animationIterationCount)
@@ -186,9 +194,9 @@ const assertRotationCueLifecycle = async (page: Page) => {
     .toBe("infinite");
   await dragDetailCanvasHorizontally(page);
   await expect
-    .poll(async () => await getCueState(page), { timeout: 2600 })
+    .poll(async () => await getCueState(page), { timeout: 3800 })
     .toBe("visible");
-  await expect(page.locator(".dish-modal__rotate-cue")).toHaveClass(/is-looping/);
+  await expect(cue).toHaveClass(/is-looping/);
 };
 
 const createFixture = (animatedGif: string): RotationCueFixture => ({
