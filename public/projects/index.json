@@ -113,6 +113,12 @@
       "name": "SplatsCollection",
       "template": "focus-rows",
       "cover": "/projects/kenethsplatscollection/assets/derived/backgrounds/backgroundMannheim-md.gif"
+    },
+    {
+      "slug": "keneth-s-gaussian-splattings-collection",
+      "name": "Keneth's Gaussian Splattings Collection",
+      "template": "focus-rows",
+      "cover": "/projects/keneth-s-gaussian-splattings-collection/assets/derived/backgrounds/backgroundMannheim-md.gif"
     }
   ]
 }
