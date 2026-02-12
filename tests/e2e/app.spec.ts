@@ -343,3 +343,113 @@ test("item show price toggle hides price in carousel and detail modal", async ({
   await expect(page.locator(".dish-modal.open")).toBeVisible();
   await expect(page.locator(".dish-modal__price")).toHaveCount(0);
 });
+
+test("detail modal cue is interactive-only and follows visible/hidden lifecycle", async ({
+  page
+}, testInfo) => {
+  const animatedGifBuffer = await readFile(
+    path.resolve("public/projects/cafebrunch-menu-1/assets/originals/items/ice-cream-sandwich-5545c1.gif")
+  );
+  const animatedGif = `data:image/gif;base64,${animatedGifBuffer.toString("base64")}`;
+  const transparentPng =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2LQxkAAAAASUVORK5CYII=";
+  const project: ProjectFixture = {
+    ...makeProjectFixture("Rotation Cue", "rotation-cue"),
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "Main",
+        src:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%231f2937'/%3E%3C/svg%3E",
+        type: "image"
+      }
+    ],
+    categories: [
+      {
+        id: "cat-1",
+        name: { es: "Sección", en: "Section" },
+        items: [
+          {
+            id: "item-interactive",
+            name: { es: "Item Interactivo", en: "Interactive Item" },
+            description: { es: "Desc", en: "Desc" },
+            longDescription: { es: "", en: "" },
+            price: { amount: 25, currency: "MXN" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: animatedGif }
+          },
+          {
+            id: "item-static",
+            name: { es: "Item Estático", en: "Static Item" },
+            description: { es: "Desc", en: "Desc" },
+            longDescription: { es: "", en: "" },
+            price: { amount: 20, currency: "MXN" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: transparentPng }
+          }
+        ]
+      }
+    ]
+  };
+  const fixturePath = await writeJsonFixture(testInfo, project);
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  const supportsImageDecoder = await page.evaluate(() => "ImageDecoder" in window);
+  test.skip(!supportsImageDecoder, "ImageDecoder is required for interactive media cue checks.");
+
+  await expect(page.locator(".carousel-card")).toHaveCount(2);
+  await page.locator(".carousel-card").first().click();
+  await expect(page.locator(".dish-modal.open")).toBeVisible();
+  const interactiveMediaHost = page.locator(".dish-modal__media");
+  await expect(page.locator(".dish-modal__rotate-cue")).toHaveCount(1);
+  await expect(page.locator(".dish-modal__rotate-cue-gesture")).toHaveCount(1);
+  const cueMain = page.locator(".dish-modal__rotate-cue-gesture-main");
+  await expect(
+    page.locator('.dish-modal__rotate-cue-gesture-main[data-icon="gesture-swipe-horizontal"]')
+  ).toHaveCount(1);
+  await expect(page.locator(".dish-modal__rotate-cue-disc")).toHaveCount(0);
+  await expect(page.locator(".dish-modal__rotate-cue-orbit")).toHaveCount(0);
+  await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "visible");
+  await expect(page.locator(".dish-modal__rotate-cue")).toHaveClass(/is-looping/);
+  await expect
+    .poll(async () => await cueMain.evaluate((element) => getComputedStyle(element).animationDuration))
+    .toContain("5s");
+  await expect
+    .poll(
+      async () => await cueMain.evaluate((element) => getComputedStyle(element).animationIterationCount)
+    )
+    .toBe("infinite");
+
+  const interactiveCanvas = page.locator(".dish-modal__media-canvas");
+  await expect(interactiveCanvas).toHaveCount(1);
+  const box = await interactiveCanvas.first().boundingBox();
+  expect(box).not.toBeNull();
+  const y = box!.y + box!.height / 2;
+  const startX = box!.x + box!.width * 0.45;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "hidden");
+  await page.mouse.move(startX + 34, y, { steps: 6 });
+  await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "hidden");
+  await page.mouse.up();
+  await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "hidden");
+  await expect
+    .poll(async () => await interactiveMediaHost.getAttribute("data-cue-state"), { timeout: 2600 })
+    .toBe("visible");
+  await expect(page.locator(".dish-modal__rotate-cue")).toHaveClass(/is-looping/);
+
+  await page.locator(".dish-modal__close").click();
+  await expect(page.locator(".dish-modal")).not.toHaveClass(/open/);
+
+  await page.locator(".carousel-card").nth(1).click();
+  await expect(page.locator(".dish-modal.open")).toBeVisible();
+  await expect(page.locator(".dish-modal__rotate-cue")).toHaveCount(0);
+  await expect(page.locator(".dish-modal__rotate-cue-gesture")).toHaveCount(0);
+  await expect(page.locator(".dish-modal__rotate-cue-disc")).toHaveCount(0);
+  await expect(page.locator(".dish-modal__rotate-cue-orbit")).toHaveCount(0);
+  expect(await page.locator(".dish-modal__media").getAttribute("data-cue-state")).toBeNull();
+});

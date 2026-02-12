@@ -152,6 +152,8 @@
   let modalMediaCleanup: (() => void) | null = null;
   let modalMediaToken = 0;
   let detailRotateDirection: 1 | -1 = -1;
+  const ROTATE_CUE_RESHOW_IDLE_MS = 2000;
+  const ROTATE_CUE_LOOP_MS = 5000;
   const DEBUG_INTERACTIVE_CENTER =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).has("debugRotate");
@@ -1827,6 +1829,8 @@ const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
 const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 const INTERACTIVE_GIF_MAX_FRAMES = 72;
 const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
+const ROTATE_CUE_RESHOW_IDLE_MS = 2000;
+const ROTATE_CUE_LOOP_MS = 5000;
 const DEBUG_INTERACTIVE_CENTER = new URLSearchParams(window.location.search).has("debugRotate");
 const interactiveDetailBytesCache = new Map();
 const interactiveDetailBytesPending = new Map();
@@ -2519,7 +2523,40 @@ const setupInteractiveModalMedia = async (asset) => {
   let debugBounds = null;
   let debugVisibleRect = null;
   let debugFrameSize = null;
+  const cueElement = host.querySelector(".dish-modal__rotate-cue");
+  let cueIdleTimeout = 0;
+  const clearCueTimers = () => {
+    if (cueIdleTimeout) {
+      window.clearTimeout(cueIdleTimeout);
+      cueIdleTimeout = 0;
+    }
+  };
+  const restartCueLoop = () => {
+    if (!cueElement) return;
+    cueElement.style.setProperty("--rotate-cue-loop-ms", ROTATE_CUE_LOOP_MS + "ms");
+    cueElement.classList.remove("is-looping");
+    void cueElement.offsetWidth;
+    cueElement.classList.add("is-looping");
+  };
+  const setCueState = (state) => {
+    host.dataset.cueState = state;
+    if (state === "visible") {
+      restartCueLoop();
+    }
+  };
+  const scheduleCueVisible = () => {
+    if (disposed) return;
+    if (cueIdleTimeout) {
+      window.clearTimeout(cueIdleTimeout);
+    }
+    cueIdleTimeout = window.setTimeout(() => {
+      cueIdleTimeout = 0;
+      if (disposed) return;
+      setCueState("visible");
+    }, ROTATE_CUE_RESHOW_IDLE_MS);
+  };
   host.classList.add("is-loading-interactive");
+  setCueState("visible");
   if (debugEnabled) {
     debugEl = document.createElement("div");
     debugEl.className = "dish-modal__media-debug";
@@ -2585,6 +2622,9 @@ const setupInteractiveModalMedia = async (asset) => {
     if (imageHidden) {
       image.classList.remove("is-hidden");
     }
+    clearCueTimers();
+    cueElement?.classList.remove("is-looping");
+    delete host.dataset.cueState;
     host.classList.remove("is-loading-interactive");
     host.classList.remove("is-interactive");
     bitmaps.forEach((bitmap) => bitmap.close?.());
@@ -2751,6 +2791,8 @@ const setupInteractiveModalMedia = async (asset) => {
       const onPointerDown = (event) => {
         pointerId = event.pointerId;
         lastX = event.clientX;
+        clearCueTimers();
+        setCueState("hidden");
         canvas.setPointerCapture(pointerId);
         canvas.classList.add("is-dragging");
         event.preventDefault();
@@ -2759,6 +2801,7 @@ const setupInteractiveModalMedia = async (asset) => {
         if (pointerId !== event.pointerId) return;
         const deltaX = event.clientX - lastX;
         lastX = event.clientX;
+        setCueState("hidden");
         frameCursor += (deltaX / pixelsPerFrame) * detailRotateDirection;
         render();
         event.preventDefault();
@@ -2770,6 +2813,8 @@ const setupInteractiveModalMedia = async (asset) => {
         } catch {}
         pointerId = null;
         canvas.classList.remove("is-dragging");
+        setCueState("hidden");
+        scheduleCueVisible();
       };
       canvas.addEventListener("pointerdown", onPointerDown);
       canvas.addEventListener("pointermove", onPointerMove);
@@ -3961,6 +4006,7 @@ const bindCards = () => {
           <button class="dish-modal__close" id="modal-close">✕</button>
         </div>
         <div class="dish-modal__media">
+          \${asset && supportsInteractiveMedia() ? '<div class="dish-modal__rotate-cue" aria-hidden="true"><span class="dish-modal__rotate-cue-gesture"><svg class="dish-modal__rotate-cue-gesture-main" data-icon="gesture-swipe-horizontal" viewBox="0 0 24 24" role="presentation" focusable="false" aria-hidden="true"><path d="M6 1L3 4l3 3V5h3v2l3-3l-3-3v2H6zm5 7a1 1 0 0 0-1 1v10l-3.2-1.72h-.22c-.28 0-.55.11-.74.32l-.74.77l4.9 4.2c.26.28.62.43 1 .43h6.5a1.5 1.5 0 0 0 1.5-1.5v-4.36c0-.58-.32-1.11-.85-1.35l-4.94-2.19l-1.21-.13V9a1 1 0 0 0-1-1"></path></svg><svg class="dish-modal__rotate-cue-gesture-ghost" data-icon="gesture-swipe-horizontal" viewBox="0 0 24 24" role="presentation" focusable="false" aria-hidden="true"><path d="M6 1L3 4l3 3V5h3v2l3-3l-3-3v2H6zm5 7a1 1 0 0 0-1 1v10l-3.2-1.72h-.22c-.28 0-.55.11-.74.32l-.74.77l4.9 4.2c.26.28.62.43 1 .43h6.5a1.5 1.5 0 0 0 1.5-1.5v-4.36c0-.58-.32-1.11-.85-1.35l-4.94-2.19l-1.21-.13V9a1 1 0 0 0-1-1"></path></svg></span></div>' : ""}
           \${asset && supportsInteractiveMedia() ? '<p class="dish-modal__media-note">' + getDetailRotateHint() + "</p>" : ""}
           <img src="\${getDetailImageSrc(dish)}" alt="\${textOf(dish.name)}" draggable="false" oncontextmenu="return false;" ondragstart="return false;" decoding="async" />
         </div>
@@ -4908,8 +4954,41 @@ void preloadStartupAssets();
       dw: number;
       dh: number;
     } | null = null;
+    const cueElement = host.querySelector<HTMLDivElement>(".dish-modal__rotate-cue");
+    let cueIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+    const clearCueTimers = () => {
+      if (cueIdleTimeout) {
+        window.clearTimeout(cueIdleTimeout);
+        cueIdleTimeout = null;
+      }
+    };
+    const restartCueLoop = () => {
+      if (!cueElement) return;
+      cueElement.style.setProperty("--rotate-cue-loop-ms", `${ROTATE_CUE_LOOP_MS}ms`);
+      cueElement.classList.remove("is-looping");
+      void cueElement.offsetWidth;
+      cueElement.classList.add("is-looping");
+    };
+    const setCueState = (state: "visible" | "hidden") => {
+      host.dataset.cueState = state;
+      if (state === "visible") {
+        restartCueLoop();
+      }
+    };
+    const scheduleCueVisible = () => {
+      if (disposed) return;
+      if (cueIdleTimeout) {
+        window.clearTimeout(cueIdleTimeout);
+      }
+      cueIdleTimeout = window.setTimeout(() => {
+        cueIdleTimeout = null;
+        if (disposed) return;
+        setCueState("visible");
+      }, ROTATE_CUE_RESHOW_IDLE_MS);
+    };
 
     host.classList.add("is-loading-interactive");
+    setCueState("visible");
     if (debugEnabled) {
       debugEl = document.createElement("div");
       debugEl.className = "dish-modal__media-debug";
@@ -4958,6 +5037,9 @@ void preloadStartupAssets();
       if (imageHidden) {
         image.classList.remove("is-hidden");
       }
+      clearCueTimers();
+      cueElement?.classList.remove("is-looping");
+      delete host.dataset.cueState;
       host.classList.remove("is-loading-interactive");
       host.classList.remove("is-interactive");
       bitmaps.forEach((bitmap) => bitmap.close());
@@ -5131,6 +5213,8 @@ void preloadStartupAssets();
         const onPointerDown = (event: PointerEvent) => {
           pointerId = event.pointerId;
           lastX = event.clientX;
+          clearCueTimers();
+          setCueState("hidden");
           canvas?.setPointerCapture(pointerId);
           canvas?.classList.add("is-dragging");
           event.preventDefault();
@@ -5139,6 +5223,7 @@ void preloadStartupAssets();
           if (pointerId !== event.pointerId) return;
           const deltaX = event.clientX - lastX;
           lastX = event.clientX;
+          setCueState("hidden");
           frameCursor += (deltaX / pixelsPerFrame) * detailRotateDirection;
           render();
           event.preventDefault();
@@ -5152,6 +5237,8 @@ void preloadStartupAssets();
           }
           pointerId = null;
           canvas?.classList.remove("is-dragging");
+          setCueState("hidden");
+          scheduleCueVisible();
         };
 
         canvas.addEventListener("pointerdown", onPointerDown);
