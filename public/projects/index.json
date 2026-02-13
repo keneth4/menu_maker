@@ -119,6 +119,36 @@
       "name": "Keneth's Gaussian Splattings Collection",
       "template": "focus-rows",
       "cover": "/projects/keneth-s-gaussian-splattings-collection/assets/derived/backgrounds/backgroundMannheim-md.gif"
+    },
+    {
+      "slug": "ffmpeg-save-1771014292095-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771014292095-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771015560431-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771015560431-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771016908342-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771016908342-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771018781773-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771018781773-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771021559849-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771021559849-save/assets/derived/backgrounds/backery-outside-md.png"
     }
   ]
 }

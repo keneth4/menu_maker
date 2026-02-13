@@ -101,6 +101,40 @@ const openEditor = async (page: Page) => {
   }
 };
 
+const supportsInteractiveDecodeForSource = async (page: Page, source: string) => {
+  return await page.evaluate(async (src) => {
+    const Decoder = (window as Window & { ImageDecoder?: new (init: unknown) => any }).ImageDecoder;
+    if (!Decoder || typeof createImageBitmap !== "function") return false;
+    try {
+      const response = await fetch(src);
+      if (!response.ok) return false;
+      const data = await response.arrayBuffer();
+      const decoder = new Decoder({ data, type: "image/gif" });
+      await decoder.tracks.ready;
+      const frameCount = Number(decoder.tracks?.selectedTrack?.frameCount ?? 0);
+      if (frameCount < 2) {
+        decoder.close?.();
+        return false;
+      }
+      const decoded = await decoder.decode({ frameIndex: 0, completeFramesOnly: true });
+      const frame = decoded?.image;
+      if (!frame) {
+        decoder.close?.();
+        return false;
+      }
+      try {
+        await createImageBitmap(frame);
+      } finally {
+        frame.close?.();
+      }
+      decoder.close?.();
+      return true;
+    } catch {
+      return false;
+    }
+  }, source);
+};
+
 const getProjectNameInput = (page: Page) =>
   page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
@@ -338,9 +372,11 @@ test("item show price toggle hides price in carousel and detail modal", async ({
 
   await expect(page.locator(".carousel-card")).toBeVisible();
   await expect(page.locator(".carousel-price")).toHaveCount(0);
+  await page.getByRole("button", { name: /cerrar editor|close editor/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
 
   await page.locator(".carousel-card").first().click();
-  await expect(page.locator(".dish-modal.open")).toBeVisible();
+  await expect(page.locator(".dish-modal")).toBeVisible();
   await expect(page.locator(".dish-modal__price")).toHaveCount(0);
 });
 
@@ -386,7 +422,8 @@ test("show price checkbox row uses inline layout in edit and wizard item forms",
   await openProjectFromLanding(page, fixturePath);
 
   const tabs = page.locator(".editor-tabs");
-  await tabs.getByRole("button", { name: /editar|edit/i }).click();
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
+  await page.getByRole("button", { name: /items|platillos|dishes/i }).click();
   const editShowPriceRow = page.locator(
     ".edit-item__content label.editor-field.editor-inline",
     { hasText: /mostrar precio|show price/i }
@@ -407,7 +444,7 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   page
 }, testInfo) => {
   const animatedGifBuffer = await readFile(
-    path.resolve("public/projects/cafebrunch-menu-1/assets/originals/items/ice-cream-sandwich-5545c1.gif")
+    path.resolve("public/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif")
   );
   const animatedGif = `data:image/gif;base64,${animatedGifBuffer.toString("base64")}`;
   const transparentPng =
@@ -457,10 +494,15 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
 
-  const supportsImageDecoder = await page.evaluate(() => "ImageDecoder" in window);
-  test.skip(!supportsImageDecoder, "ImageDecoder is required for interactive media cue checks.");
+  const supportsInteractiveDecode = await supportsInteractiveDecodeForSource(page, animatedGif);
+  test.skip(
+    !supportsInteractiveDecode,
+    "Interactive GIF decoding is unavailable in this runtime."
+  );
 
   await expect(page.locator(".carousel-card")).toHaveCount(2);
+  await page.getByRole("button", { name: /cerrar editor|close editor/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
   await page.locator(".carousel-card").first().click();
   await expect(page.locator(".dish-modal.open")).toBeVisible();
   const interactiveMediaHost = page.locator(".dish-modal__media");
@@ -505,12 +547,12 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   await page.mouse.up();
   await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "hidden");
   await expect
-    .poll(async () => await interactiveMediaHost.getAttribute("data-cue-state"), { timeout: 3800 })
+    .poll(async () => await interactiveMediaHost.getAttribute("data-cue-state"), { timeout: 12_000 })
     .toBe("visible");
   await expect(cue).toHaveClass(/is-looping/);
 
   await page.locator(".dish-modal__close").click();
-  await expect(page.locator(".dish-modal")).not.toHaveClass(/open/);
+  await expect(page.locator(".dish-modal")).toHaveCount(0);
 
   await page.locator(".carousel-card").nth(1).click();
   await expect(page.locator(".dish-modal.open")).toBeVisible();

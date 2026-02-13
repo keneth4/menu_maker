@@ -22,6 +22,40 @@ const closeEditorIfOpen = async (page: Page) => {
   }
 };
 
+const supportsInteractiveGifDecoding = async (page: Page) => {
+  return await page.evaluate(async () => {
+    const Decoder = (window as Window & { ImageDecoder?: new (init: unknown) => any }).ImageDecoder;
+    if (!Decoder || typeof createImageBitmap !== "function") return false;
+    try {
+      const response = await fetch("/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif");
+      if (!response.ok) return false;
+      const data = await response.arrayBuffer();
+      const decoder = new Decoder({ data, type: "image/gif" });
+      await decoder.tracks.ready;
+      const frameCount = Number(decoder.tracks?.selectedTrack?.frameCount ?? 0);
+      if (frameCount < 2) {
+        decoder.close?.();
+        return false;
+      }
+      const decoded = await decoder.decode({ frameIndex: 0, completeFramesOnly: true });
+      const frame = decoded?.image;
+      if (!frame) {
+        decoder.close?.();
+        return false;
+      }
+      try {
+        await createImageBitmap(frame);
+      } finally {
+        frame.close?.();
+      }
+      decoder.close?.();
+      return true;
+    } catch {
+      return false;
+    }
+  });
+};
+
 test("interactive modal enables drag-to-rotate canvas for sample project", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => {
@@ -31,6 +65,9 @@ test("interactive modal enables drag-to-rotate canvas for sample project", async
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, sampleMenuPath);
+
+  const supportsInteractiveGif = await supportsInteractiveGifDecoding(page);
+  test.skip(!supportsInteractiveGif, "Interactive GIF decoding is unavailable in this runtime.");
 
   await closeEditorIfOpen(page);
 

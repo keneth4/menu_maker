@@ -15,16 +15,26 @@ const dish: MenuItem = {
 
 describe("DishModal", () => {
   it("emits close event and renders allergens", async () => {
+    const closeAction = vi.fn();
     const { component } = render(DishModal, {
       props: {
-        dish,
-        interactiveEnabled: true,
-        detailRotateHint: "drag",
-        textOf: (value: Record<string, string> | undefined) => value?.es ?? "",
-        getDetailImageSource: () => "/projects/demo/assets/tostada.webp",
-        getAllergenValues: () => ["Nueces"],
-        getMenuTerm: (key: string) => key,
-        formatPrice: (value: number) => `$${value}`
+        model: {
+          dish,
+          interactiveEnabled: true,
+          itemFontStyle: "",
+          modalMediaHost: null,
+          modalMediaImage: null,
+          textOf: (value: Record<string, string> | undefined) => value?.es ?? "",
+          getDetailImageSource: () => "/projects/demo/assets/tostada.webp",
+          getAllergenValues: () => ["Nueces"],
+          getMenuTerm: (key: string) => key,
+          formatPrice: (value: number) => `$${value}`
+        },
+        actions: {
+          close: closeAction,
+          setModalMediaHost: () => undefined,
+          setModalMediaImage: () => undefined
+        }
       }
     });
 
@@ -34,6 +44,7 @@ describe("DishModal", () => {
     await fireEvent.click(screen.getByRole("button", { name: "✕" }));
 
     expect(close).toHaveBeenCalledTimes(1);
+    expect(closeAction).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/Nueces/)).toBeInTheDocument();
   });
 });

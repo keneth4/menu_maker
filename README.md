@@ -213,7 +213,20 @@ Export rules:
 
 ## 9) Current Technical Notes
 
-- UI shell/orchestration is still concentrated in `src/App.svelte` (componentized but still monolithic).
+- `src/App.svelte` is now a thin composition shell (controller mount + `AppRuntime` composition only).
+- `src/ui/components/AppRuntime.svelte` is now a thin runtime wrapper.
+- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreen.svelte`, with ongoing redistribution into:
+  - `src/application/*` workflows,
+  - `src/ui/controllers/*`,
+  - `src/ui/stores/*`,
+  - `src/export-runtime/*`.
+- `src/ui/controllers/createAppController.ts` now exposes real action groups and lifecycle-owned mount/destroy wiring.
+- Large UI surfaces now expose typed `{ model, actions }` contracts in:
+  - `src/ui/components/AssetsManager.svelte`
+  - `src/ui/components/EditPanel.svelte`
+  - `src/ui/components/WizardPanel.svelte`
+  - `src/ui/components/PreviewCanvas.svelte`
+  - `src/ui/components/DishModal.svelte`
 - Template capability matrix + strategy interface are in `src/core/templates/registry.ts`.
 - Domain logic modules are in `src/core/menu/*`.
 - Import/export use-cases are in `src/application/export/*`.
@@ -221,6 +234,7 @@ Export rules:
 - Bridge API contract remains in `vite.config.ts` (`/api/assets/*`).
 - Zip primitives remain in `src/lib/zip.ts`.
 - Template behavior reference doc: `TEMPLATE_BEHAVIOR_GUIDE.md`.
+- Redistribution mapping reference: `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`.
 
 ## 10) Next Development Priorities
 
@@ -234,21 +248,27 @@ Completed in Phases 1-8:
 Open product and engineering priorities:
 - stronger wizard recommendations by menu size/use case,
 - accessibility hardening and reduced-motion parity across templates,
-- continue reducing `src/App.svelte` orchestration weight into additional modules/stores,
+- continue reducing `src/ui/components/AppRuntimeScreen.svelte` orchestration weight into additional modules/stores/controllers,
 - template expansion using the strategy registry (next template implementation path).
 
 ## 11) Local Development
 
 Requirements:
-- Node.js 20+ recommended
+- Node.js `>=18.19.0` (Playwright ESM loader requirement)
 
 Commands:
 - `npm install`
 - `npm run dev`
 - `npm run build`
 - `npm run test`
-- `npm run test:e2e`
-- `npm run test:perf` (export budget check via e2e export flow; falls back to container smoke if local Node is below Playwright minimum)
+- `npm run test:e2e` (container-first gate, local fallback)
+- `npm run test:e2e:container` (forced containerized e2e gate)
+- `npm run test:e2e:local` (forced local Playwright run)
+- `npm run test:perf` (container-first perf gate, local fallback)
+- `npm run test:perf:container` (forced containerized perf/smoke gate)
+
+Install note:
+- `postinstall` runs `scripts/patch-parse5-for-jsdom.mjs` to apply local jsdom/parse5 compatibility fixes required by the current host runtime constraints.
 
 ## 12) Container Workflows (Phase 6)
 
@@ -262,6 +282,8 @@ Added container files:
 - `VITE_PORT` (default `5173`): host port mapped to dev app (`app` service).
 - `PREVIEW_PORT` (default `4173`): host port mapped to static preview (`preview` service).
 - `APP_PORT` (default `5173`): smoke script target port.
+- `E2E_GREP` (default export-flow smoke grep): optional Playwright grep for containerized e2e runs. Empty value runs full suite.
+- `ALLOW_CONTAINER_BUILD` (default `0`): when `1`, container smoke scripts may build/pull missing images; when `0`, they fail fast if images are not already local.
 - `PLAYWRIGHT_DOCKER_TAG` (default auto-derived, fallback `v1.58.1-jammy`): Playwright image tag used by container smoke e2e service.
 
 Mount points in `docker-compose.yml`:
@@ -294,10 +316,11 @@ This keeps the bridge API contract stable under container dev:
 ### Optional manual smoke sequence
 1. `docker compose up -d --build app`
 2. Verify bridge: `curl "http://127.0.0.1:5173/api/assets/ping?project=manual-smoke"`
-3. Run export flow against containerized server:
-   `PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 npm run test:e2e -- --grep "save project and export static site create zip downloads"`
-   - If local Playwright runtime mismatches Node, use `npm run test:perf` instead.
-4. `docker compose down`
+3. Run containerized e2e against containerized server:
+   `E2E_GREP=\"\" npm run test:e2e:container`
+4. Run containerized perf/smoke gate:
+   `npm run test:perf:container`
+5. `docker compose down`
 
 ## 13) Performance Hardening (Phase 7)
 
@@ -326,7 +349,7 @@ Added in this phase:
 - preview shell rendering now uses strategy interface methods instead of hardcoded template branches:
   - `src/ui/components/PreviewCanvas.svelte`
 - interaction handlers in app shell now use template capabilities (axis, thresholds, settle timing) instead of `focus-rows`/`jukebox` conditionals:
-  - `src/App.svelte`
+  - `src/ui/components/AppRuntimeScreen.svelte`
 - fixture-backed template smoke path added for strategy validation:
   - `public/projects/sample-jukebox-smoke/menu.json`
 

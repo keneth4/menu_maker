@@ -129,7 +129,8 @@ test("source pickers show filename labels while preserving full path values", as
   await openProjectFromLanding(page, fixturePath);
   await openEditorIfClosed(page);
 
-  await page.getByRole("button", { name: /edición|edit/i }).click();
+  const tabs = page.locator(".editor-tabs");
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
   await page.getByRole("button", { name: /items|platillos|dishes/i }).click();
 
   const sourceOptions = await page

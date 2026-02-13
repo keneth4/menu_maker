@@ -24,38 +24,28 @@ supports_local_playwright() {
   return 1
 }
 
-LOCAL_NODE_SUPPORTED=0
-if supports_local_playwright; then
-  LOCAL_NODE_SUPPORTED=1
+run_local_perf_gate() {
+  if ! supports_local_playwright; then
+    local current
+    current="$(node -p "process.versions.node" 2>/dev/null || echo "unknown")"
+    echo "Local Node.js ${current} is below ${REQUIRED_MAJOR}.${REQUIRED_MINOR} for Playwright ESM loading."
+    return 1
+  fi
+
   echo "Running local Playwright export budget check..."
-  LOCAL_LOG="$(mktemp)"
+  npm run test:e2e:local -- --grep "${TEST_GREP}"
+}
+
+if command -v docker >/dev/null 2>&1; then
+  echo "Running containerized perf gate (container-first)..."
   set +e
-  npx playwright test --grep "${TEST_GREP}" 2>&1 | tee "${LOCAL_LOG}"
-  LOCAL_EXIT=${PIPESTATUS[0]}
+  ./scripts/container-smoke.sh
+  CONTAINER_EXIT=$?
   set -e
-  if [ "${LOCAL_EXIT}" -eq 0 ]; then
-    rm -f "${LOCAL_LOG}"
+  if [ "${CONTAINER_EXIT}" -eq 0 ]; then
     exit 0
   fi
-  if grep -q "Playwright requires Node.js 18.19 or higher" "${LOCAL_LOG}"; then
-    echo "Local Playwright run failed due runtime mismatch. Falling back to containerized check..."
-  else
-    echo "Local Playwright run failed (exit ${LOCAL_EXIT}). Falling back to containerized check..."
-  fi
-  rm -f "${LOCAL_LOG}"
+  echo "Containerized perf gate failed (exit ${CONTAINER_EXIT}). Falling back to local Playwright..."
 fi
 
-CURRENT_NODE="$(node -p "process.versions.node" 2>/dev/null || echo "unknown")"
-if [ "${LOCAL_NODE_SUPPORTED}" -eq 0 ]; then
-  echo "Local Node.js ${CURRENT_NODE} is below ${REQUIRED_MAJOR}.${REQUIRED_MINOR} for Playwright ESM loading."
-else
-  echo "Local Node.js ${CURRENT_NODE} is compatible, but local Playwright run failed."
-fi
-echo "Falling back to containerized perf smoke check..."
-
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is required for fallback execution. Please install Docker or upgrade Node.js." >&2
-  exit 1
-fi
-
-exec ./scripts/container-smoke.sh
+run_local_perf_gate
