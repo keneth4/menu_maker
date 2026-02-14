@@ -215,11 +215,28 @@ Export rules:
 
 - `src/App.svelte` is now a thin composition shell (controller mount + `AppRuntime` composition only).
 - `src/ui/components/AppRuntime.svelte` is now a thin runtime wrapper.
-- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreen.svelte`, with ongoing redistribution into:
+- `src/ui/components/AppRuntimeScreen.svelte` is now a thin composition shell.
+- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreenContent.svelte` (`892` lines, within current closeout budget), with redistribution implemented across:
   - `src/application/*` workflows,
   - `src/ui/controllers/*`,
   - `src/ui/stores/*`,
   - `src/export-runtime/*`.
+- Workspace shell composition (landing/editor/preview host) is now delegated through:
+  - `src/ui/components/RuntimeWorkspace.svelte`.
+- Editor tab composition (`info/assets/edit/wizard`) is now delegated through:
+  - `src/ui/components/RuntimeEditorTabContent.svelte`.
+- Runtime bindings/bootstrap state synchronization now uses a typed bridge:
+  - `src/ui/controllers/runtimeStateBridgeController.ts`.
+- Runtime bindings/bootstrap composition wiring is delegated through:
+  - `src/ui/controllers/runtimeWiringController.ts`.
+- Runtime modal/detail orchestration and interactive setup synchronization are delegated through:
+  - `src/ui/controllers/runtimeModalSurfaceController.ts`.
+- Runtime asset byte loading policy is delegated through:
+  - `src/ui/controllers/runtimeAssetReaderController.ts`.
+- Runtime shell DOM/orientation helpers are delegated through:
+  - `src/ui/controllers/runtimeShellDomController.ts`.
+- Draft meta localized-field hydration (`title`/`restaurantName`) is delegated through:
+  - `src/ui/controllers/runtimeDraftMetaController.ts`.
 - `src/ui/controllers/createAppController.ts` now exposes real action groups and lifecycle-owned mount/destroy wiring.
 - Large UI surfaces now expose typed `{ model, actions }` contracts in:
   - `src/ui/components/AssetsManager.svelte`
@@ -248,7 +265,7 @@ Completed in Phases 1-8:
 Open product and engineering priorities:
 - stronger wizard recommendations by menu size/use case,
 - accessibility hardening and reduced-motion parity across templates,
-- continue reducing `src/ui/components/AppRuntimeScreen.svelte` orchestration weight into additional modules/stores/controllers,
+- continue store/controller ownership migration to reduce runtime-local mutable state in `src/ui/components/AppRuntimeScreenContent.svelte`,
 - template expansion using the strategy registry (next template implementation path).
 
 ## 11) Local Development
@@ -261,11 +278,11 @@ Commands:
 - `npm run dev`
 - `npm run build`
 - `npm run test`
-- `npm run test:e2e` (container-first gate, local fallback)
-- `npm run test:e2e:container` (forced containerized e2e gate)
+- `npm run test:e2e` (container-first full e2e gate, local fallback)
+- `npm run test:e2e:container` (forced full containerized e2e gate)
 - `npm run test:e2e:local` (forced local Playwright run)
-- `npm run test:perf` (container-first perf gate, local fallback)
-- `npm run test:perf:container` (forced containerized perf/smoke gate)
+- `npm run test:perf` (container-first perf gate for `performance-fluidity`, local fallback)
+- `npm run test:perf:container` (forced containerized `performance-fluidity` gate)
 
 Install note:
 - `postinstall` runs `scripts/patch-parse5-for-jsdom.mjs` to apply local jsdom/parse5 compatibility fixes required by the current host runtime constraints.
@@ -282,14 +299,15 @@ Added container files:
 - `VITE_PORT` (default `5173`): host port mapped to dev app (`app` service).
 - `PREVIEW_PORT` (default `4173`): host port mapped to static preview (`preview` service).
 - `APP_PORT` (default `5173`): smoke script target port.
-- `E2E_GREP` (default export-flow smoke grep): optional Playwright grep for containerized e2e runs. Empty value runs full suite.
-- `ALLOW_CONTAINER_BUILD` (default `0`): when `1`, container smoke scripts may build/pull missing images; when `0`, they fail fast if images are not already local.
+- `E2E_GREP` (default empty): optional Playwright grep for containerized e2e runs. Empty value runs full suite.
+- `ALLOW_CONTAINER_BUILD`:
+  - `scripts/container-smoke.sh` default is `0` (fail fast if images are missing),
+  - `npm run test:e2e` and `npm run test:perf` default it to `1` unless explicitly overridden.
 - `PLAYWRIGHT_DOCKER_TAG` (default auto-derived, fallback `v1.58.1-jammy`): Playwright image tag used by container smoke e2e service.
 
 Mount points in `docker-compose.yml`:
 - Source code: `./ -> /app`
 - Dependencies cache: `menumaker_node_modules -> /app/node_modules`
-- Persistent project assets: `menumaker_projects -> /app/public/projects`
 
 This keeps the bridge API contract stable under container dev:
 - `/api/assets/ping`
@@ -310,15 +328,16 @@ This keeps the bridge API contract stable under container dev:
 - `npm run docker:preview`
   - Builds production bundle and serves `dist/` at `http://127.0.0.1:${PREVIEW_PORT:-4173}`.
 - `npm run docker:smoke`
-  - Runs bridge smoke checks (ping/upload/list/file) plus export-flow smoke via a dedicated Playwright container against the running containerized app.
+  - Runs bridge smoke checks (ping/upload/list/file) plus a dedicated Playwright container run against the running containerized app.
+  - Default run executes the full e2e suite; set `E2E_GREP` to target a subset.
   - E2E container uses internal Docker alias `menumaker-dev` (avoids Chromium HSTS behavior on hostname `app`).
 
 ### Optional manual smoke sequence
 1. `docker compose up -d --build app`
 2. Verify bridge: `curl "http://127.0.0.1:5173/api/assets/ping?project=manual-smoke"`
 3. Run containerized e2e against containerized server:
-   `E2E_GREP=\"\" npm run test:e2e:container`
-4. Run containerized perf/smoke gate:
+   `npm run test:e2e:container`
+4. Run containerized perf gate:
    `npm run test:perf:container`
 5. `docker compose down`
 
@@ -349,7 +368,7 @@ Added in this phase:
 - preview shell rendering now uses strategy interface methods instead of hardcoded template branches:
   - `src/ui/components/PreviewCanvas.svelte`
 - interaction handlers in app shell now use template capabilities (axis, thresholds, settle timing) instead of `focus-rows`/`jukebox` conditionals:
-  - `src/ui/components/AppRuntimeScreen.svelte`
+  - `src/ui/components/AppRuntimeScreenContent.svelte`
 - fixture-backed template smoke path added for strategy validation:
   - `public/projects/sample-jukebox-smoke/menu.json`
 

@@ -23,7 +23,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
 | 6 | Validation + docs sync | DONE | Validation gates + docs/tracker sync completed for current architecture decisions. |
-| 9 | App runtime redistribution redesign | IN_PROGRESS | `App.svelte` is now a thin shell; ongoing extraction into `application/*`, `ui/controllers/*`, and `export-runtime/*`. |
+| 9 | App runtime redistribution redesign | IN_PROGRESS | `AppRuntimeScreen.svelte` is now a thin shell (`8` lines) and `AppRuntimeScreenContent.svelte` is within closeout budget (`892` lines); remaining work is final docs/closeout consolidation. |
 
 ## Phase 0 checklist
 - [x] Create a phase tracker with status board.
@@ -357,7 +357,161 @@ Tracking checklist:
 - Current gate status after closeout-pass implementation:
   - `npm run build`: PASS
   - `npm test`: PASS
-  - `npm run test:e2e`: BLOCKED in this host (container-first now fails fast when required Playwright image is unavailable locally unless `ALLOW_CONTAINER_BUILD=1`; local fallback still fails with Playwright Node ESM gate message)
-  - `npm run test:perf`: BLOCKED in this host (container-first now fails fast when required container images are unavailable locally unless `ALLOW_CONTAINER_BUILD=1`; local fallback still fails with Playwright Node ESM gate message)
+  - `npm run test:e2e`: PASS in container-first mode (`22 passed`, `3 skipped`, `0 failed`).
+  - `npm run test:perf`: PASS in container-first mode (`performance-fluidity` spec).
 - Remaining redistribution hotspot after wrapper split:
-  - `src/ui/components/AppRuntimeScreen.svelte` still carries 1860 lines of orchestration and needs further extraction before declaring full redistribution completion quality.
+  - `src/ui/components/AppRuntimeScreen.svelte` still carries 1894 lines of orchestration and needs further extraction before declaring full redistribution completion quality.
+- Hardened container gate semantics for strict closeout:
+  - `scripts/container-smoke.sh` now treats empty `E2E_GREP` as full suite (no implicit smoke-only fallback).
+  - `scripts/test-e2e.sh` now passes through unset/empty `E2E_GREP` correctly to container runner.
+  - `scripts/test-perf.sh` now targets `performance smoke keeps startup and modal interaction responsive`.
+  - `scripts/test-e2e.sh` and `scripts/test-perf.sh` now default `ALLOW_CONTAINER_BUILD=1` for clean-machine reliability (override still supported).
+  - `package.json` `test:perf:container` now explicitly runs the perf spec in container.
+- Gate verification in expected container-first path:
+  - `npm run test:e2e`: PASS (container-first full suite, `22 passed`, `3 skipped`).
+  - `npm run test:perf`: PASS (container-first perf spec).
+  - `npm run test:e2e:container`: PASS (forced full containerized e2e).
+  - `npm run test:perf:container`: PASS (forced containerized perf spec).
+  - `npm test`: PASS.
+  - `npm run build`: PASS.
+- Phase 9 remains `IN_PROGRESS` pending the final Large Class reduction of `src/ui/components/AppRuntimeScreen.svelte`.
+- Phase 9 final-pass extraction update (AppRuntimeScreen reduction hybrid pass):
+  - Added pure presentation workflow module:
+    - `src/application/projects/presentationWorkflow.ts`
+    - `src/application/projects/presentationWorkflow.test.ts`
+  - Added runtime extraction controllers:
+    - `src/ui/controllers/runtimeShellController.ts`
+    - `src/ui/controllers/runtimeBootstrapController.ts`
+    - `src/ui/controllers/runtimeBindingsController.ts`
+    - `src/ui/controllers/runtimeShellController.test.ts`
+    - `src/ui/controllers/runtimeBootstrapController.test.ts`
+    - `src/ui/controllers/runtimeBindingsController.test.ts`
+  - Added split UI blocks:
+    - `src/ui/components/ProjectInfoPanel.svelte`
+    - `src/ui/components/RuntimeSurfaceHost.svelte`
+    - `src/ui/components/ProjectInfoPanel.test.ts`
+    - `src/ui/components/RuntimeSurfaceHost.test.ts`
+  - Updated architecture guard:
+    - `src/App.architecture.test.ts` now enforces `AppRuntimeScreen.svelte <= 1100`.
+  - Reduced `src/ui/components/AppRuntimeScreen.svelte` to a thin composition shell:
+    - current line count: `8`
+    - runtime implementation moved to `src/ui/components/AppRuntimeScreenContent.svelte` (current line count: `1538`) for continued follow-up extraction passes.
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS
+    - `npm run test:e2e`: PASS (container-first full suite: `22 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first performance spec)
+- Phase 9 follow-up pass (continued AppRuntimeScreenContent reduction):
+  - Extracted editor-tab orchestration/render host into:
+    - `src/ui/components/RuntimeEditorTabContent.svelte`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to:
+    - delegate tab rendering/actions through `RuntimeEditorTabContent`,
+    - consume controller methods directly for landing/import/tab actions,
+    - remove large local action alias blocks.
+  - Added architecture trend guard:
+    - `src/App.architecture.test.ts` now enforces `AppRuntimeScreenContent.svelte <= 1400`.
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `1364` (down from `1538`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS
+    - `npm run test:e2e`: PASS (container-first full suite: `22 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec)
+- Phase 9 high-yield follow-up pass (workspace shell extraction):
+  - Extracted landing/editor/preview host shell into:
+    - `src/ui/components/RuntimeWorkspace.svelte`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to delegate:
+    - project-file input wiring,
+    - landing route states,
+    - editor shell + tab host composition,
+    - preview canvas host.
+  - Runtime tab host extraction from prior pass remains:
+    - `src/ui/components/RuntimeEditorTabContent.svelte`
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `1310` (down from `1364`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS
+    - `npm run test:e2e`: PASS (container-first full suite: `22 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec)
+- Phase 9 high-yield follow-up pass (runtime state bridge + wiring extraction):
+  - Extracted runtime state bridge into:
+    - `src/ui/controllers/runtimeStateBridgeController.ts`
+    - `src/ui/controllers/runtimeStateBridgeController.test.ts`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to:
+    - replace duplicated `getRuntimeBindingsState` / `setRuntimeBindingsState` with a single typed bridge accessor map,
+    - wire `createRuntimeBindings` and `createRuntimeBootstrapController` through `runtimeStateBridge.getState` / `runtimeStateBridge.setState`,
+    - remove untyped `Record<string, unknown>` patch casting in runtime wiring.
+  - Tightened architecture trend guard:
+    - `src/App.architecture.test.ts` now enforces `AppRuntimeScreenContent.svelte <= 1300`.
+  - Expanded runtime typing alignment:
+    - `src/ui/controllers/runtimeBindingsController.ts` now exports `RuntimeBindingsState` / `RuntimeBindingsPatch`.
+    - `src/ui/controllers/runtimeBootstrapController.ts` now consumes `RuntimeBindingsPatch` for typed state patches.
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `1273` (down from `1310`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`48` files, `133` tests)
+    - `npm run test:e2e`: PASS (container-first full suite: `22 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS in container-first path after one transient rerun
+- Phase 9 high-yield follow-up pass (runtime wiring composition extraction):
+  - Added runtime composition module:
+    - `src/ui/controllers/runtimeWiringController.ts`
+    - `src/ui/controllers/runtimeWiringController.test.ts`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to:
+    - delegate `createRuntimeBindings` + `createRuntimeBootstrapController` assembly through `createRuntimeWiring`,
+    - keep asset workspace callbacks (`updateAssetMode`, `refreshBridgeEntries`) sourced from the composed runtime wiring result.
+  - Expanded controller typing surface for composition reuse:
+    - `src/ui/controllers/runtimeBindingsController.ts` now exports `RuntimeBindingsDeps`.
+    - `src/ui/controllers/runtimeBootstrapController.ts` now exports `RuntimeBootstrapDeps`.
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `1263` (down from `1273`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`49` files, `134` tests)
+    - `npm run test:e2e`: PASS (container-first full suite: `22 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first performance spec)
+- Phase 9 high-yield follow-up pass (modal/detail orchestration extraction):
+  - Added modal surface orchestration controller:
+    - `src/ui/controllers/runtimeModalSurfaceController.ts`
+    - `src/ui/controllers/runtimeModalSurfaceController.test.ts`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to:
+    - delegate modal open/close/prefetch actions to `runtimeModalSurfaceController`,
+    - delegate interactive media setup signature sync to `runtimeModalSurfaceController.syncInteractiveMedia`,
+    - derive active dish and interactive-enabled state through `runtimeModalSurfaceController.resolveSurface`.
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `1253` (down from `1263`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`50` files, `135` tests)
+    - `npm run test:e2e`: PASS in container-first full suite on rerun (`22 passed`, `3 skipped`) after one transient parity-section-background failure
+    - `npm run test:perf`: PASS (container-first performance spec)
+- Phase 9 high-yield follow-up pass (runtime helper extraction + final line-budget push):
+  - Added helper/controller modules:
+    - `src/ui/controllers/runtimeAssetReaderController.ts`
+    - `src/ui/controllers/runtimeShellDomController.ts`
+    - `src/ui/controllers/runtimeDraftMetaController.ts`
+  - Added unit coverage:
+    - `src/ui/controllers/runtimeAssetReaderController.test.ts`
+    - `src/ui/controllers/runtimeShellDomController.test.ts`
+    - `src/ui/controllers/runtimeDraftMetaController.test.ts`
+  - Rewired `src/ui/components/AppRuntimeScreenContent.svelte` to:
+    - delegate asset byte loading to `runtimeAssetReaderController`,
+    - delegate editor-panel hit-testing + orientation lock helper behavior to `runtimeShellDomController`,
+    - delegate draft localized meta hydration to `runtimeDraftMetaController`,
+    - use `createRuntimeStateAccessors(...)` for typed runtime state bridge composition.
+  - Tightened architecture closeout guard:
+    - `src/App.architecture.test.ts` now enforces `AppRuntimeScreenContent.svelte <= 900`.
+  - Current line counts after this pass:
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `892` (down from `1253`)
+  - Gate status after this pass:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`56` files, `144` tests)
+    - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container`: PASS (`22 passed`, `3 skipped`)
+    - `ALLOW_CONTAINER_BUILD=1 npm run test:perf:container`: PASS (`1 passed`)

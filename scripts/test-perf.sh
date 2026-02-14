@@ -3,7 +3,7 @@ set -euo pipefail
 
 REQUIRED_MAJOR=18
 REQUIRED_MINOR=19
-TEST_GREP="save project and export static site create zip downloads"
+TEST_GREP="${TEST_GREP:-performance smoke keeps startup and modal interaction responsive}"
 
 supports_local_playwright() {
   local version
@@ -39,6 +39,8 @@ run_local_perf_gate() {
 if command -v docker >/dev/null 2>&1; then
   echo "Running containerized perf gate (container-first)..."
   set +e
+  ALLOW_CONTAINER_BUILD="${ALLOW_CONTAINER_BUILD-1}" \
+  E2E_GREP="${TEST_GREP}" \
   ./scripts/container-smoke.sh
   CONTAINER_EXIT=$?
   set -e

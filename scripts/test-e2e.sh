@@ -4,7 +4,9 @@ set -euo pipefail
 if command -v docker >/dev/null 2>&1; then
   echo "Running containerized e2e gate (container-first)..."
   set +e
-  E2E_GREP="${E2E_GREP:-}" ./scripts/container-smoke.sh
+  ALLOW_CONTAINER_BUILD="${ALLOW_CONTAINER_BUILD-1}" \
+  E2E_GREP="${E2E_GREP-}" \
+  ./scripts/container-smoke.sh
   CONTAINER_EXIT=$?
   set -e
   if [ "${CONTAINER_EXIT}" -eq 0 ]; then

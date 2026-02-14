@@ -5,7 +5,8 @@ APP_PORT="${APP_PORT:-5173}"
 SMOKE_PROJECT="${SMOKE_PROJECT:-container-smoke}"
 BASE_URL="http://127.0.0.1:${APP_PORT}"
 COMPOSE_BIN="${COMPOSE_BIN:-docker compose}"
-E2E_GREP="${E2E_GREP:-save project and export static site create zip downloads}"
+# Empty E2E_GREP means "run full suite".
+E2E_GREP="${E2E_GREP-}"
 APP_IMAGE="${APP_IMAGE:-newproject-app}"
 ALLOW_CONTAINER_BUILD="${ALLOW_CONTAINER_BUILD:-0}"
 PLAYWRIGHT_VERSION="$(

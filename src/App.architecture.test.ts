@@ -16,6 +16,30 @@ describe("architecture guardrails", () => {
     expect(lineCount).toBeLessThanOrEqual(900);
   });
 
+  it("keeps AppRuntimeScreen.svelte within the phase budget", () => {
+    const runtimeScreenPath = path.resolve(
+      process.cwd(),
+      "src",
+      "ui",
+      "components",
+      "AppRuntimeScreen.svelte"
+    );
+    const lineCount = readFileSync(runtimeScreenPath, "utf8").split(/\r?\n/).length;
+    expect(lineCount).toBeLessThanOrEqual(1100);
+  });
+
+  it("keeps AppRuntimeScreenContent.svelte within the closeout budget", () => {
+    const runtimeScreenContentPath = path.resolve(
+      process.cwd(),
+      "src",
+      "ui",
+      "components",
+      "AppRuntimeScreenContent.svelte"
+    );
+    const lineCount = readFileSync(runtimeScreenContentPath, "utf8").split(/\r?\n/).length;
+    expect(lineCount).toBeLessThanOrEqual(900);
+  });
+
   it("keeps buildRuntimeScript.ts as a thin orchestrator", () => {
     const runtimeBuilderPath = path.resolve(
       process.cwd(),

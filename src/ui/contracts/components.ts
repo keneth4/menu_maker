@@ -195,6 +195,33 @@ export type WizardPanelActions = {
   setWizardItemId: (itemId: string) => void;
 };
 
+export type ProjectInfoPanelModel = {
+  t: (key: string) => string;
+  draft: MenuProject | null;
+  uiLang: "es" | "en";
+  templateOptions: TemplateOption[];
+  workflowMode: "save" | "export" | "upload" | null;
+  openError: string;
+  exportStatus: string;
+  exportError: string;
+  workflowStep: string;
+  workflowProgress: number;
+  fontChoice: string;
+  fontAssetOptions: Array<{ value: string; label: string }>;
+};
+
+export type ProjectInfoPanelActions = {
+  createNewProject: () => Promise<void> | void;
+  openProjectDialog: () => void;
+  saveProject: () => Promise<void> | void;
+  exportStaticSite: () => Promise<void> | void;
+  toggleLanguage: (code: string) => void;
+  handleCurrencyChange: (event: Event) => void;
+  toggleCurrencyPosition: () => void;
+  handleFontSelect: (event: Event) => void;
+  handleCustomFontSourceInput: (event: Event) => void;
+};
+
 export type PreviewBackgroundModel = {
   id: string;
   src: string;
@@ -256,6 +283,28 @@ export type DishModalModel = {
 
 export type DishModalActions = {
   close: () => void;
+  setModalMediaHost: (host: HTMLDivElement | null) => void;
+  setModalMediaImage: (image: HTMLImageElement | null) => void;
+};
+
+export type RuntimeSurfaceHostModel = {
+  activeItem: { category: string; itemId: string } | null;
+  dish: MenuItem | null;
+  interactiveEnabled: boolean;
+  itemFontStyle: string;
+  modalMediaHost: HTMLDivElement | null;
+  modalMediaImage: HTMLImageElement | null;
+  textOf: (value: Record<string, string> | undefined, fallback?: string) => string;
+  getDetailImageSource: (value: MenuItem) => string;
+  getAllergenValues: (value: MenuItem) => string[];
+  getMenuTerm: (key: string) => string;
+  formatPrice: (value: number) => string;
+  assetOptions: Array<{ value: string; label: string }>;
+  fontAssetOptions: Array<{ value: string; label: string }>;
+};
+
+export type RuntimeSurfaceHostActions = {
+  closeDish: () => void;
   setModalMediaHost: (host: HTMLDivElement | null) => void;
   setModalMediaImage: (image: HTMLImageElement | null) => void;
 };

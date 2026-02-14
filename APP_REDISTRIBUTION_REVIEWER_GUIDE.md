@@ -10,7 +10,11 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
 - `src/ui/components/AppRuntime.svelte`
   - thin runtime wrapper that delegates to `AppRuntimeScreen`.
 - `src/ui/components/AppRuntimeScreen.svelte`
+  - thin composition shell that delegates to `AppRuntimeScreenContent`.
+- `src/ui/components/AppRuntimeScreenContent.svelte`
   - current runtime orchestration host while final redistribution slices are completed.
+- `src/ui/components/RuntimeWorkspace.svelte`
+  - extracted landing/editor/preview workspace shell host.
 
 ## State / Contracts / Controllers
 - `src/ui/contracts/state.ts`
@@ -23,6 +27,20 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
 - `src/ui/controllers/previewController.ts`
 - `src/ui/controllers/interactiveMediaController.ts`
 - `src/ui/controllers/backgroundRotationController.ts`
+- `src/ui/controllers/runtimeBindingsController.ts`
+- `src/ui/controllers/runtimeBootstrapController.ts`
+- `src/ui/controllers/runtimeStateBridgeController.ts`
+  - typed runtime state bridge used by runtime bindings/bootstrap wiring.
+- `src/ui/controllers/runtimeWiringController.ts`
+  - composes runtime bindings + bootstrap wiring for `AppRuntimeScreenContent`.
+- `src/ui/controllers/runtimeModalSurfaceController.ts`
+  - owns runtime modal open/close/prefetch delegation plus interactive setup signature sync.
+- `src/ui/controllers/runtimeAssetReaderController.ts`
+  - isolates asset byte loading policy across filesystem, bridge, and static `/projects/*` fallbacks.
+- `src/ui/controllers/runtimeShellDomController.ts`
+  - centralizes editor-panel hit testing and landscape lock attempts used by shell orchestration.
+- `src/ui/controllers/runtimeDraftMetaController.ts`
+  - owns draft meta localized-field hydration (`title`, `restaurantName`).
 
 ## Component API Normalization
 - New typed `{ model, actions }` wrappers:
@@ -31,6 +49,9 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
   - `src/ui/components/WizardPanel.svelte`
   - `src/ui/components/PreviewCanvas.svelte`
   - `src/ui/components/DishModal.svelte`
+  - `src/ui/components/ProjectInfoPanel.svelte`
+  - `src/ui/components/RuntimeSurfaceHost.svelte`
+  - `src/ui/components/RuntimeEditorTabContent.svelte`
 - Previous implementations preserved as legacy internals:
   - `src/ui/components/AssetsManagerLegacy.svelte`
   - `src/ui/components/EditPanelLegacy.svelte`
@@ -73,3 +94,13 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
 ## Compatibility Hardening (Test Env)
 - `scripts/patch-parse5-for-jsdom.mjs`
   - postinstall compatibility patch for offline/local jsdom+parse5+Node runtime mismatches.
+
+## Current Closeout Status (2026-02-14)
+- Container-first gates are operational and passing:
+  - `npm run test:e2e` (full suite in container-first path)
+  - `npm run test:perf` (container-first performance spec path)
+- Forced container commands are now explicit:
+  - `npm run test:e2e:container` runs full containerized e2e.
+  - `npm run test:perf:container` runs containerized `performance-fluidity` spec.
+- Remaining architectural hotspot:
+  - `src/ui/components/AppRuntimeScreenContent.svelte` now carries `892` lines and is within the closeout budget for this phase.
