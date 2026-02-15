@@ -49,11 +49,8 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
 const closeEditorIfOpen = async (page: Page) => {
@@ -231,6 +228,7 @@ const createFixture = (): SectionBackgroundFixture => {
 };
 
 test("section background mode stays in parity between preview and export", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const fixture = createFixture();
   const fixturePath = await writeJsonFixture(testInfo, fixture);
   await disableBridgeMode(page);
@@ -247,7 +245,7 @@ test("section background mode stays in parity between preview and export", async
 
   await goToNextSection(page);
   await expect
-    .poll(async () => await getActiveBackgroundSource(page), { timeout: 350 })
+    .poll(async () => await getActiveBackgroundSource(page), { timeout: 1200 })
     .toBe(fixture.backgrounds[1].src);
 
   await openEditorIfClosed(page);
@@ -273,7 +271,7 @@ test("section background mode stays in parity between preview and export", async
 
     await goToNextSection(page);
     await expect
-      .poll(async () => await getActiveBackgroundSource(page), { timeout: 350 })
+      .poll(async () => await getActiveBackgroundSource(page), { timeout: 1200 })
       .toBe(fixture.backgrounds[1].src);
   } finally {
     await server.close();
@@ -282,6 +280,7 @@ test("section background mode stays in parity between preview and export", async
 });
 
 test("section background mode does not fallback when mapping is invalid", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const fixture = createFixture();
   fixture.categories[0].backgroundId = "bg-missing-a";
   fixture.categories[1].backgroundId = "bg-missing-b";

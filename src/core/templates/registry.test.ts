@@ -11,6 +11,13 @@ describe("template registry", () => {
     expect(resolveTemplateId("unknown-template")).toBe("focus-rows");
   });
 
+  it("normalizes known aliases and casing to canonical template ids", () => {
+    expect(resolveTemplateId("Jukebox")).toBe("jukebox");
+    expect(resolveTemplateId("juke_box")).toBe("jukebox");
+    expect(resolveTemplateId("  focus rows  ")).toBe("focus-rows");
+    expect(resolveTemplateId("bar-pub")).toBe("focus-rows");
+  });
+
   it("exposes capabilities and strategies for every known template", () => {
     TEMPLATE_IDS.forEach((id) => {
       const capabilities = getTemplateCapabilities(id);
@@ -26,4 +33,3 @@ describe("template registry", () => {
     expect(templateOptions.every((option) => option.smokeFixturePath.length > 0)).toBe(true);
   });
 });
-

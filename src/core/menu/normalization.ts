@@ -1,5 +1,6 @@
 import type { MenuProject } from "../../lib/types";
 import { normalizeAllergenEntries } from "./allergens";
+import { resolveTemplateId } from "../templates/registry";
 
 const LEGACY_TEMPLATE_MAP: Record<string, string> = {
   "bar-pub": "focus-rows",
@@ -226,9 +227,8 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
     };
   });
 
-  value.meta.template = LEGACY_TEMPLATE_MAP[value.meta.template] ?? value.meta.template;
-  if (!value.meta.template) {
-    value.meta.template = "focus-rows";
-  }
+  value.meta.template = resolveTemplateId(
+    LEGACY_TEMPLATE_MAP[value.meta.template] ?? value.meta.template
+  );
   return value;
 };

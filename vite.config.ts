@@ -1046,6 +1046,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    server: {
+      deps: {
+        inline: ["jsdom", "parse5"]
+      }
+    },
     exclude: ["tests/e2e/**", "node_modules/**", "dist/**"]
   }
 });

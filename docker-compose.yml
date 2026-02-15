@@ -33,14 +33,18 @@ services:
     profiles: ["e2e"]
     image: mcr.microsoft.com/playwright:${PLAYWRIGHT_DOCKER_TAG:-v1.58.1-jammy}
     working_dir: /app
+    environment:
+      - E2E_GREP
     depends_on:
       - app
     entrypoint: ["/bin/bash", "-lc"]
     command:
       - >
         if [ ! -f node_modules/.container-ready ]; then npm ci && touch node_modules/.container-ready; fi &&
-        PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://menumaker-dev:5173
-        npm run test:e2e -- --grep "save project and export static site create zip downloads"
+        if [ -n "$$E2E_GREP" ];
+        then PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://menumaker-dev:5173 npm run test:e2e:local -- --grep "$$E2E_GREP";
+        else PLAYWRIGHT_EXTERNAL_SERVER=1 PLAYWRIGHT_BASE_URL=http://menumaker-dev:5173 npm run test:e2e:local;
+        fi
     volumes:
       - ./:/app
       - menumaker_node_modules:/app/node_modules
