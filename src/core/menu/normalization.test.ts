@@ -92,6 +92,13 @@ describe("normalizeProject", () => {
     expect(normalized.meta.template).toBe("focus-rows");
   });
 
+  it("canonicalizes template ids from non-canonical variants", () => {
+    const project = buildProjectFixture();
+    project.meta.template = " Juke_Box ";
+    const normalized = normalizeProject(project);
+    expect(normalized.meta.template).toBe("jukebox");
+  });
+
   it("normalizes identity and rotation settings from invalid values", () => {
     const project = buildProjectFixture();
     (project.meta as { identityMode?: string }).identityMode = "brand-image";

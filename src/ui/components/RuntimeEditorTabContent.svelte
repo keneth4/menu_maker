@@ -127,6 +127,8 @@
       openProjectDialog: projectWorkflowController.openProjectDialog,
       saveProject: projectWorkflowController.saveProject,
       exportStaticSite: projectWorkflowController.exportStaticSite,
+      setTemplate: (templateId) =>
+        editorDraftController.applyTemplate(templateId, { source: "project" }),
       toggleLanguage: editorDraftController.toggleLanguage,
       handleCurrencyChange: editorDraftController.handleCurrencyChange,
       toggleCurrencyPosition: editorDraftController.toggleCurrencyPosition,

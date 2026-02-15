@@ -53,6 +53,13 @@ export const createRuntimeAssetReader = (
     }
 
     const publicPath = deps.normalizeAssetSource(sourcePath);
+    if (publicPath.startsWith("data:")) {
+      const response = await fetchAsset(publicPath);
+      if (!response.ok) return null;
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+
     if (publicPath.startsWith("/projects/")) {
       const response = await fetchAsset(publicPath);
       if (!response.ok) return null;

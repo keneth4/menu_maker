@@ -7,7 +7,6 @@
 
   export let setUiLang: (lang: "es" | "en") => void = () => {};
   export let setEditorTab: (tab: "info" | "assets" | "edit" | "wizard") => void = () => {};
-  export let togglePreviewMode: () => void = () => {};
   export let toggleEditor: () => void = () => {};
 </script>
 
@@ -18,19 +17,6 @@
       <p class="mt-1 text-xs text-slate-400">{t("studioSubtitle")}</p>
     </div>
     <div class="editor-actions">
-      <button
-        class="icon-btn"
-        type="button"
-        aria-label={t("toggleView")}
-        title={t("toggleView")}
-        on:click={togglePreviewMode}
-      >
-        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="2.5" y="4.5" width="13" height="9" rx="1.5"></rect>
-          <rect x="18" y="6" width="3.5" height="10" rx="1"></rect>
-          <path d="M6 18h6"></path>
-        </svg>
-      </button>
       <div class="lang-toggle" aria-label={t("toggleLang")}>
         <button
           class="lang-btn {uiLang === 'es' ? 'active' : ''}"

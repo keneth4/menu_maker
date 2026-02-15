@@ -1,7 +1,7 @@
 import {
   applySectionFocus,
-  centerSection,
   centerSectionHorizontally,
+  centerSection,
   getClosestHorizontalSectionIndex,
   getClosestSectionIndex
 } from "../../application/preview/navigationWorkflow";
@@ -15,6 +15,7 @@ export type PreviewController = {
     axis: "horizontal" | "vertical";
     snapDelayMs: number;
     syncBackground: (index: number) => void;
+    resolveHorizontalIndex?: (container: HTMLElement) => number;
   }) => void;
   destroy: () => void;
 };
@@ -45,16 +46,19 @@ export const createPreviewController = (): PreviewController => {
     container,
     axis,
     snapDelayMs,
-    syncBackground
+    syncBackground,
+    resolveHorizontalIndex
   }: {
     container: HTMLElement;
     axis: "horizontal" | "vertical";
     snapDelayMs: number;
     syncBackground: (index: number) => void;
+    resolveHorizontalIndex?: (container: HTMLElement) => number;
   }) => {
     if (axis === "horizontal") {
       if (container.scrollWidth <= container.clientWidth + 4) return;
-      const closestIndex = getClosestHorizontalSectionIndex(container);
+      const resolveIndex = resolveHorizontalIndex ?? getClosestHorizontalSectionIndex;
+      const closestIndex = resolveIndex(container);
       if (closestIndex >= 0) {
         syncBackground(closestIndex);
       }
@@ -62,7 +66,7 @@ export const createPreviewController = (): PreviewController => {
         clearTimeout(sectionSnapTimeout);
       }
       sectionSnapTimeout = setTimeout(() => {
-        const snapIndex = getClosestHorizontalSectionIndex(container);
+        const snapIndex = resolveIndex(container);
         if (snapIndex >= 0) {
           centerSectionHorizontally(container, snapIndex, "smooth");
           syncBackground(snapIndex);

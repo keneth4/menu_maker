@@ -11,6 +11,16 @@ export type ProjectAssetPair = {
   zipPath: string;
 };
 
+const isExternalOrInlineSource = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("data:") ||
+    normalized.startsWith("blob:")
+  );
+};
+
 const collectFontConfigSource = (
   assets: Set<string>,
   fontConfig?: { family?: string; source?: string }
@@ -44,7 +54,7 @@ export const collectProjectAssetPaths = (
   });
   return Array.from(assets)
     .map((path) => normalizePath(path))
-    .filter((path) => path && !path.startsWith("http"));
+    .filter((path) => path && !isExternalOrInlineSource(path));
 };
 
 const collectDerivedVariantPaths = (assets: Set<string>, value?: DerivedMediaVariant) => {
@@ -73,7 +83,7 @@ const normalizeCollectedAssetPaths = (
 ) =>
   Array.from(assets)
     .map((path) => normalizePath(path))
-    .filter((path) => path && !path.startsWith("http"));
+    .filter((path) => path && !isExternalOrInlineSource(path));
 
 export const collectExportProjectAssetPaths = (
   project: MenuProject,

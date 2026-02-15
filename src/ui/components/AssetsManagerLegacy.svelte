@@ -45,6 +45,10 @@
 
   const LOCKED_ROOTS = new Set(["originals/backgrounds", "originals/items", "originals/fonts"]);
   const isLockedRoot = (path: string) => LOCKED_ROOTS.has(path);
+  let assetWorkspaceReadOnly = false;
+  let hasRenderedRows = false;
+  $: assetWorkspaceReadOnly = assetProjectReadOnly || assetMode === "none";
+  $: hasRenderedRows = treeRows.length > 0 || fsEntries.length > 0;
 </script>
 
 <section class="asset-manager">
@@ -60,7 +64,7 @@
         title={t("newFolder")}
         aria-label={t("newFolder")}
         on:click={createFolder}
-        disabled={assetProjectReadOnly}
+        disabled={assetWorkspaceReadOnly}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4l1.6 2h9.4A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11z" />
@@ -72,7 +76,7 @@
         class="asset-icon-btn"
         title={t("uploadAssets")}
         aria-label={t("uploadAssets")}
-        disabled={assetProjectReadOnly}
+        disabled={assetWorkspaceReadOnly}
         on:click={() => assetUploadInput?.click()}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -85,7 +89,7 @@
         class="sr-only"
         type="file"
         multiple
-        disabled={assetProjectReadOnly}
+        disabled={assetWorkspaceReadOnly}
         bind:this={assetUploadInput}
         on:change={handleAssetUpload}
       />
@@ -105,7 +109,7 @@
   <div class="asset-drop">
     <label class="editor-field">
       <span>{t("uploadTo")}</span>
-      <select bind:value={uploadTargetPath} class="editor-select" disabled={assetProjectReadOnly}>
+      <select bind:value={uploadTargetPath} class="editor-select" disabled={assetWorkspaceReadOnly}>
         {#each uploadFolderOptions as folder}
           <option value={folder.value}>{folder.label}</option>
         {/each}
@@ -116,15 +120,15 @@
     {/if}
     <p>{t("uploadHint")}</p>
     <div
-      class={`asset-drop__zone ${assetProjectReadOnly ? "disabled" : ""}`}
+      class={`asset-drop__zone ${assetWorkspaceReadOnly ? "disabled" : ""}`}
       role="button"
-      tabindex={assetProjectReadOnly ? -1 : 0}
+      tabindex={assetWorkspaceReadOnly ? -1 : 0}
       aria-label={t("uploadAssets")}
       on:dragover={handleAssetDragOver}
       on:drop={handleAssetDrop}
-      on:click={() => !assetProjectReadOnly && assetUploadInput?.click()}
+      on:click={() => !assetWorkspaceReadOnly && assetUploadInput?.click()}
       on:keydown={(event) => {
-        if (assetProjectReadOnly) return;
+        if (assetWorkspaceReadOnly) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           assetUploadInput?.click();
@@ -141,21 +145,21 @@
     <p class="text-xs text-red-300">{fsError}</p>
   {/if}
   <div class="asset-bulk">
-    <button type="button" on:click={selectAllAssets} disabled={assetProjectReadOnly}>
+    <button type="button" on:click={selectAllAssets} disabled={assetWorkspaceReadOnly}>
       {t("selectAll")}
     </button>
     <button type="button" on:click={clearAssetSelection}>{t("clear")}</button>
-    <button type="button" on:click={bulkMove} disabled={assetProjectReadOnly}>
+    <button type="button" on:click={bulkMove} disabled={assetWorkspaceReadOnly}>
       {t("move")}
     </button>
-    <button type="button" on:click={bulkDelete} disabled={assetProjectReadOnly}>
+    <button type="button" on:click={bulkDelete} disabled={assetWorkspaceReadOnly}>
       {t("delete")}
     </button>
   </div>
   <div class="asset-list">
-    {#if assetMode === "none"}
+    {#if assetMode === "none" && !hasRenderedRows}
       <p class="text-xs text-slate-400">{t("pickRootHint")}</p>
-    {:else if fsEntries.length === 0}
+    {:else if !hasRenderedRows}
       <p class="text-xs text-slate-400">{t("rootEmpty")}</p>
     {:else}
       {#each treeRows as row}
@@ -163,7 +167,7 @@
           <label class="asset-check">
             <input
               type="checkbox"
-              disabled={assetProjectReadOnly}
+              disabled={assetWorkspaceReadOnly}
               checked={selectedAssetIds.includes(row.entry.id)}
               on:change={() => toggleAssetSelection(row.entry.id)}
             />
@@ -197,7 +201,7 @@
               class="asset-icon-btn"
               title={t("rename")}
               aria-label={t("rename")}
-              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
+              disabled={assetWorkspaceReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => renameEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -210,7 +214,7 @@
               class="asset-icon-btn"
               title={t("move")}
               aria-label={t("move")}
-              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
+              disabled={assetWorkspaceReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => moveEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -225,7 +229,7 @@
               class="asset-icon-btn danger"
               title={t("delete")}
               aria-label={t("delete")}
-              disabled={assetProjectReadOnly || isLockedRoot(row.entry.path)}
+              disabled={assetWorkspaceReadOnly || isLockedRoot(row.entry.path)}
               on:click={() => deleteEntry(row.entry)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -4,7 +4,6 @@
     <link rel="stylesheet" href={href} />
   {/each}
 </svelte:head>
-
 <script lang="ts">
   import { createEmptyProject as createEmptyProjectWorkflow, cloneProject as cloneProjectWorkflow } from "../../application/projects/session";
   import { getSuggestedZipName as getSuggestedZipNameWorkflow, normalizeZipName as normalizeZipNameWorkflow, slugifyName as slugifyNameWorkflow } from "../../application/projects/saveWorkflow";
@@ -12,6 +11,7 @@
   import { formatProjectPrice as formatProjectPriceWorkflow, getInstructionCopyLocalized as getInstructionCopyLocalizedWorkflow, getMenuTermLocalized as getMenuTermLocalizedWorkflow, normalizeAssetSource as normalizeAssetSourceWorkflow, textOfLocalized as textOfLocalizedWorkflow } from "../../application/projects/presentationWorkflow";
   import { ensureAllergens as ensureAllergensWorkflow, ensureDescription as ensureDescriptionWorkflow, ensureLongDescription as ensureLongDescriptionWorkflow } from "../../application/projects/draftMutations";
   import { buildTemplateSyncSignature as buildTemplateSyncSignatureWorkflow, buildWizardProgressState as buildWizardProgressStateWorkflow } from "../../application/projects/wizardProgressWorkflow";
+  import { isWizardShowcaseEligible as isWizardShowcaseEligibleWorkflow } from "../../application/projects/wizardShowcaseEligibility";
   import { buildAssetOptionSourcePaths as buildAssetOptionSourcePathsWorkflow, buildFontAssetOptions as buildFontAssetOptionsWorkflow, buildProjectAssetEntries as buildProjectAssetEntriesWorkflow } from "../../application/assets/projectAssetWorkflow";
   import { buildExportStyles as buildExportStylesWorkflow } from "../../application/export/exportStylesWorkflow";
   import { buildAssetOptions as buildAssetOptionsWorkflow, isLockedManagedAssetRoot as isLockedManagedAssetRootWorkflow, isManagedAssetRelativePath as isManagedAssetRelativePathWorkflow, isManagedAssetSourcePath as isManagedAssetSourcePathWorkflow, joinAssetFolderPath as joinAssetFolderPathWorkflow, mapLegacyAssetRelativeToManaged as mapLegacyAssetRelativeToManagedWorkflow, normalizeAssetFolderPath as normalizeAssetFolderPathWorkflow, toAssetRelativeForUi as toAssetRelativeForUiWorkflow, USER_MANAGED_ASSET_ROOTS as USER_MANAGED_ASSET_ROOTS_WORKFLOW } from "../../application/assets/workspaceWorkflow";
@@ -61,11 +61,9 @@
   import { createRuntimeShellController } from "../controllers/runtimeShellController";
   import { createWizardShowcaseController } from "../controllers/wizardShowcaseController";
   import appCssRaw from "../../app.css?raw";
-
   export let controller: AppController | null = null;
   $: controllerState = controller?.state;
   let controllerState: AppController["state"] | undefined;
-
   let project: MenuProject | null = null;
   let draft: MenuProject | null = null;
   let projects: ProjectSummary[] = [];
@@ -210,6 +208,7 @@
     tick,
     queryMenuScroll: () => document.querySelector<HTMLElement>(".menu-scroll"),
     getActiveTemplateCapabilities: () => activeTemplateCapabilities,
+    getDeviceMode: () => deviceMode,
     getActiveProject: () => activeProject,
     getCarouselActive: () => carouselActive,
     setCarouselActive: (next) => {
@@ -416,6 +415,11 @@
     }
   }
 
+  $: if (draft && wizardShowcaseProject && !isWizardShowcaseEligibleWorkflow(draft)) {
+    wizardShowcaseProject = null;
+    wizardDemoPreview = false;
+  }
+
   $: if (draft) {
     const signature = buildTemplateSyncSignatureWorkflow(draft);
     if (signature !== templateSyncSignature) {
@@ -470,21 +474,27 @@
     previewBackgrounds
   );
   $: fontStyleController.sync(fontFaceCss);
-
-  $: if (typeof window !== "undefined") {
-    previewBackgroundController.syncRotation();
+  $: {
+    activeProject;
+    previewBackgrounds;
+    sectionBackgroundIndexByCategory;
+    if (typeof window !== "undefined") {
+      previewBackgroundController.syncForProjectChange();
+    }
   }
-  $: previewBackgroundController.syncSectionModeActiveIndex();
-  $: previewBackgroundController.syncLoadedBackgroundIndexes();
-
+  $: {
+    activeBackgroundIndex;
+    previewBackgrounds;
+    if (typeof window !== "undefined") {
+      previewBackgroundController.syncLoadedBackgroundIndexes();
+    }
+  }
   const touchDraft = () => {
     if (draft) {
       draft = { ...draft };
     }
   };
-
   const normalizeAssetSrc = normalizeAssetSourceWorkflow;
-
   const instructionCopy = instructionCopyConfig;
   const isProtectedAssetProjectSlug = (slug: string) => READ_ONLY_ASSET_PROJECTS.has(slug);
   const runtimePresentationController = createRuntimePresentationController({
@@ -509,7 +519,6 @@
   const getAssetOwnershipDisclaimer = runtimePresentationController.getAssetOwnershipDisclaimer;
   const getTemplateScrollHint = runtimePresentationController.getTemplateScrollHint;
   const getAllergenValues = runtimePresentationController.getAllergenValues;
-
   const ensureMetaTitle = () => ensureDraftMetaLocalizedField(draft, "title");
   const ensureRestaurantName = () =>
     ensureDraftMetaLocalizedField(draft, "restaurantName");
@@ -525,7 +534,6 @@
   });
   const buildWizardShowcaseProject = async (templateId: string) =>
     await wizardShowcaseController.buildWizardShowcaseProject(draft, templateId);
-
   const createEmptyProject = (): MenuProject =>
     createEmptyProjectWorkflow(DEFAULT_BACKGROUND_CAROUSEL_SECONDS);
 
@@ -616,7 +624,6 @@
     runtimeShellController.handleDesktopOutsidePointer(event);
   };
   const toggleEditor = () => runtimeShellController.toggleEditor();
-  const togglePreviewMode = () => runtimeShellController.togglePreviewMode();
   const setEditorTab = (tab: "info" | "assets" | "edit" | "wizard") =>
     runtimeShellController.setEditorTab(tab);
   const syncWizardShowcaseVisibility = () => runtimeShellController.syncWizardShowcaseVisibility();
@@ -727,6 +734,7 @@
       ensureLongDescription,
       ensureAllergens,
       resolveTemplateId,
+      isWizardShowcaseEligible: isWizardShowcaseEligibleWorkflow,
       normalizePath,
       readAssetBytes,
       buildExportStyles,
@@ -820,7 +828,13 @@
   });
 
   $: previewStartupController.syncProject(activeProject);
-  $: assetWorkspaceController.syncDerivedState();
+  $: {
+    fsEntries;
+    rootFiles;
+    assetMode;
+    expandedPaths;
+    assetWorkspaceController.syncDerivedState();
+  }
 
   const buildFontStack = buildFontStackWorkflow;
   const getProjectInterfaceFontConfig = getProjectInterfaceFontConfigWorkflow;
@@ -852,35 +866,27 @@
 
   $: runtimeWorkspaceShell = { t, uiLang, locale, showLanding, loadError, project, activeProject, showEditorToggle, editorVisible, editorPresentation, editorTab, deviceMode, previewMode };
   $: runtimeWorkspaceEditor = {
-    draft, templateOptions, workflowMode, openError, exportStatus, exportError, workflowStep, workflowProgress,
-    fontChoice, fontAssetOptions, rootLabel, assetProjectReadOnly, assetUploadInput, uploadTargetPath, uploadFolderOptions,
-    needsAssets, fsError, assetTaskVisible, assetTaskStep, assetTaskProgress, assetMode, fsEntries, treeRows, selectedAssetIds,
-    editPanel, editLang, selectedCategoryId, selectedItemId, selectedCategory, selectedItem, assetOptions,
-    sectionBackgroundOptionsByCategory, sectionBackgroundNeedsCoverage, sectionBackgroundHasDuplicates, commonAllergenCatalog, normalizeBackgroundCarouselSeconds,
-    wizardStep, wizardSteps, wizardProgress, wizardStatus, wizardLang, wizardCategoryId, wizardItemId, wizardCategory, wizardItem,
+    draft, templateOptions, workflowMode, openError, exportStatus, exportError, workflowStep, workflowProgress, fontChoice, fontAssetOptions, rootLabel, assetProjectReadOnly, assetUploadInput, uploadTargetPath, uploadFolderOptions,
+    needsAssets, fsError, assetTaskVisible, assetTaskStep, assetTaskProgress, assetMode, fsEntries, treeRows, selectedAssetIds, editPanel, editLang, selectedCategoryId, selectedItemId, selectedCategory, selectedItem, assetOptions,
+    sectionBackgroundOptionsByCategory, sectionBackgroundNeedsCoverage, sectionBackgroundHasDuplicates, commonAllergenCatalog, normalizeBackgroundCarouselSeconds, wizardStep, wizardSteps, wizardProgress, wizardStatus, wizardLang, wizardCategoryId, wizardItemId, wizardCategory, wizardItem,
     wizardDemoPreview, wizardNeedsRootBackground, getLocalizedValue, textOf, ensureRestaurantName, ensureMetaTitle, touchDraft
   };
   $: runtimeWorkspacePreview = {
-    effectivePreview, previewStartupLoading, previewStartupProgress, previewStartupBlockingSources, previewBackgrounds,
-    loadedPreviewBackgroundIndexes, activeBackgroundIndex, isBlankMenu, carouselActive, previewFontStack, previewFontVars,
-    getLoadingLabel, getTemplateScrollHint, getCarouselImageSource, buildResponsiveSrcSetFromMedia, getMenuTerm, formatPrice,
-    getDishTapHint, getAssetOwnershipDisclaimer, getItemFontStyle
+    effectivePreview, previewStartupLoading, previewStartupProgress, previewStartupBlockingSources, previewBackgrounds, loadedPreviewBackgroundIndexes, activeBackgroundIndex, isBlankMenu, carouselActive, previewFontStack, previewFontVars,
+    getLoadingLabel, getTemplateScrollHint, getCarouselImageSource, buildResponsiveSrcSetFromMedia, getMenuTerm, formatPrice, getDishTapHint, getAssetOwnershipDisclaimer, getItemFontStyle
   };
   $: runtimeWorkspaceControllers = { editorDraftController, projectWorkflowController, assetWorkspaceController };
   $: runtimeWorkspaceActions = {
     setProjectFileInput: (input: HTMLInputElement | null) => (projectFileInput = input), setUiLang: (lang: "es" | "en") => (uiLang = lang), setLocale: (value: string) => (locale = value),
-    setEditorTab, togglePreviewMode, toggleEditor, setUploadTargetPath: (path: string) => (uploadTargetPath = path), setAssetUploadInput: (input: HTMLInputElement | null) => (assetUploadInput = input),
+    setEditorTab, toggleEditor, setUploadTargetPath: (path: string) => (uploadTargetPath = path), setAssetUploadInput: (input: HTMLInputElement | null) => (assetUploadInput = input),
     setEditPanel: (panel: "identity" | "background" | "section" | "dish") => (editPanel = panel), setSelectedCategoryId: (categoryId: string) => (selectedCategoryId = categoryId), setSelectedItemId: (itemId: string) => (selectedItemId = itemId),
     setWizardLang: (lang: string) => (wizardLang = lang), setWizardCategoryId: (categoryId: string) => (wizardCategoryId = categoryId), setWizardItemId: (itemId: string) => (wizardItemId = itemId),
     isWizardStepValid, goToStep, goPrevStep, goNextStep, shiftSection, handleMenuScroll, shiftCarousel, handleCarouselWheel, handleCarouselTouchStart, handleCarouselTouchMove, handleCarouselTouchEnd, openDish, prefetchDishDetail
   };
   $: runtimeSurfaceModel = { activeItem, dish: activeDish, interactiveEnabled: modalInteractiveEnabled, itemFontStyle: activeDish ? getItemFontStyle(activeDish) : "", modalMediaHost, modalMediaImage, textOf, getDetailImageSource, getAllergenValues, getMenuTerm, formatPrice, assetOptions, fontAssetOptions };
   $: runtimeSurfaceActions = { closeDish, setModalMediaHost: (host: HTMLDivElement | null) => (modalMediaHost = host), setModalMediaImage: (image: HTMLImageElement | null) => (modalMediaImage = image) };
-
 </script>
-
 <svelte:window on:pointerdown={handleDesktopOutsidePointer} />
-
 <RuntimeWorkspace
   shell={runtimeWorkspaceShell}
   editor={runtimeWorkspaceEditor}
@@ -888,5 +894,4 @@
   controllers={runtimeWorkspaceControllers}
   actions={runtimeWorkspaceActions}
 />
-
 <RuntimeSurfaceHost model={runtimeSurfaceModel} actions={runtimeSurfaceActions} />

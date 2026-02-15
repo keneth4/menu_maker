@@ -73,7 +73,6 @@
         editorTab={shell.editorTab}
         setUiLang={actions.setUiLang}
         setEditorTab={actions.setEditorTab}
-        togglePreviewMode={actions.togglePreviewMode}
         toggleEditor={actions.toggleEditor}
       >
         <RuntimeEditorTabContent

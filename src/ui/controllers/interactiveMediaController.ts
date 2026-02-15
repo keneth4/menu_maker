@@ -362,8 +362,8 @@ export const createInteractiveMediaController = (
   const getInteractiveDetailAsset = (item: MenuItem | null): InteractiveDetailAsset | null => {
     if (!item) return null;
     const candidates = [
-      item.media.hero360,
       item.media.originalHero360,
+      item.media.hero360,
       item.media.responsive?.large,
       item.media.responsive?.medium,
       item.media.responsive?.small

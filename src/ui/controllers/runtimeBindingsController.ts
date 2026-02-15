@@ -125,6 +125,7 @@ export type RuntimeBindingsDeps = {
   ensureLongDescription: (item: MenuItem) => Record<string, string>;
   ensureAllergens: (item: MenuItem) => Array<{ id?: string; label: Record<string, string> }>;
   resolveTemplateId: (templateId: string) => string;
+  isWizardShowcaseEligible: (project: MenuProject | null) => boolean;
   normalizePath: (value: string) => string;
   readAssetBytes: (slug: string, sourcePath: string) => Promise<Uint8Array | null>;
   buildExportStyles: () => string;
@@ -233,6 +234,7 @@ export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBinding
     ensureLongDescription: deps.ensureLongDescription,
     ensureAllergens: deps.ensureAllergens,
     resolveTemplateId: deps.resolveTemplateId,
+    isWizardShowcaseEligible: deps.isWizardShowcaseEligible,
     buildWizardShowcaseProject: deps.buildWizardShowcaseProject,
     resetTemplateDemoCache: deps.resetTemplateDemoCache,
     syncWizardShowcaseVisibility: deps.syncWizardShowcaseVisibility,
@@ -264,6 +266,7 @@ export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBinding
     cloneProject: deps.cloneProject,
     createEmptyProject: deps.createEmptyProject,
     applyTemplate: editorDraftController.applyTemplate,
+    syncWizardShowcaseVisibility: deps.syncWizardShowcaseVisibility,
     normalizePath: deps.normalizePath,
     readAssetBytes: deps.readAssetBytes,
     buildExportStyles: deps.buildExportStyles,
@@ -302,6 +305,7 @@ export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBinding
         wizardDemoPreview: state.wizardDemoPreview,
         wizardShowcaseProject: state.wizardShowcaseProject,
         lastSaveName: state.lastSaveName,
+        rootFiles: state.rootFiles,
         needsAssets: state.needsAssets,
         openError: state.openError,
         exportError: state.exportError,

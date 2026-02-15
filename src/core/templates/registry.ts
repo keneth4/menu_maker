@@ -148,10 +148,28 @@ const templateRegistry: Record<TemplateId, TemplateRegistryEntry> = {
 
 const DEFAULT_TEMPLATE_ID: TemplateId = "focus-rows";
 
+const TEMPLATE_ID_ALIASES: Record<string, TemplateId> = {
+  "focus-rows": "focus-rows",
+  focusrows: "focus-rows",
+  "focus-row": "focus-rows",
+  "in-focus-rows": "focus-rows",
+  "in-focus-row": "focus-rows",
+  "bar-pub": "focus-rows",
+  "cafe-brunch": "focus-rows",
+  "street-food": "focus-rows",
+  jukebox: "jukebox",
+  "juke-box": "jukebox"
+};
+
+const normalizeTemplateToken = (value: string) =>
+  value.trim().toLowerCase().replace(/[_\s]+/g, "-");
+
 export const resolveTemplateId = (value?: string): TemplateId => {
   if (!value) return DEFAULT_TEMPLATE_ID;
-  if ((TEMPLATE_IDS as readonly string[]).includes(value)) {
-    return value as TemplateId;
+  const normalized = normalizeTemplateToken(value);
+  const resolved = TEMPLATE_ID_ALIASES[normalized] ?? normalized;
+  if ((TEMPLATE_IDS as readonly string[]).includes(resolved)) {
+    return resolved as TemplateId;
   }
   return DEFAULT_TEMPLATE_ID;
 };
@@ -169,4 +187,3 @@ export const getTemplateStrategy = (value?: string): TemplateStrategy => {
 export const templateCapabilityList = TEMPLATE_IDS.map(
   (id) => templateRegistry[id].capabilities
 );
-

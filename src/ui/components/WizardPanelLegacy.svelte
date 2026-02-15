@@ -147,6 +147,22 @@
     if (!(target instanceof HTMLInputElement)) return;
     setItemPriceVisible(item, target.checked);
   };
+
+  const ensureDraftMetaLocalizedField = (key: "restaurantName" | "title") => {
+    if (!draft) return null;
+    const meta = draft.meta as Record<string, unknown>;
+    const current = meta[key];
+    if (current && typeof current === "object") {
+      const localized = current as Record<string, unknown>;
+      if (typeof localized.es !== "string") localized.es = "";
+      if (typeof localized.en !== "string") localized.en = "";
+      return localized as Record<string, string>;
+    }
+    const created: Record<string, string> = { es: "", en: "" };
+    meta[key] = created;
+    touchDraft();
+    return created;
+  };
 </script>
 
 <section class="wizard">
@@ -239,7 +255,34 @@
                 </label>
               </div>
             </label>
-            {#if draft.meta.identityMode === "logo"}
+            {#if (draft.meta.identityMode ?? "text") === "text"}
+              <label class="editor-field">
+                <span>{t("restaurantName")}</span>
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={getLocalizedValue(draft.meta.restaurantName, wizardLang)}
+                  on:input={(event) => {
+                    const localized = ensureDraftMetaLocalizedField("restaurantName");
+                    if (!localized) return;
+                    handleLocalizedInput(localized, wizardLang, event);
+                  }}
+                />
+              </label>
+              <label class="editor-field">
+                <span>{t("menuTitle")}</span>
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={getLocalizedValue(draft.meta.title, wizardLang)}
+                  on:input={(event) => {
+                    const localized = ensureDraftMetaLocalizedField("title");
+                    if (!localized) return;
+                    handleLocalizedInput(localized, wizardLang, event);
+                  }}
+                />
+              </label>
+            {:else if draft.meta.identityMode === "logo"}
               <label class="editor-field">
                 <span>{t("logoAsset")}</span>
                 {#if mediaAssetOptions.length}

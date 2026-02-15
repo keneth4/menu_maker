@@ -43,6 +43,7 @@ type EditorDraftControllerDeps = {
   ensureLongDescription: (item: MenuItem) => Record<string, string>;
   ensureAllergens: (item: MenuItem) => AllergenEntry[];
   resolveTemplateId: (templateId: string) => string;
+  isWizardShowcaseEligible: (project: MenuProject | null) => boolean;
   buildWizardShowcaseProject: (templateId: string) => Promise<MenuProject | null>;
   resetTemplateDemoCache: () => void;
   syncWizardShowcaseVisibility: () => void;
@@ -208,8 +209,12 @@ export const createEditorDraftController = (
     draft.meta.template = resolvedTemplateId;
     if (options.source === "wizard") {
       deps.resetTemplateDemoCache();
+      const showcaseEligible = deps.isWizardShowcaseEligible(draft);
       deps.setState({
-        wizardShowcaseProject: await deps.buildWizardShowcaseProject(resolvedTemplateId)
+        wizardShowcaseProject: showcaseEligible
+          ? await deps.buildWizardShowcaseProject(resolvedTemplateId)
+          : null,
+        ...(showcaseEligible ? {} : { wizardDemoPreview: false })
       });
       deps.syncWizardShowcaseVisibility();
     } else {

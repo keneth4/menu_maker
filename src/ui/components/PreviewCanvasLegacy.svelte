@@ -222,7 +222,9 @@
           </div>
         {/if}
 
-        {#if activeTemplateCapabilities.showSectionNav && activeProject.categories.length > 1}
+        {#if deviceMode === "desktop" &&
+        activeTemplateCapabilities.showSectionNav &&
+        activeProject.categories.length > 1}
           <div class="section-nav">
             <button
               class="section-nav__btn prev"

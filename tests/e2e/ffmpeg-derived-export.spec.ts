@@ -83,6 +83,11 @@ const openEditorIfClosed = async (page: Page) => {
   }
 };
 
+const openProjectFromLanding = async (page: Page, fixturePath: string) => {
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
+};
+
 test("bridge export generates derived assets and keeps originals for detail rendering", async ({
   page,
   request
@@ -113,11 +118,7 @@ test("bridge export generates derived assets and keeps originals for detail rend
   const fixturePath = await writeBridgeFixtureZip(testInfo, slug);
 
   await page.goto("/");
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await openProjectFromLanding(page, fixturePath);
   await openEditorIfClosed(page);
   const projectNameInput = page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })
@@ -206,11 +207,7 @@ test("bridge save zip keeps originals and strips derived metadata", async ({ pag
   const fixturePath = await writeBridgeFixtureZip(testInfo, slug);
 
   await page.goto("/");
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await openProjectFromLanding(page, fixturePath);
   await openEditorIfClosed(page);
   const projectNameInput = page
     .locator("label.editor-field", { hasText: /nombre del proyecto|project name/i })

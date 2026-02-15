@@ -11,7 +11,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 ## Current phase
 - Active phase: `9 (App.svelte redistribution redesign)`
 - Started: `2026-02-13`
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 
 ## Phase board
 | Phase | Name | Status | Notes |
@@ -23,7 +23,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
 | 6 | Validation + docs sync | DONE | Validation gates + docs/tracker sync completed for current architecture decisions. |
-| 9 | App runtime redistribution redesign | IN_PROGRESS | `AppRuntimeScreen.svelte` is now a thin shell (`8` lines) and `AppRuntimeScreenContent.svelte` is within closeout budget (`892` lines); remaining work is final docs/closeout consolidation. |
+| 9 | App runtime redistribution redesign | DONE | Runtime shell split is complete (`AppRuntimeScreen.svelte`: 8 lines, `AppRuntimeScreenContent.svelte`: 898 lines), regression fixes landed, and build/unit/e2e/perf gates are green on container-first path. |
 
 ## Phase 0 checklist
 - [x] Create a phase tracker with status board.
@@ -515,3 +515,101 @@ Tracking checklist:
     - `npm test`: PASS (`56` files, `144` tests)
     - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container`: PASS (`22 passed`, `3 skipped`)
     - `ALLOW_CONTAINER_BUILD=1 npm run test:perf:container`: PASS (`1 passed`)
+- Phase 9 closeout recovery pass (manual-regression parity fixes + container cleanup hardening):
+  - Added targeted e2e regression coverage:
+    - `tests/e2e/import-parity.spec.ts`
+    - `tests/e2e/jukebox-scroll-parity.spec.ts`
+    - `tests/e2e/detail-image-source-parity.spec.ts`
+    - extended `tests/e2e/app.spec.ts` for wizard identity text fields + editor-header toggle removal assertions.
+  - Fixed reported UI/runtime regressions:
+    - restored wizard identity text inputs in `src/ui/components/WizardPanelLegacy.svelte`,
+    - removed top header toggle-view button in `src/ui/components/EditorShell.svelte` and runtime wiring callsites,
+    - enforced Jukebox wheel axis routing (`vertical -> cards`, `horizontal -> sections`) in `src/ui/controllers/runtimePreviewAdapterController.ts`,
+    - preserved detail-card original image priority while stabilizing inline source normalization in `src/application/projects/presentationWorkflow.ts`.
+  - Fixed import/background/assets parity for no-bridge zip opens:
+    - zip assets hydrate to inline sources in `src/ui/controllers/projectWorkflowController.ts`,
+    - virtual asset tree rows for no-bridge/rootless sessions in `src/ui/controllers/assetWorkspaceController.ts`,
+    - reactive asset-tree sync now tracks `rootFiles` changes in `src/ui/components/AppRuntimeScreenContent.svelte`,
+    - assets tab now renders virtual rows in none-mode and keeps controls read-only in `src/ui/components/AssetsManagerLegacy.svelte`.
+  - Hardened cleanup scripts to reduce disk pressure:
+    - stale Playwright outputs cleaned at run start in `scripts/test-e2e.sh` and `scripts/test-perf.sh`,
+    - compose teardown now removes local compose images/volumes/orphans in `scripts/container-smoke.sh`.
+  - Export/runtime compatibility hardening:
+    - inline/data/blob sources are excluded from zip asset remap/copy paths in `src/application/export/projectZip.ts` to preserve data URL parity.
+  - Final closeout line counts:
+    - `src/App.svelte`: `16`
+    - `src/ui/components/AppRuntime.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreen.svelte`: `8`
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `898`
+    - `src/export-runtime/buildRuntimeScript.ts`: `12`
+  - Final gate status:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`58` files, `152` tests)
+    - `npm run test:e2e`: PASS (container-first full suite: `29 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec: `1 passed`)
+- Phase 9.1 recovery follow-up pass (background visibility + section-mode parity stabilization):
+  - Fixed section-mode preview background orchestration race:
+    - `src/ui/controllers/previewBackgroundController.ts` now preserves `-1` for invalid section mappings (no fallback) and separates project-sync behavior from active-index loading behavior.
+    - `src/ui/components/AppRuntimeScreenContent.svelte` now splits project/background sync and active-index loaded-background sync reactive blocks to avoid section-nav overwrite loops.
+  - Fixed export-runtime section background settle race:
+    - `src/export-runtime/fragments/runtimeScriptComposer.ts` jukebox scroll handler no longer re-syncs section background mid-scroll; background sync occurs on settle to prevent active-section flapping.
+  - Added/updated targeted regression coverage:
+    - `src/ui/controllers/previewBackgroundController.test.ts` (invalid-mapping no-fallback guard).
+    - Existing parity specs validated in container mode:
+      - `tests/e2e/parity-section-background.spec.ts`
+      - `tests/e2e/import-parity.spec.ts`
+      - `tests/e2e/detail-image-source-parity.spec.ts`
+      - `tests/e2e/jukebox-scroll-parity.spec.ts`
+  - Gate status after this follow-up:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`58` files, `152` tests)
+    - `npm run test:e2e`: PASS (container-first full suite: `29 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec: `1 passed`)
+- Phase 9.2 recovery follow-up pass (locale switching + Jukebox focus/scroll parity):
+  - Added targeted regression coverage for reported parity gaps:
+    - extended `tests/e2e/app.spec.ts` with locale dropdown and desktop section-nav button checks for Jukebox preview.
+    - strengthened `tests/e2e/jukebox-scroll-parity.spec.ts` to assert no section recoil to index `0` during center-screen horizontal gestures.
+    - added `tests/e2e/jukebox-import-reactivity.spec.ts` for JSON/ZIP import reactivity parity (section + item responsiveness).
+  - Added controller/component unit coverage for restored behavior contracts:
+    - `src/ui/components/PreviewCanvas.test.ts`
+    - `src/ui/controllers/previewController.test.ts`
+    - `src/ui/controllers/previewNavigationController.test.ts`
+    - `src/ui/controllers/runtimePreviewAdapterController.test.ts`
+  - Fixed locale propagation overwrite race:
+    - `src/ui/components/PreviewCanvas.svelte` now guards pending local locale commits so model sync no longer clobbers user selection on the same tick.
+  - Restored pre-refactor horizontal settle/focus behavior:
+    - `src/ui/controllers/previewController.ts` now performs horizontal focused-section sync, schedules settle snap, and confirms section focus after settle.
+    - `src/ui/controllers/runtimePreviewAdapterController.ts` removed custom horizontal section-lock interception and defers to carousel/native menu-scroll behavior.
+    - `src/ui/controllers/previewNavigationController.ts` now exposes hysteresis-stable horizontal section resolution to prevent midpoint flapping.
+  - Gate status after this follow-up:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`59` files, `154` tests)
+    - `npm run test:e2e`: PASS (container-first full suite: `33 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec: `1 passed`)
+- Phase 9.4 recovery follow-up pass (template-switch coherence + desktop wheel/section parity):
+  - Unified Project-tab template switching through controller action pipeline:
+    - `src/ui/components/ProjectInfoPanel.svelte` now dispatches `actions.setTemplate(...)` instead of direct draft mutation.
+    - `src/ui/components/RuntimeEditorTabContent.svelte` now routes template changes to `editorDraftController.applyTemplate(templateId, { source: "project" })`.
+    - `src/ui/contracts/components.ts` now includes `ProjectInfoPanelActions.setTemplate`.
+  - Added Wizard showcase eligibility guardrail and wiring:
+    - new workflow `src/application/projects/wizardShowcaseEligibility.ts` + unit test.
+    - `src/ui/controllers/editorDraftController.ts` now gates wizard demo/showcase activation by blank-project eligibility.
+    - `src/ui/components/AppRuntimeScreenContent.svelte` now clears stale showcase state when current draft becomes ineligible.
+  - Hardened Jukebox desktop wheel/section behavior and template compatibility:
+    - `src/ui/controllers/runtimePreviewAdapterController.ts` now uses deterministic desktop horizontal-intent routing for section changes while preserving vertical carousel movement.
+    - `src/ui/components/PreviewCanvasLegacy.svelte` now enforces desktop-only section-nav rendering.
+    - `src/export-runtime/fragments/runtimeScriptComposer.ts` now mirrors desktop-only section-nav contract in export runtime.
+    - `src/core/templates/registry.ts` + `src/core/menu/normalization.ts` now canonicalize template IDs with alias normalization.
+  - Stabilized e2e harness and flaky parity/perf edges:
+    - Open-project helpers now use deterministic hidden-input upload path across e2e specs.
+    - `tests/e2e/interactive-modal.spec.ts` now uses a deterministic GIF-data fixture to validate interactive modal rendering.
+    - `tests/e2e/parity-section-background.spec.ts` settle-window polling widened for container stability.
+    - `tests/e2e/performance-fluidity.spec.ts` now uses percentile-based frame jitter assertions (`p95`/`p99`) to reduce container noise while keeping responsiveness gates.
+  - Final line-count checkpoint:
+    - `src/ui/components/AppRuntimeScreenContent.svelte`: `898` lines (architecture cap `<= 900`).
+  - Gate status after this follow-up:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`60` files, `162` tests)
+    - `npm run test:e2e`: PASS (container-first path; local fallback not needed when container green)
+    - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container`: PASS (`36 passed`, `3 skipped`)
+    - `npm run test:perf`: PASS (container-first perf spec)

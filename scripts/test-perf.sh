@@ -5,6 +5,13 @@ REQUIRED_MAJOR=18
 REQUIRED_MINOR=19
 TEST_GREP="${TEST_GREP:-performance smoke keeps startup and modal interaction responsive}"
 
+cleanup_stale_playwright_artifacts() {
+  rm -rf test-results playwright-report
+  find . -maxdepth 1 -type d \( -name "ffmpeg*" -o -name "ffmpg*" \) -exec rm -rf {} + 2>/dev/null || true
+}
+
+cleanup_stale_playwright_artifacts
+
 supports_local_playwright() {
   local version
   version="$(node -p "process.versions.node" 2>/dev/null || true)"

@@ -29,6 +29,7 @@ type WorkflowMode = "save" | "export" | "upload";
 export type ProjectWorkflowState = {
   project: MenuProject | null;
   draft: MenuProject | null;
+  rootFiles: string[];
   projects: ProjectSummary[];
   activeSlug: string;
   locale: string;
@@ -64,6 +65,7 @@ type ProjectWorkflowControllerDeps = {
   cloneProject: (value: MenuProject) => MenuProject;
   createEmptyProject: () => MenuProject;
   applyTemplate: (templateId: string, options?: { source?: "wizard" | "project" }) => Promise<void>;
+  syncWizardShowcaseVisibility: () => void;
   normalizePath: (value: string) => string;
   readAssetBytes: (slug: string, sourcePath: string) => Promise<Uint8Array | null>;
   buildExportStyles: () => string;
@@ -153,6 +155,43 @@ const applyImportedPaths = (
   slug: string,
   mapLegacyAssetRelativeToManaged: (value: string) => string
 ) => applyImportedPathsWorkflow(data, slug, mapLegacyAssetRelativeToManaged);
+
+type ImportedZipAsset = {
+  sourcePath: string;
+  dataUrl: string;
+};
+
+const buildImportedZipAssets = (
+  entries: ReturnType<typeof getZipAssetEntries>,
+  slug: string,
+  mapLegacyAssetRelativeToManaged: (value: string) => string
+): ImportedZipAsset[] => {
+  const bySourcePath = new Map<string, ImportedZipAsset>();
+  entries.forEach((assetEntry) => {
+    const mappedRelative = mapLegacyAssetRelativeToManaged(assetEntry.relative);
+    if (!mappedRelative) return;
+    const normalizedRelative = mappedRelative.replace(/^\/+/, "");
+    const sourcePath = `/projects/${slug}/assets/${normalizedRelative}`;
+    const mime = getMimeType(assetEntry.name || normalizedRelative);
+    bySourcePath.set(sourcePath, {
+      sourcePath,
+      dataUrl: `data:${mime};base64,${toBase64(assetEntry.entry.data)}`
+    });
+  });
+  return Array.from(bySourcePath.values());
+};
+
+const hydrateImportedProjectAssetSources = (
+  project: MenuProject,
+  importedAssets: ImportedZipAsset[]
+) => {
+  if (importedAssets.length === 0) return project;
+  const sourceMap = new Map(importedAssets.map((entry) => [entry.sourcePath, entry.dataUrl]));
+  return mapProjectAssetPaths(project, (value) => {
+    const normalized = value.startsWith("/") ? value : `/${value.replace(/^\/+/, "")}`;
+    return sourceMap.get(normalized) ?? value;
+  });
+};
 
 export const createProjectWorkflowController = (
   deps: ProjectWorkflowControllerDeps
@@ -418,7 +457,11 @@ export const createProjectWorkflowController = (
     }
   };
 
-  const applyLoadedProject = async (data: MenuProject, sourceName = "") => {
+  const applyLoadedProject = async (
+    data: MenuProject,
+    sourceName = "",
+    options: { rootFiles?: string[] } = {}
+  ) => {
     const activeSlug = data.meta.slug || "importado";
     const summary = {
       slug: activeSlug,
@@ -439,6 +482,7 @@ export const createProjectWorkflowController = (
       wizardShowcaseProject: null,
       activeSlug,
       lastSaveName: sourceName || `${activeSlug}.zip`,
+      rootFiles: options.rootFiles ?? [],
       locale: data.meta.defaultLocale || "es",
       editPanel: "identity",
       projects,
@@ -473,6 +517,7 @@ export const createProjectWorkflowController = (
       wizardDemoPreview: false,
       wizardShowcaseProject: null,
       lastSaveName: "",
+      rootFiles: [],
       needsAssets: false,
       openError: "",
       exportStatus: "",
@@ -519,6 +564,7 @@ export const createProjectWorkflowController = (
       editorOpen: true,
       showLanding: false
     });
+    deps.syncWizardShowcaseVisibility();
   };
 
   const openProjectDialog = () => {
@@ -586,9 +632,20 @@ export const createProjectWorkflowController = (
           deps.slugifyName(data.meta.slug || folderName || data.meta.name || "menu") || "menu";
         data.meta.slug = slug;
         let preparedProject = applyImportedPaths(data, slug, deps.mapLegacyAssetRelativeToManaged);
+        const assetEntries = getZipAssetEntries(entries, menuEntry.name);
+        const importedZipAssets = buildImportedZipAssets(
+          assetEntries,
+          slug,
+          deps.mapLegacyAssetRelativeToManaged
+        );
+        const importedRootFiles = Array.from(
+          new Set([
+            ...importedZipAssets.map((asset) => asset.sourcePath),
+            ...importedZipAssets.map((asset) => asset.dataUrl)
+          ])
+        );
 
         if (deps.getState().assetMode === "bridge") {
-          const assetEntries = getZipAssetEntries(entries, menuEntry.name);
           const totalAssets = Math.max(1, assetEntries.length);
           for (let assetIndex = 0; assetIndex < assetEntries.length; assetIndex += 1) {
             const assetEntry = assetEntries[assetIndex];
@@ -629,12 +686,13 @@ export const createProjectWorkflowController = (
           deps.setState({ needsAssets: false });
         } else {
           deps.setState({
-            needsAssets: true,
-            openError: deps.t("errZipNoBridge")
+            needsAssets: importedZipAssets.length === 0,
+            openError: importedZipAssets.length === 0 ? deps.t("errZipNoBridge") : ""
           });
+          preparedProject = hydrateImportedProjectAssetSources(preparedProject, importedZipAssets);
         }
 
-        await applyLoadedProject(preparedProject, file.name);
+        await applyLoadedProject(preparedProject, file.name, { rootFiles: importedRootFiles });
 
         if (deps.getState().assetMode === "bridge") {
           await deps.refreshBridgeEntries();
@@ -646,7 +704,7 @@ export const createProjectWorkflowController = (
         const slug = deps.slugifyName(data.meta.slug || data.meta.name || "importado") || "importado";
         data.meta.slug = slug;
         const prepared = applyImportedPaths(data, slug, deps.mapLegacyAssetRelativeToManaged);
-        await applyLoadedProject(prepared, file.name);
+        await applyLoadedProject(prepared, file.name, { rootFiles: [] });
         if (deps.getState().assetMode === "bridge") {
           deps.setState({
             needsAssets: true,

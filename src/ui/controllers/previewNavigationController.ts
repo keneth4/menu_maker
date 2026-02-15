@@ -2,7 +2,6 @@ import {
   applySectionFocus as applySectionFocusWorkflow,
   centerSection as centerSectionWorkflow,
   centerSectionHorizontally as centerSectionHorizontallyWorkflow,
-  getClosestHorizontalSectionIndex as getClosestHorizontalSectionIndexWorkflow,
   getClosestSectionIndex as getClosestSectionIndexWorkflow,
   isKeyboardEditableTarget as isKeyboardEditableTargetWorkflow
 } from "../../application/preview/navigationWorkflow";
@@ -32,6 +31,7 @@ type PreviewNavigationControllerDeps = {
 export type PreviewNavigationController = {
   applySectionFocus: (container: HTMLElement) => void;
   syncSectionBackgroundByIndex: (index: number) => void;
+  resolveHorizontalSectionIndex: (container: HTMLElement) => number;
   shiftSection: (direction: number) => void;
   getActiveSectionCategoryId: () => string | null;
   handleDesktopPreviewKeydown: (event: KeyboardEvent) => void;
@@ -43,6 +43,8 @@ const queryMenuScrollContainerDefault = () =>
 export const createPreviewNavigationController = (
   deps: PreviewNavigationControllerDeps
 ): PreviewNavigationController => {
+  const HORIZONTAL_INDEX_HYSTERESIS_PX = 24;
+  let stableHorizontalIndex = -1;
   const isKeyboardEditableTarget = deps.isKeyboardEditableTarget ?? isKeyboardEditableTargetWorkflow;
   const queryMenuScrollContainer = deps.queryMenuScrollContainer ?? queryMenuScrollContainerDefault;
 
@@ -60,6 +62,45 @@ export const createPreviewNavigationController = (
     applySectionFocusWorkflow(container, syncSectionBackgroundByIndex);
   };
 
+  const resolveHorizontalSectionIndex = (container: HTMLElement) => {
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (sections.length === 0) {
+      stableHorizontalIndex = -1;
+      return -1;
+    }
+    const centerX = container.scrollLeft + container.clientWidth / 2;
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+      const distance = Math.abs(sectionCenter - centerX);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    if (
+      stableHorizontalIndex >= 0 &&
+      stableHorizontalIndex < sections.length &&
+      stableHorizontalIndex !== closestIndex
+    ) {
+      const stableSection = sections[stableHorizontalIndex];
+      const stableCenter = stableSection.offsetLeft + stableSection.offsetWidth / 2;
+      const stableDistance = Math.abs(stableCenter - centerX);
+      const hysteresisPx = Math.max(
+        HORIZONTAL_INDEX_HYSTERESIS_PX,
+        Math.round(container.clientWidth * 0.04)
+      );
+      if (stableDistance <= closestDistance + hysteresisPx) {
+        closestIndex = stableHorizontalIndex;
+      }
+    }
+
+    stableHorizontalIndex = closestIndex;
+    return closestIndex;
+  };
+
   const shiftSection = (direction: number) => {
     const container = queryMenuScrollContainer();
     if (!container) return;
@@ -68,7 +109,7 @@ export const createPreviewNavigationController = (
     const capabilities = deps.getTemplateCapabilities();
     const current =
       capabilities.sectionSnapAxis === "horizontal"
-        ? getClosestHorizontalSectionIndexWorkflow(container)
+        ? resolveHorizontalSectionIndex(container)
         : getClosestSectionIndexWorkflow(container);
     if (current < 0) return;
     const next = (current + direction + sections.length) % sections.length;
@@ -90,7 +131,7 @@ export const createPreviewNavigationController = (
     const capabilities = deps.getTemplateCapabilities();
     const index =
       capabilities.sectionSnapAxis === "horizontal"
-        ? getClosestHorizontalSectionIndexWorkflow(container)
+        ? resolveHorizontalSectionIndex(container)
         : getClosestSectionIndexWorkflow(container);
     if (index < 0) return project.categories[0]?.id ?? null;
     return project.categories[index]?.id ?? project.categories[0]?.id ?? null;
@@ -164,6 +205,7 @@ export const createPreviewNavigationController = (
   return {
     applySectionFocus,
     syncSectionBackgroundByIndex,
+    resolveHorizontalSectionIndex,
     shiftSection,
     getActiveSectionCategoryId,
     handleDesktopPreviewKeydown

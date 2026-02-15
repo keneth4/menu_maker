@@ -120,4 +120,68 @@ describe("previewBackgroundController", () => {
     expect(activeBackgroundIndex).toBe(2);
     expect(loadedBackgroundIndexes).toEqual([2, 0]);
   });
+
+  it("ensures first background is loaded immediately after project sync", () => {
+    let activeBackgroundIndex = -1;
+    let loadedBackgroundIndexes: number[] = [];
+    const sync = vi.fn();
+    const controller = createPreviewBackgroundController({
+      defaultCarouselSeconds: 9,
+      minCarouselSeconds: 2,
+      maxCarouselSeconds: 60,
+      rotationController: { clear: vi.fn(), sync },
+      getActiveProject: () => makeProject("carousel"),
+      getPreviewBackgrounds: () => [
+        { id: "bg-1", src: "" },
+        { id: "bg-2", src: "" }
+      ],
+      getActiveBackgroundIndex: () => activeBackgroundIndex,
+      setActiveBackgroundIndex: (index) => {
+        activeBackgroundIndex = index;
+      },
+      getSectionBackgroundIndexByCategory: () => ({}),
+      getActiveSectionCategoryId: () => null,
+      getLoadedBackgroundIndexes: () => loadedBackgroundIndexes,
+      setLoadedBackgroundIndexes: (indexes) => {
+        loadedBackgroundIndexes = indexes;
+      }
+    });
+
+    controller.syncForProjectChange();
+
+    expect(activeBackgroundIndex).toBe(0);
+    expect(loadedBackgroundIndexes).toEqual([0, 1]);
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fallback to first background when section mapping is invalid", () => {
+    let activeBackgroundIndex = -1;
+    let loadedBackgroundIndexes: number[] = [];
+    const controller = createPreviewBackgroundController({
+      defaultCarouselSeconds: 9,
+      minCarouselSeconds: 2,
+      maxCarouselSeconds: 60,
+      rotationController: { clear: vi.fn(), sync: vi.fn() },
+      getActiveProject: () => makeProject("section"),
+      getPreviewBackgrounds: () => [
+        { id: "bg-1", src: "" },
+        { id: "bg-2", src: "" }
+      ],
+      getActiveBackgroundIndex: () => activeBackgroundIndex,
+      setActiveBackgroundIndex: (index) => {
+        activeBackgroundIndex = index;
+      },
+      getSectionBackgroundIndexByCategory: () => ({ "cat-1": -1 }),
+      getActiveSectionCategoryId: () => "cat-1",
+      getLoadedBackgroundIndexes: () => loadedBackgroundIndexes,
+      setLoadedBackgroundIndexes: (indexes) => {
+        loadedBackgroundIndexes = indexes;
+      }
+    });
+
+    controller.syncForProjectChange();
+
+    expect(activeBackgroundIndex).toBe(-1);
+    expect(loadedBackgroundIndexes).toEqual([]);
+  });
 });

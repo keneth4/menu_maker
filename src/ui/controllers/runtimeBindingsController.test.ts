@@ -137,6 +137,7 @@ describe("createRuntimeBindings", () => {
       ensureLongDescription: (item) => item.longDescription,
       ensureAllergens: (item) => item.allergens ?? [],
       resolveTemplateId: (templateId) => templateId,
+      isWizardShowcaseEligible: () => true,
       normalizePath: (value) => value,
       readAssetBytes: async () => null,
       buildExportStyles: () => "",

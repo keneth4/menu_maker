@@ -71,6 +71,7 @@ const cloneProject = (value: MenuProject): MenuProject => JSON.parse(JSON.string
 const createState = (): ProjectWorkflowState => ({
   project: null,
   draft: null,
+  rootFiles: [],
   projects: [],
   activeSlug: "nuevo-proyecto",
   locale: "es",
@@ -108,6 +109,7 @@ const createHarness = (
   });
   const initCarouselIndices = vi.fn();
   const applyTemplate = vi.fn(async () => {});
+  const syncWizardShowcaseVisibility = vi.fn();
   const refreshBridgeEntries = vi.fn(async () => {});
   const prepareProjectDerivedAssets = vi.fn(async (_slug: string, project: MenuProject) => project);
 
@@ -125,6 +127,7 @@ const createHarness = (
     cloneProject,
     createEmptyProject: () => makeProject("nuevo-proyecto"),
     applyTemplate,
+    syncWizardShowcaseVisibility,
     normalizePath: (value: string) => value,
     readAssetBytes: vi.fn(async () => null),
     buildExportStyles: () => "",
@@ -156,6 +159,7 @@ const createHarness = (
     setState,
     initCarouselIndices,
     applyTemplate,
+    syncWizardShowcaseVisibility,
     refreshBridgeEntries,
     prepareProjectDerivedAssets
   };
@@ -233,5 +237,19 @@ describe("projectWorkflowController", () => {
     expect(state.wizardStep).toBe(0);
     expect(state.draft?.backgrounds.length).toBe(1);
     expect(applyTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts wizard with showcase visibility sync after tab switch", async () => {
+    const { controller, getState, syncWizardShowcaseVisibility } = createHarness({
+      uiLang: "es"
+    });
+
+    await controller.startWizard();
+
+    const state = getState();
+    expect(state.editorTab).toBe("wizard");
+    expect(state.editorOpen).toBe(true);
+    expect(state.showLanding).toBe(false);
+    expect(syncWizardShowcaseVisibility).toHaveBeenCalledTimes(1);
   });
 });

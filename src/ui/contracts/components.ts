@@ -215,6 +215,7 @@ export type ProjectInfoPanelActions = {
   openProjectDialog: () => void;
   saveProject: () => Promise<void> | void;
   exportStaticSite: () => Promise<void> | void;
+  setTemplate: (templateId: string) => Promise<void> | void;
   toggleLanguage: (code: string) => void;
   handleCurrencyChange: (event: Event) => void;
   toggleCurrencyPosition: () => void;

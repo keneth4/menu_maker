@@ -12,13 +12,13 @@ describe("mapImportedAssetPath", () => {
     expect(result).toBe("/projects/demo/assets/originals/items/pie.gif");
   });
 
-  it("preserves same-slug project asset paths", () => {
+  it("rewrites same-slug project legacy asset paths into managed roots", () => {
     const result = mapImportedAssetPath(
       "/projects/demo/assets/dishes/pie.gif",
       "demo",
       mapLegacyAssetRelativeToManaged
     );
-    expect(result).toBe("/projects/demo/assets/dishes/pie.gif");
+    expect(result).toBe("/projects/demo/assets/originals/items/pie.gif");
   });
 
   it("rewrites cross-slug project asset paths into managed roots", () => {

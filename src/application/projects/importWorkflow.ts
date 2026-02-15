@@ -14,10 +14,6 @@ export const mapImportedAssetPath = (
   }
   const match = normalized.match(/^projects\/([^/]+)\/(assets\/.*)$/);
   if (match) {
-    const sourceSlug = match[1];
-    if (sourceSlug === slug) {
-      return `/${normalized}`;
-    }
     const relative = mapLegacyAssetRelativeToManaged(match[2].slice("assets/".length));
     return `/projects/${slug}/assets/${relative}`;
   }

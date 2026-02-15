@@ -19,7 +19,7 @@ PLAYWRIGHT_DOCKER_TAG="${PLAYWRIGHT_DOCKER_TAG:-v${PLAYWRIGHT_VERSION}-jammy}"
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:${PLAYWRIGHT_DOCKER_TAG}"
 
 cleanup() {
-  ${COMPOSE_BIN} down >/dev/null 2>&1 || true
+  ${COMPOSE_BIN} down --remove-orphans --volumes --rmi local >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 

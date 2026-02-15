@@ -10,6 +10,36 @@ const createProject = (): MenuProject =>
     ]
   }) as unknown as MenuProject;
 
+const defineOffset = (element: HTMLElement, key: "offsetLeft" | "offsetWidth", value: number) => {
+  Object.defineProperty(element, key, {
+    configurable: true,
+    get: () => value
+  });
+};
+
+const defineHorizontalMetrics = (
+  container: HTMLElement,
+  options: { clientWidth: number; scrollLeft: number }
+) => {
+  let scrollLeft = options.scrollLeft;
+  Object.defineProperty(container, "clientWidth", {
+    configurable: true,
+    get: () => options.clientWidth
+  });
+  Object.defineProperty(container, "scrollLeft", {
+    configurable: true,
+    get: () => scrollLeft,
+    set: (value: number) => {
+      scrollLeft = value;
+    }
+  });
+  return {
+    setScrollLeft: (value: number) => {
+      scrollLeft = value;
+    }
+  };
+};
+
 describe("createPreviewNavigationController", () => {
   it("syncs section background index when in section mode", () => {
     let activeBackgroundIndex = 0;
@@ -66,5 +96,39 @@ describe("createPreviewNavigationController", () => {
     controller.handleDesktopPreviewKeydown(arrowUp);
     expect(shiftCarousel).toHaveBeenCalledWith("cat-1", -1);
     expect(arrowPreventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps horizontal section index stable near midpoint using hysteresis", () => {
+    const container = document.createElement("div");
+    const metrics = defineHorizontalMetrics(container, { clientWidth: 400, scrollLeft: 160 });
+    const sectionA = document.createElement("section");
+    sectionA.className = "menu-section";
+    defineOffset(sectionA, "offsetLeft", 0);
+    defineOffset(sectionA, "offsetWidth", 360);
+    const sectionB = document.createElement("section");
+    sectionB.className = "menu-section";
+    defineOffset(sectionB, "offsetLeft", 420);
+    defineOffset(sectionB, "offsetWidth", 360);
+    container.append(sectionA, sectionB);
+
+    const controller = createPreviewNavigationController({
+      getProject: () => createProject(),
+      getTemplateCapabilities: () => ({ sectionSnapAxis: "horizontal" }),
+      getDeviceMode: () => "desktop",
+      getActiveItem: () => null,
+      getSectionBackgroundIndexByCategory: () => ({ "cat-1": 0, "cat-2": 1 }),
+      getActiveBackgroundIndex: () => 0,
+      setActiveBackgroundIndex: () => undefined,
+      isSectionBackgroundMode: () => true,
+      closeDish: () => undefined,
+      shiftCarousel: () => undefined,
+      queryMenuScrollContainer: () => container
+    });
+
+    expect(controller.resolveHorizontalSectionIndex(container)).toBe(0);
+    metrics.setScrollLeft(198);
+    expect(controller.resolveHorizontalSectionIndex(container)).toBe(0);
+    metrics.setScrollLeft(260);
+    expect(controller.resolveHorizontalSectionIndex(container)).toBe(1);
   });
 });

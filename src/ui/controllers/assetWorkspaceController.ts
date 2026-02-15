@@ -168,6 +168,37 @@ const areRecordsEqual = (left: Record<string, boolean>, right: Record<string, bo
   return true;
 };
 
+const buildVirtualEntriesFromRootFiles = (rootFiles: string[]): AssetWorkspaceEntry[] => {
+  const files = rootFiles
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .filter((entry) => entry.startsWith("/projects/") || entry.startsWith("projects/"))
+    .map((entry) => (entry.startsWith("/") ? entry.slice(1) : entry))
+    .map((entry) => {
+      const match = entry.match(/^projects\/[^/]+\/assets\/(.+)$/);
+      if (!match) return null;
+      const assetPath = match[1].replace(/^\/+/, "");
+      if (!assetPath) return null;
+      const name = assetPath.split("/").filter(Boolean).pop() ?? assetPath;
+      return {
+        id: assetPath,
+        name,
+        path: assetPath,
+        kind: "file" as const,
+        handle: null,
+        parent: null,
+        source: "bridge" as const
+      };
+    })
+    .filter((entry): entry is AssetWorkspaceEntry => Boolean(entry));
+
+  const uniqueByPath = new Map<string, AssetWorkspaceEntry>();
+  files.forEach((entry) => {
+    uniqueByPath.set(entry.path, entry);
+  });
+  return Array.from(uniqueByPath.values());
+};
+
 const toDataUrl = async (file: File) =>
   await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -346,8 +377,14 @@ export const createAssetWorkspaceController = (
 
   const syncDerivedState = () => {
     const state = deps.getState();
+    const visibleEntries =
+      state.fsEntries.length > 0
+        ? state.fsEntries
+        : state.assetMode === "none"
+          ? buildVirtualEntriesFromRootFiles(state.rootFiles)
+          : [];
     const seededExpandedPaths = { ...state.expandedPaths };
-    state.fsEntries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       if (entry.kind === "directory" && seededExpandedPaths[entry.path] === undefined) {
         const isTopLevel = !entry.path.includes("/");
         seededExpandedPaths[entry.path] = isTopLevel;
@@ -355,7 +392,7 @@ export const createAssetWorkspaceController = (
     });
 
     const entryMap = new Map<string, AssetWorkspaceEntry>();
-    state.fsEntries.forEach((entry) => entryMap.set(entry.path, entry));
+    visibleEntries.forEach((entry) => entryMap.set(entry.path, entry));
 
     const childrenMap = new Map<string, Set<string>>();
     const ensureChildren = (parent: string) => {
@@ -363,7 +400,7 @@ export const createAssetWorkspaceController = (
       return childrenMap.get(parent)!;
     };
 
-    state.fsEntries.forEach((entry) => {
+    visibleEntries.forEach((entry) => {
       const parts = entry.path.split("/").filter(Boolean);
       let parent = "";
       parts.forEach((_, index) => {
@@ -412,7 +449,7 @@ export const createAssetWorkspaceController = (
     walk("", 0);
 
     const folderSet = new Set<string>(deps.userManagedRoots);
-    state.fsEntries
+    visibleEntries
       .filter((entry) => entry.kind === "directory")
       .map((entry) => deps.mapLegacyAssetRelativeToManaged(entry.path))
       .filter((path) => deps.isManagedAssetRelativePath(path))

@@ -6,9 +6,24 @@
   export let actions: ProjectInfoPanelActions;
 
   let languageMenuOpen = false;
+  let templateValue = "";
 
   const selectedLabel = (count: number) =>
     model.uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
+
+  $: {
+    const nextTemplate = model.draft?.meta.template ?? "";
+    if (nextTemplate !== templateValue) {
+      templateValue = nextTemplate;
+    }
+  }
+
+  const handleTemplateChange = async (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    templateValue = target.value;
+    await actions.setTemplate(templateValue);
+  };
 </script>
 
 <div class="editor-toolbar">
@@ -110,7 +125,7 @@
     </label>
     <label class="editor-field">
       <span>{model.t("template")}</span>
-      <select bind:value={model.draft.meta.template} class="editor-select">
+      <select value={templateValue} class="editor-select" on:change={handleTemplateChange}>
         {#each model.templateOptions as template}
           <option value={template.id}>
             {template.label[model.uiLang] ?? template.label.es ?? template.id}

@@ -90,17 +90,47 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
 - New workflow tests:
   - `src/application/export/exportSiteWorkflow.test.ts`
   - `src/application/workflow/progress.test.ts`
+- Runtime parity regression tests:
+  - `src/ui/components/PreviewCanvas.test.ts`
+  - `src/ui/controllers/previewController.test.ts`
+  - `src/ui/controllers/previewNavigationController.test.ts`
+  - `src/ui/controllers/runtimePreviewAdapterController.test.ts`
 
 ## Compatibility Hardening (Test Env)
 - `scripts/patch-parse5-for-jsdom.mjs`
   - postinstall compatibility patch for offline/local jsdom+parse5+Node runtime mismatches.
 
-## Current Closeout Status (2026-02-14)
+## Current Closeout Status (2026-02-15)
 - Container-first gates are operational and passing:
-  - `npm run test:e2e` (full suite in container-first path)
-  - `npm run test:perf` (container-first performance spec path)
-- Forced container commands are now explicit:
+  - `npm run test:e2e` (container-first wrapper path)
+  - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container` (`36 passed`, `3 skipped`)
+  - `npm run test:perf` (container-first performance path)
+- Forced container commands are explicit:
   - `npm run test:e2e:container` runs full containerized e2e.
   - `npm run test:perf:container` runs containerized `performance-fluidity` spec.
-- Remaining architectural hotspot:
-  - `src/ui/components/AppRuntimeScreenContent.svelte` now carries `892` lines and is within the closeout budget for this phase.
+- Runtime size closeout:
+  - `src/ui/components/AppRuntimeScreenContent.svelte` is now `898` lines (within `<= 900` architecture cap).
+- Phase 9.4 coherence updates shipped:
+  - Project-tab template changes now flow through controller action wiring (`setTemplate -> applyTemplate(..., { source: "project" })`) via:
+    - `src/ui/components/ProjectInfoPanel.svelte`
+    - `src/ui/components/RuntimeEditorTabContent.svelte`
+    - `src/ui/contracts/components.ts`
+  - Wizard demo preview now only activates for blank projects using:
+    - `src/application/projects/wizardShowcaseEligibility.ts`
+    - `src/ui/controllers/editorDraftController.ts`
+    - `src/ui/components/AppRuntimeScreenContent.svelte` stale-showcase guard.
+  - Jukebox desktop routing/visibility parity hardening:
+    - desktop wheel intent routing in `src/ui/controllers/runtimePreviewAdapterController.ts`,
+    - desktop-only section-nav contract in `src/ui/components/PreviewCanvasLegacy.svelte`,
+    - matching export-runtime nav gating in `src/export-runtime/fragments/runtimeScriptComposer.ts`.
+  - Template ID compatibility hardening:
+    - alias/canonical normalization in `src/core/templates/registry.ts`,
+    - normalization pipeline integration in `src/core/menu/normalization.ts`.
+- Regression + gate reliability hardening:
+  - Open-project e2e helpers now use deterministic hidden-input uploads across specs (avoids flaky `filechooser` waits under mobile emulation).
+  - Interactive modal regression now uses deterministic GIF-data fixture:
+    - `tests/e2e/interactive-modal.spec.ts`.
+  - Section-background parity settle timing stabilized:
+    - `tests/e2e/parity-section-background.spec.ts`.
+  - Perf gate now uses percentile-based frame-jitter assertions (`p95`, `p99`) with outlier cap:
+    - `tests/e2e/performance-fluidity.spec.ts`.

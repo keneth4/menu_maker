@@ -71,7 +71,10 @@ const makeProject = (): MenuProject => ({
   }
 });
 
-const createHarness = (stateOverrides: Partial<EditorDraftState> = {}) => {
+const createHarness = (
+  stateOverrides: Partial<EditorDraftState> = {},
+  options: { isWizardShowcaseEligible?: (project: MenuProject | null) => boolean } = {}
+) => {
   let state: EditorDraftState = {
     draft: makeProject(),
     activeProject: null,
@@ -143,6 +146,7 @@ const createHarness = (stateOverrides: Partial<EditorDraftState> = {}) => {
       return item.allergens;
     },
     resolveTemplateId: (templateId) => templateId,
+    isWizardShowcaseEligible: options.isWizardShowcaseEligible ?? (() => true),
     buildWizardShowcaseProject,
     resetTemplateDemoCache,
     syncWizardShowcaseVisibility,
@@ -184,6 +188,54 @@ describe("editorDraftController", () => {
     expect(initCarouselIndices).toHaveBeenCalledTimes(1);
     expect(touchDraft).toHaveBeenCalled();
     expect(getState().wizardShowcaseProject).not.toBeNull();
+  });
+
+  it("applies project template without enabling wizard showcase preview", async () => {
+    const {
+      controller,
+      getState,
+      resetTemplateDemoCache,
+      syncWizardShowcaseVisibility,
+      buildWizardShowcaseProject
+    } = createHarness({
+      wizardDemoPreview: true,
+      wizardShowcaseProject: makeProject()
+    });
+
+    await controller.applyTemplate("jukebox", { source: "project" });
+
+    expect(getState().draft?.meta.template).toBe("jukebox");
+    expect(getState().wizardShowcaseProject).toBeNull();
+    expect(getState().wizardDemoPreview).toBe(false);
+    expect(resetTemplateDemoCache).not.toHaveBeenCalled();
+    expect(buildWizardShowcaseProject).not.toHaveBeenCalled();
+    expect(syncWizardShowcaseVisibility).not.toHaveBeenCalled();
+  });
+
+  it("keeps wizard showcase disabled when the draft is not showcase-eligible", async () => {
+    const {
+      controller,
+      getState,
+      resetTemplateDemoCache,
+      syncWizardShowcaseVisibility,
+      buildWizardShowcaseProject
+    } = createHarness(
+      {
+        wizardDemoPreview: true,
+        wizardShowcaseProject: makeProject()
+      },
+      {
+        isWizardShowcaseEligible: () => false
+      }
+    );
+
+    await controller.applyTemplate("jukebox", { source: "wizard" });
+
+    expect(getState().wizardShowcaseProject).toBeNull();
+    expect(getState().wizardDemoPreview).toBe(false);
+    expect(buildWizardShowcaseProject).not.toHaveBeenCalled();
+    expect(resetTemplateDemoCache).toHaveBeenCalledTimes(1);
+    expect(syncWizardShowcaseVisibility).toHaveBeenCalledTimes(1);
   });
 
   it("updates locale list and hydrates allergen labels for common entries", () => {

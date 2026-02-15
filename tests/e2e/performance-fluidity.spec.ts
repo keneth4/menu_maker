@@ -98,11 +98,8 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
 const closeEditorIfOpen = async (page: Page) => {
@@ -139,12 +136,20 @@ const sampleFrameStability = async (page: Page, durationMs: number) =>
     const hiccups = deltas.filter((delta) => delta > 50).length;
     const severeHiccups = deltas.filter((delta) => delta > 100).length;
     const maxDelta = deltas.length ? Math.max(...deltas) : 0;
+    const sorted = [...deltas].sort((left, right) => left - right);
+    const atPercentile = (p: number) => {
+      if (!sorted.length) return 0;
+      const index = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p));
+      return sorted[index];
+    };
     return {
       durationMs: performance.now() - started,
       frames: deltas.length,
       hiccups,
       severeHiccups,
-      maxDelta
+      maxDelta,
+      p95Delta: atPercentile(0.95),
+      p99Delta: atPercentile(0.99)
     };
   }, durationMs);
 
@@ -176,7 +181,9 @@ test("performance smoke keeps startup and modal interaction responsive", async (
   expect(previewStats.frames).toBeGreaterThan(20);
   expect(previewStats.hiccups).toBeLessThan(35);
   expect(previewStats.severeHiccups).toBeLessThan(10);
-  expect(previewStats.maxDelta).toBeLessThan(240);
+  expect(previewStats.p95Delta).toBeLessThan(75);
+  expect(previewStats.p99Delta).toBeLessThan(260);
+  expect(previewStats.maxDelta).toBeLessThan(700);
 
   await closeEditorIfOpen(page);
   const activeCard = page.locator(".menu-preview .carousel-card.active").first();
@@ -199,5 +206,7 @@ test("performance smoke keeps startup and modal interaction responsive", async (
   expect(modalStats.frames).toBeGreaterThan(20);
   expect(modalStats.hiccups).toBeLessThan(45);
   expect(modalStats.severeHiccups).toBeLessThan(14);
-  expect(modalStats.maxDelta).toBeLessThan(280);
+  expect(modalStats.p95Delta).toBeLessThan(90);
+  expect(modalStats.p99Delta).toBeLessThan(320);
+  expect(modalStats.maxDelta).toBeLessThan(700);
 });

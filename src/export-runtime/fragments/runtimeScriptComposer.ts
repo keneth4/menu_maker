@@ -1375,7 +1375,29 @@ const getTapHint = () => getInstructionCopy("tapHint");
 const getAssetDisclaimer = () => getInstructionCopy("assetDisclaimer");
 const getJukeboxHint = () => getInstructionCopy("jukeboxHint");
 const getFocusRowsHint = () => getInstructionCopy("focusRowsHint");
-const isJukeboxTemplate = () => (DATA.meta.template || "focus-rows") === "jukebox";
+const normalizeTemplateToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\\s]+/g, "-");
+const resolveTemplateId = (value) => {
+  const normalized = normalizeTemplateToken(value);
+  if (normalized === "jukebox" || normalized === "juke-box") return "jukebox";
+  if (
+    normalized === "focus-rows" ||
+    normalized === "focusrows" ||
+    normalized === "focus-row" ||
+    normalized === "in-focus-rows" ||
+    normalized === "bar-pub" ||
+    normalized === "cafe-brunch" ||
+    normalized === "street-food"
+  ) {
+    return "focus-rows";
+  }
+  return "focus-rows";
+};
+const activeTemplateId = resolveTemplateId(DATA.meta.template || "focus-rows");
+const isJukeboxTemplate = () => activeTemplateId === "jukebox";
 const STARTUP_BLOCKING_BACKGROUND_LIMIT = 1;
 const STARTUP_BLOCKING_ITEM_LIMIT = 3;
 const normalizeStartupSourceKey = (value) =>
@@ -1654,7 +1676,7 @@ const render = () => {
   const identityMode = DATA.meta.identityMode === "logo" ? "logo" : "text";
   const logoSrc = (DATA.meta.logoSrc || "").trim();
   const logoAlt = (restaurantName || menuTitle || "Restaurant").replace(/"/g, "&quot;");
-  const templateClass = "template-" + (DATA.meta.template || "focus-rows");
+  const templateClass = "template-" + activeTemplateId;
   const backgroundModeClass =
     backgroundDisplayMode === "section" ? "background-mode-section" : "background-mode-carousel";
   ensureFont();
@@ -1691,7 +1713,9 @@ const render = () => {
           </select>
         </div>
       </header>
-      \${isJukeboxTemplate() && DATA.categories.length > 1
+      \${isJukeboxTemplate() &&
+      DATA.categories.length > 1 &&
+      window.matchMedia("(min-width: 900px)").matches
         ? '<div class="section-nav">' +
           '<button class="section-nav__btn prev" type="button" data-section-dir="-1" aria-label="Previous section"><span aria-hidden="true">‹</span></button>' +
           '<span class="section-nav__label">' + getJukeboxHint() + "</span>" +
@@ -2344,10 +2368,6 @@ const bindSectionFocus = () => {
     if (scroll.scrollWidth <= scroll.clientWidth + 4) return;
     let snapTimeout;
     const onScroll = () => {
-      const closestIndex = getClosestHorizontalSectionIndex(scroll);
-      if (closestIndex >= 0) {
-        syncBackgroundForSectionIndex(closestIndex);
-      }
       if (snapTimeout) window.clearTimeout(snapTimeout);
       snapTimeout = window.setTimeout(() => {
         const snapIndex = getClosestHorizontalSectionIndex(scroll);

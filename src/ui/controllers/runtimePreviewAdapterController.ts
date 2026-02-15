@@ -15,6 +15,7 @@ type RuntimePreviewAdapterDeps = {
   tick: () => Promise<void>;
   queryMenuScroll: () => HTMLElement | null;
   getActiveTemplateCapabilities: () => RuntimePreviewCapabilities;
+  getDeviceMode: () => "mobile" | "desktop";
   getActiveProject: () => MenuProject | null;
   getCarouselActive: () => Record<string, number>;
   setCarouselActive: (next: Record<string, number>) => void;
@@ -40,7 +41,12 @@ export type RuntimePreviewAdapterController = {
 export const createRuntimePreviewAdapterController = (
   deps: RuntimePreviewAdapterDeps
 ): RuntimePreviewAdapterController => {
+  const JUKEBOX_HORIZONTAL_WHEEL_HYSTERESIS_PX = 4;
+  const JUKEBOX_SECTION_WHEEL_COOLDOWN_MS = 240;
+  let sectionWheelLockUntilByCategory: Record<string, number> = {};
+
   const clearCarouselWheelState = () => {
+    sectionWheelLockUntilByCategory = {};
     deps.carouselController.clear();
   };
 
@@ -83,7 +89,11 @@ export const createRuntimePreviewAdapterController = (
       container,
       axis: capabilities.sectionSnapAxis,
       snapDelayMs: capabilities.sectionSnapDelayMs,
-      syncBackground: deps.previewNavigationController.syncSectionBackgroundByIndex
+      syncBackground: deps.previewNavigationController.syncSectionBackgroundByIndex,
+      resolveHorizontalIndex:
+        capabilities.sectionSnapAxis === "horizontal"
+          ? deps.previewNavigationController.resolveHorizontalSectionIndex
+          : undefined
     });
   };
 
@@ -96,6 +106,24 @@ export const createRuntimePreviewAdapterController = (
   };
 
   const handleCarouselWheel = (categoryId: string, event: WheelEvent) => {
+    const capabilities = deps.getActiveTemplateCapabilities();
+    const isDesktop = deps.getDeviceMode() === "desktop";
+    const horizontalSectionMode = capabilities.sectionSnapAxis === "horizontal";
+    if (isDesktop && horizontalSectionMode) {
+      const absX = Math.abs(event.deltaX);
+      const absY = Math.abs(event.deltaY);
+      if (absX <= 1 && absY <= 1) return;
+      const horizontalIntent = absX >= absY + JUKEBOX_HORIZONTAL_WHEEL_HYSTERESIS_PX;
+      event.preventDefault();
+      if (horizontalIntent) {
+        const now = Date.now();
+        const lockUntil = sectionWheelLockUntilByCategory[categoryId] ?? 0;
+        if (now < lockUntil) return;
+        deps.previewNavigationController.shiftSection(event.deltaX > 0 ? 1 : -1);
+        sectionWheelLockUntilByCategory[categoryId] = now + JUKEBOX_SECTION_WHEEL_COOLDOWN_MS;
+        return;
+      }
+    }
     deps.carouselController.handleWheel(categoryId, event);
   };
 

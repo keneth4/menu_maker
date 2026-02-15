@@ -6,12 +6,23 @@
   export let actions: PreviewCanvasActions;
 
   let locale = "es";
+  let observedModelLocale = "";
+  let pendingLocaleCommit = "";
 
-  $: if (model.locale !== locale) {
-    locale = model.locale;
+  $: {
+    if (model.locale !== observedModelLocale) {
+      observedModelLocale = model.locale;
+      if (!pendingLocaleCommit || model.locale === pendingLocaleCommit) {
+        locale = model.locale;
+      }
+      if (pendingLocaleCommit && model.locale === pendingLocaleCommit) {
+        pendingLocaleCommit = "";
+      }
+    }
   }
 
-  $: if (locale !== model.locale) {
+  $: if (locale !== observedModelLocale && pendingLocaleCommit !== locale) {
+    pendingLocaleCommit = locale;
     actions.setLocale(locale);
   }
 </script>

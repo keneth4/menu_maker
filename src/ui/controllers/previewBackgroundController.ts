@@ -25,6 +25,7 @@ export type PreviewBackgroundController = {
   normalizeBackgroundCarouselSeconds: (value: unknown) => number;
   isSectionBackgroundMode: (project: MenuProject | null) => boolean;
   getBackgroundRotationIntervalMs: (project: MenuProject | null) => number;
+  syncForProjectChange: () => void;
   syncRotation: () => void;
   syncSectionModeActiveIndex: () => void;
   syncLoadedBackgroundIndexes: () => void;
@@ -92,9 +93,15 @@ export const createPreviewBackgroundController = (
   };
 
   const syncLoadedBackgroundIndexes = () => {
+    const project = deps.getActiveProject();
+    const sectionMode = isSectionBackgroundMode(project);
     const previewBackgrounds = deps.getPreviewBackgrounds();
     const count = previewBackgrounds.length;
-    const activeBackgroundIndex = deps.getActiveBackgroundIndex();
+    let activeBackgroundIndex = deps.getActiveBackgroundIndex();
+    if (count > 0 && (activeBackgroundIndex < 0 || activeBackgroundIndex >= count)) {
+      activeBackgroundIndex = sectionMode ? -1 : 0;
+      deps.setActiveBackgroundIndex(activeBackgroundIndex);
+    }
     const loadedPreviewBackgroundIndexes = deps.getLoadedBackgroundIndexes();
     const nextIndexes: number[] = [];
     if (count > 0 && activeBackgroundIndex >= 0) {
@@ -118,6 +125,32 @@ export const createPreviewBackgroundController = (
     }
   };
 
+  const syncForProjectChange = () => {
+    const project = deps.getActiveProject();
+    const sectionMode = isSectionBackgroundMode(project);
+    const count = deps.getPreviewBackgrounds().length;
+    if (count === 0) {
+      deps.rotationController.clear();
+      if (deps.getActiveBackgroundIndex() !== -1) {
+        deps.setActiveBackgroundIndex(-1);
+      }
+      if (deps.getLoadedBackgroundIndexes().length > 0) {
+        deps.setLoadedBackgroundIndexes([]);
+      }
+      return;
+    }
+
+    if (sectionMode) {
+      syncSectionModeActiveIndex();
+    }
+    if (!sectionMode && (deps.getActiveBackgroundIndex() < 0 || deps.getActiveBackgroundIndex() >= count)) {
+      deps.setActiveBackgroundIndex(0);
+    }
+    syncLoadedBackgroundIndexes();
+    syncRotation();
+    syncLoadedBackgroundIndexes();
+  };
+
   const destroy = () => {
     deps.rotationController.clear();
   };
@@ -126,6 +159,7 @@ export const createPreviewBackgroundController = (
     normalizeBackgroundCarouselSeconds,
     isSectionBackgroundMode,
     getBackgroundRotationIntervalMs,
+    syncForProjectChange,
     syncRotation,
     syncSectionModeActiveIndex,
     syncLoadedBackgroundIndexes,
