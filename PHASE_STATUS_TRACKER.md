@@ -23,7 +23,12 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
 | 6 | Validation + docs sync | DONE | Validation gates + docs/tracker sync completed for current architecture decisions. |
-| 9 | App runtime redistribution redesign | DONE | Runtime shell split is complete (`AppRuntimeScreen.svelte`: 8 lines, `AppRuntimeScreenContent.svelte`: 898 lines), regression fixes landed, and build/unit/e2e/perf gates are green on container-first path. |
+| 9 | App runtime redistribution redesign | DONE | Runtime shell split is complete (`AppRuntimeScreen.svelte`: 8 lines, `AppRuntimeScreenContent.svelte`: 897 lines), regression fixes landed, and build/unit/e2e/perf gates are green on container-first path. |
+
+## Documentation references
+- English architecture + state docs: `docs/en/INDEX.md`
+- Documentacion de arquitectura + estado (ES): `docs/es/INDICE.md`
+- Mermaid sources: `docs/diagrams/`
 
 ## Phase 0 checklist
 - [x] Create a phase tracker with status board.
@@ -613,3 +618,16 @@ Tracking checklist:
     - `npm run test:e2e`: PASS (container-first path; local fallback not needed when container green)
     - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container`: PASS (`36 passed`, `3 skipped`)
     - `npm run test:perf`: PASS (container-first perf spec)
+- Documentation expansion pass (bilingual architecture + diagram-driven references):
+  - Added complete bilingual doc sets under:
+    - `docs/en/*`
+    - `docs/es/*`
+  - Added shared Mermaid source set under:
+    - `docs/diagrams/*`
+  - Added snapshot + delta documentation for current working branch context and validated gate baseline:
+    - `docs/en/08-current-state-snapshot-and-delta.md`
+    - `docs/es/08-estado-actual-snapshot-y-delta.md`
+  - Root navigation/docs integration updated:
+    - `README.md`
+    - `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
+    - `PHASE_STATUS_TRACKER.md`

@@ -1,0 +1,15 @@
+flowchart LR
+  Start["Developer Change"] --> Build["npm run build"]
+  Build --> Unit["npm test (Vitest)"]
+  Unit --> E2EWrapper["npm run test:e2e"]
+
+  E2EWrapper --> ContainerTry["container-smoke.sh (container-first)"]
+  ContainerTry -->|pass| E2EPass["E2E Gate PASS"]
+  ContainerTry -->|fail| LocalFallback["playwright local fallback"]
+  LocalFallback --> E2EPass
+
+  E2EPass --> PerfWrapper["npm run test:perf"]
+  PerfWrapper --> ContainerPerf["container-first perf grep"]
+  ContainerPerf -->|pass| Done["Gate PASS"]
+  ContainerPerf -->|fail| LocalPerf["local perf fallback"]
+  LocalPerf --> Done

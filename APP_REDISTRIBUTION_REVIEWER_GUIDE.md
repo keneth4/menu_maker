@@ -2,6 +2,11 @@
 
 This guide maps former `src/App.svelte` hotspot responsibilities to their new homes after the redistribution redesign.
 
+## Documentation map
+- English architecture set: `docs/en/INDEX.md`
+- Spanish architecture set: `docs/es/INDICE.md`
+- Shared diagram sources: `docs/diagrams/`
+
 ## Entry Shell
 - `src/App.svelte`
   - now only mounts/destroys `createAppController()` and renders `AppRuntime`.
@@ -109,7 +114,7 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
   - `npm run test:e2e:container` runs full containerized e2e.
   - `npm run test:perf:container` runs containerized `performance-fluidity` spec.
 - Runtime size closeout:
-  - `src/ui/components/AppRuntimeScreenContent.svelte` is now `898` lines (within `<= 900` architecture cap).
+  - `src/ui/components/AppRuntimeScreenContent.svelte` is now `897` lines (within `<= 900` architecture cap).
 - Phase 9.4 coherence updates shipped:
   - Project-tab template changes now flow through controller action wiring (`setTemplate -> applyTemplate(..., { source: "project" })`) via:
     - `src/ui/components/ProjectInfoPanel.svelte`

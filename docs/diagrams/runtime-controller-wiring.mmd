@@ -1,0 +1,24 @@
+flowchart TB
+  App["App.svelte"] --> Runtime["AppRuntime.svelte"]
+  Runtime --> Screen["AppRuntimeScreen.svelte"]
+  Screen --> Content["AppRuntimeScreenContent.svelte"]
+
+  Content --> Wiring["runtimeWiringController"]
+  Wiring --> Bindings["runtimeBindingsController"]
+  Wiring --> Bootstrap["runtimeBootstrapController"]
+
+  Bindings --> StateBridge["runtimeStateBridgeController"]
+  Bindings --> ProjectWorkflow["projectWorkflowController"]
+  Bindings --> EditorDraft["editorDraftController"]
+  Bindings --> AssetWorkspace["assetWorkspaceController"]
+  Bindings --> PreviewStartup["previewStartupController"]
+  Bindings --> WorkflowStatus["workflowStatusController"]
+
+  Content --> PreviewAdapter["runtimePreviewAdapterController"]
+  PreviewAdapter --> PreviewNav["previewNavigationController"]
+  PreviewAdapter --> PreviewCtrl["previewController"]
+  PreviewAdapter --> CarouselCtrl["carouselController"]
+
+  Content --> ModalSurface["runtimeModalSurfaceController"]
+  ModalSurface --> ModalCtrl["modalController"]
+  ModalSurface --> Interactive["interactiveMediaController"]

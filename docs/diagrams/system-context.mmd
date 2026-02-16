@@ -1,0 +1,13 @@
+flowchart LR
+  User["User / Editor"] --> UI["Svelte UI Runtime"]
+  UI --> Bridge["Bridge API (/api/assets/*)"]
+  UI --> FS["Browser FS Access API"]
+  UI --> Export["Static Export Packager"]
+  Bridge --> ProjectStore["public/projects/<slug>"]
+  FS --> ProjectStore
+  Export --> Zip["Export ZIP (index.html, app.js, menu.json, assets)"]
+  Export --> Reports["asset-manifest.json + export-report.json"]
+  CI["Container Gates"] --> E2E["Playwright E2E"]
+  CI --> Perf["Performance Spec"]
+  E2E --> UI
+  Perf --> UI

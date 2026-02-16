@@ -6,6 +6,12 @@ MenuMaker is a Svelte + Vite application for building and previewing interactive
 
 This document is the current short technical and product documentation for the app behavior as implemented today.
 
+## Documentation Hub (Bilingual + Diagram Sources)
+
+- English architecture and current-state docs: `docs/en/INDEX.md`
+- Documentacion en espanol: `docs/es/INDICE.md`
+- Shared Mermaid sources (single source of truth): `docs/diagrams/`
+
 ## 1) Product Goal
 
 MenuMaker helps a restaurant or creator:
@@ -216,7 +222,7 @@ Export rules:
 - `src/App.svelte` is now a thin composition shell (controller mount + `AppRuntime` composition only).
 - `src/ui/components/AppRuntime.svelte` is now a thin runtime wrapper.
 - `src/ui/components/AppRuntimeScreen.svelte` is now a thin composition shell.
-- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreenContent.svelte` (`892` lines, within current closeout budget), with redistribution implemented across:
+- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreenContent.svelte` (`897` lines, within current closeout budget), with redistribution implemented across:
   - `src/application/*` workflows,
   - `src/ui/controllers/*`,
   - `src/ui/stores/*`,
