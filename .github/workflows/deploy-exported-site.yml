@@ -1,0 +1,53 @@
+name: Deploy Exported Site
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_path:
+        description: "Path to extracted export folder (must contain index.html)"
+        required: true
+        default: "exported-sites/current"
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate site folder
+        run: |
+          SITE_PATH="${{ github.event.inputs.site_path }}"
+          if [ ! -d "$SITE_PATH" ]; then
+            echo "Site path does not exist: $SITE_PATH" >&2
+            exit 1
+          fi
+          if [ ! -f "$SITE_PATH/index.html" ]; then
+            echo "Site path must contain index.html: $SITE_PATH/index.html" >&2
+            exit 1
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ github.event.inputs.site_path }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

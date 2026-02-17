@@ -215,6 +215,21 @@ Export rules:
 - export diagnostics include deterministic manifest + budget report data,
 - output expects serving over local HTTP (not direct `file://` open).
 
+### Deploy an exported site to GitHub Pages
+This repository includes `.github/workflows/deploy-exported-site.yml` to publish a chosen exported site folder.
+
+1. Export from the app (`Export site`) to get `<slug>-export.zip`.
+2. Extract that zip into a tracked repo folder, for example:
+   - `exported-sites/client-demo-1/`
+3. Commit and push the extracted files to your GitHub repository.
+4. In GitHub, open `Actions` -> `Deploy Exported Site` -> `Run workflow`.
+5. Set `site_path` to the folder you extracted (example: `exported-sites/client-demo-1`) and run it.
+6. Share the Pages URL produced by the workflow (also visible under repo `Settings` -> `Pages`).
+
+Notes:
+- Exported shell files are relative (`index.html`, `styles.css`, `app.js`, `menu.json`), so this works on project Pages URLs.
+- Keep only the client-ready exported files in the selected folder (no project-source zip needed there).
+
 ## 8) Import Rules and Constraints
 
 - `.zip` import requires a `menu.json` entry.
