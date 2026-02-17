@@ -219,7 +219,7 @@ Export rules:
 This repository includes `.github/workflows/deploy-exported-site.yml` to publish all client demos from `exported-sites/` into `keneth4/keneth4.github.io` (your user site repo).
 
 One-time setup:
-1. In `keneth4/keneth4.github.io`, set GitHub Pages source to `Deploy from a branch`, branch `main`, folder `/ (root)`.
+1. In `keneth4/keneth4.github.io`, set GitHub Pages source to `Deploy from a branch`, your default branch (`main` or `master`), folder `/ (root)`.
 2. Create a Personal Access Token with write access to `keneth4/keneth4.github.io`.
 3. Add that token as repository secret `PAGES_DEPLOY_TOKEN` in this source repo (`menu_maker`).
 

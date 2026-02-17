@@ -22,7 +22,6 @@ jobs:
     env:
       SOURCE_DIR: exported-sites
       TARGET_REPO: keneth4/keneth4.github.io
-      TARGET_BRANCH: main
     steps:
       - name: Checkout source repo
         uses: actions/checkout@v4
@@ -88,9 +87,14 @@ jobs:
           fi
 
           TARGET_DIR="${RUNNER_TEMP}/user-site"
-          git clone --depth 1 --branch "${TARGET_BRANCH}" \
-            "https://x-access-token:${PAGES_DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" \
-            "${TARGET_DIR}"
+          REMOTE_URL="https://x-access-token:${PAGES_DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git"
+          git clone --depth 1 "${REMOTE_URL}" "${TARGET_DIR}"
+
+          TARGET_BRANCH="$(git -C "${TARGET_DIR}" branch --show-current)"
+          if [ -z "${TARGET_BRANCH}" ]; then
+            TARGET_BRANCH="$(git -C "${TARGET_DIR}" symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@')"
+          fi
+          echo "Publishing to ${TARGET_REPO}@${TARGET_BRANCH}"
 
           rsync -av --delete \
             --exclude ".git/" \
@@ -109,4 +113,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Publish demos from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-          git push origin "${TARGET_BRANCH}"
+          git push origin "HEAD:${TARGET_BRANCH}"
