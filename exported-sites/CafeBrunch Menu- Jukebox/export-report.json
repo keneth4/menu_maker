@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "slug": "cafebrunch-menu",
+  "generatedAt": "2026-02-17T06:47:02.863Z",
+  "totals": {
+    "files": 36,
+    "assetFiles": 28,
+    "shellFiles": 8,
+    "totalBytes": 156670461,
+    "assetBytes": 156473784,
+    "shellBytes": 196677,
+    "firstViewAssetFiles": 4,
+    "firstViewImageBytes": 10573697,
+    "missingAssets": 0
+  },
+  "responsiveCoverage": {
+    "heroSources": 12,
+    "heroWithResponsiveVariants": 0,
+    "ratio": 0
+  },
+  "references": {
+    "referencedAssets": 28,
+    "unresolvedAssets": 0
+  },
+  "budgets": {
+    "passed": false,
+    "checks": [
+      {
+        "key": "jsGzipBytes",
+        "label": "Export JS (gzip)",
+        "threshold": 97280,
+        "actual": 28164,
+        "status": "pass"
+      },
+      {
+        "key": "cssGzipBytes",
+        "label": "Export CSS (gzip)",
+        "threshold": 12288,
+        "actual": 7515,
+        "status": "pass"
+      },
+      {
+        "key": "firstViewImageBytes",
+        "label": "First-view images",
+        "threshold": 1258291,
+        "actual": 10573697,
+        "status": "fail"
+      }
+    ]
+  },
+  "missingAssets": []
+}

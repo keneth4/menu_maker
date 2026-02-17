@@ -1,0 +1,891 @@
+{
+  "meta": {
+    "slug": "cafebrunch-menu",
+    "name": "CafeBrunch Menu",
+    "restaurantName": {
+      "es": "Cafe Aurora",
+      "en": "Cafe Aurora"
+    },
+    "title": {
+      "es": "Menu Brunch de la Casa",
+      "en": "House Brunch Menu"
+    },
+    "fontFamily": "Cinzel",
+    "fontSource": "",
+    "template": "jukebox",
+    "locales": [
+      "es",
+      "en",
+      "de"
+    ],
+    "defaultLocale": "en",
+    "currency": "MXN",
+    "currencyPosition": "left",
+    "identityMode": "text",
+    "logoSrc": "",
+    "backgroundCarouselSeconds": 9,
+    "backgroundDisplayMode": "section",
+    "scrollSensitivity": {
+      "item": 4,
+      "section": 4
+    }
+  },
+  "backgrounds": [
+    {
+      "id": "bg-1770216523927",
+      "label": "Cafe",
+      "src": "assets/derived/backgrounds/backery-outside-2014d5-md.gif",
+      "type": "image",
+      "originalSrc": "assets/originals/backgrounds/coffe-drops-544ca0.gif",
+      "derived": {
+        "profileId": "ffmpeg-v8-background-2of3-animated-gif",
+        "medium": {
+          "gif": "assets/derived/backgrounds/backery-outside-2014d5-md.gif"
+        },
+        "large": {
+          "gif": "assets/derived/backgrounds/backery-outside-2014d5-md.gif"
+        }
+      }
+    },
+    {
+      "id": "bg-1770216805499",
+      "label": "drops",
+      "src": "assets/derived/backgrounds/coffe-drops-544ca0-md.gif",
+      "type": "image",
+      "originalSrc": "assets/originals/backgrounds/backery-outside-2014d5.gif",
+      "derived": {
+        "profileId": "ffmpeg-v8-background-2of3-animated-gif",
+        "medium": {
+          "gif": "assets/derived/backgrounds/coffe-drops-544ca0-md.gif"
+        },
+        "large": {
+          "gif": "assets/derived/backgrounds/coffe-drops-544ca0-md.gif"
+        }
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": "section-pnqps1",
+      "name": {
+        "es": "Pastelería",
+        "en": "Pastries"
+      },
+      "items": [
+        {
+          "id": "dish-1770216523928-87jyg",
+          "name": {
+            "es": "Muffin de Pistache",
+            "en": "Pistachio Muffin"
+          },
+          "description": {
+            "es": "Muffin suave de vainilla con centro cremoso de pistache tostado.",
+            "en": "Soft vanilla muffin with a creamy roasted pistachio center."
+          },
+          "longDescription": {
+            "es": "El pistache se cultiva desde hace milenios y en el Mediterráneo inspiró una gran tradición repostera; esta versión celebra su perfil tostado y aromático.",
+            "en": "Pistachios have been cultivated for millennia and inspired a rich Mediterranean pastry tradition; this version highlights their toasted, aromatic profile."
+          },
+          "price": {
+            "amount": 35,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            },
+            {
+              "id": "nuts",
+              "label": {
+                "es": "Frutos secos",
+                "en": "Nuts",
+                "de": "Schalenfrüchte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/sample360food-32d517-md.gif",
+            "originalHero360": "assets/originals/items/sample360food-32d517.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/sample360food-32d517-md.gif",
+              "medium": "assets/derived/items/sample360food-32d517-md.gif",
+              "large": "assets/derived/items/sample360food-32d517-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/sample360food-32d517-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/sample360food-32d517-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770217436244",
+          "name": {
+            "es": "Galleta Blanco y Negro",
+            "en": "Black-and-White Cookie"
+          },
+          "description": {
+            "es": "Galleta tipo pastel, suave y densa, con glaseado de vainilla y chocolate.",
+            "en": "Soft, cake-like cookie finished with vanilla and chocolate icing."
+          },
+          "longDescription": {
+            "es": "Este clásico neoyorquino se volvió popular a inicios del siglo XX y sigue siendo un símbolo de cafetería urbana.",
+            "en": "This New York classic rose to popularity in the early 20th century and remains an urban bakery icon."
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/b-w-cookies-45dbd5-md.gif",
+            "originalHero360": "assets/originals/items/b-w-cookies-45dbd5.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/b-w-cookies-45dbd5-md.gif",
+              "medium": "assets/derived/items/b-w-cookies-45dbd5-md.gif",
+              "large": "assets/derived/items/b-w-cookies-45dbd5-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/b-w-cookies-45dbd5-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/b-w-cookies-45dbd5-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770217647423",
+          "name": {
+            "es": "Dona de Frutos Rojos",
+            "en": "Berry Glazed Donut"
+          },
+          "description": {
+            "es": "Dona esponjosa con relleno de frutos rojos y glaseado brillante de mora.",
+            "en": "Fluffy donut filled with mixed berries and finished with a glossy blackberry glaze."
+          },
+          "longDescription": {
+            "es": "Inspirada en la tradición de masas fritas que viajó de Europa a América, combina un interior ligero con un final frutal intenso.",
+            "en": "Inspired by the fried-dough tradition that traveled from Europe to the Americas, it pairs a light crumb with a bold berry finish."
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/all-berry-donut-a85640-md.gif",
+            "originalHero360": "assets/originals/items/all-berry-donut-a85640.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/all-berry-donut-a85640-md.gif",
+              "medium": "assets/derived/items/all-berry-donut-a85640-md.gif",
+              "large": "assets/derived/items/all-berry-donut-a85640-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/all-berry-donut-a85640-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/all-berry-donut-a85640-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770218071272",
+          "name": {
+            "es": "Hotcakes de Arándano",
+            "en": "Blueberry Pancakes"
+          },
+          "description": {
+            "es": "Hotcakes esponjosos con compota de arándano azul y mantequilla batida.",
+            "en": "Fluffy pancakes topped with blueberry compote and whipped butter."
+          },
+          "longDescription": {
+            "es": "Los hotcakes tienen raíces antiguas: en Grecia ya se preparaban versiones de sartén con harina y miel; hoy los servimos en clave brunch.",
+            "en": "Pancakes have ancient roots: Greek cooks were already making griddled versions with flour and honey; this is our brunch take."
+          },
+          "price": {
+            "amount": 55,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif",
+            "originalHero360": "assets/originals/items/blue-berry-pancakes-6028f0.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif",
+              "medium": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif",
+              "large": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770218671234",
+          "name": {
+            "es": "Pay de Caramelo",
+            "en": "Salted Caramel Pie"
+          },
+          "description": {
+            "es": "Pay de mantequilla con relleno de caramelo y crema ligeramente salada.",
+            "en": "Buttery pie with a silky caramel filling and a lightly salted cream finish."
+          },
+          "longDescription": {
+            "es": "Retoma la estructura clásica de un pie horneado y la lleva a un perfil dulce-salado para equilibrar cada bocado.",
+            "en": "It keeps the classic baked pie structure and leans into a sweet-salty profile for balance in every bite."
+          },
+          "price": {
+            "amount": 45,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/caramel-pie-6e6f4b-md.gif",
+            "originalHero360": "assets/originals/items/caramel-pie-6e6f4b.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/caramel-pie-6e6f4b-md.gif",
+              "medium": "assets/derived/items/caramel-pie-6e6f4b-md.gif",
+              "large": "assets/derived/items/caramel-pie-6e6f4b-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/caramel-pie-6e6f4b-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/caramel-pie-6e6f4b-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770219007092",
+          "name": {
+            "es": "Cheesecake de Moras (Entero)",
+            "en": "Whole Mixed-Berry Cheesecake"
+          },
+          "description": {
+            "es": "Cheesecake completo de textura cremosa, con coulis de moras y base crujiente.",
+            "en": "Whole creamy cheesecake with mixed-berry coulis and a crisp crust."
+          },
+          "longDescription": {
+            "es": "El cheesecake nace en la Antigüedad griega y evolucionó hasta estilos modernos como el neoyorquino; esta versión privilegia cremosidad y fruta.",
+            "en": "Cheesecake traces back to ancient Greece and later evolved into modern styles like New York’s; this version focuses on creaminess and fruit."
+          },
+          "price": {
+            "amount": 350,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/full-cheescake-3d5f52-md.gif",
+            "originalHero360": "assets/originals/items/full-cheescake-3d5f52.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/full-cheescake-3d5f52-md.gif",
+              "medium": "assets/derived/items/full-cheescake-3d5f52-md.gif",
+              "large": "assets/derived/items/full-cheescake-3d5f52-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/full-cheescake-3d5f52-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/full-cheescake-3d5f52-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770219339360",
+          "name": {
+            "es": "Cheesecake de Frambuesa",
+            "en": "Raspberry Cheesecake"
+          },
+          "description": {
+            "es": "Rebanada de cheesecake con frambuesa, base de galleta y acabado de crema ligera.",
+            "en": "Cheesecake slice with raspberry, cookie crust, and a light cream finish."
+          },
+          "longDescription": {
+            "es": "Un clásico de cafetería contemporánea: queso crema, fruta ácida y una base crujiente para dar contraste.",
+            "en": "A contemporary coffee-shop classic: cream cheese, tart fruit, and a crisp crust for contrast."
+          },
+          "price": {
+            "amount": 35,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif",
+            "originalHero360": "assets/originals/items/raspberry-cheesecake-pie-55d70e.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif",
+              "medium": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif",
+              "large": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770219635727",
+          "name": {
+            "es": "Sándwich de Helado Napolitano",
+            "en": "Neapolitan Ice Cream Sandwich"
+          },
+          "description": {
+            "es": "Helado napolitano entre galletas de chocolate suave, servido bien frío.",
+            "en": "Neapolitan ice cream between soft chocolate cookies, served extra cold."
+          },
+          "longDescription": {
+            "es": "Los sándwiches de helado se popularizaron en Nueva York a finales del siglo XIX; esta versión retoma ese formato con sabor clásico.",
+            "en": "Ice cream sandwiches became popular in New York in the late 19th century; this version keeps that classic format and flavor."
+          },
+          "price": {
+            "amount": 30,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            },
+            {
+              "id": "dairy",
+              "label": {
+                "es": "Lácteos",
+                "en": "Dairy",
+                "de": "Milchprodukte"
+              }
+            }
+          ],
+          "vegan": true,
+          "media": {
+            "hero360": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp",
+            "originalHero360": "assets/originals/items/ice-cream-sandwich-5545c1.webp",
+            "rotationDirection": "ccw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp",
+              "medium": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp",
+              "large": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v11-item-2of3-animated-webp-detail-original",
+              "medium": {
+                "webp": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp"
+              },
+              "large": {
+                "webp": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp"
+              }
+            }
+          },
+          "priceVisible": true
+        }
+      ],
+      "backgroundId": "bg-1770216523927"
+    },
+    {
+      "id": "section-izp9v9",
+      "name": {
+        "es": "Brunch",
+        "en": "Brunch"
+      },
+      "items": [
+        {
+          "id": "dish-1770216523929-l8vq2",
+          "name": {
+            "es": "Sándwich de Tocino y Jamón",
+            "en": "Bacon & Ham Sandwich"
+          },
+          "description": {
+            "es": "Pan tostado con jamón, tocino crujiente, jitomate y aderezo cremoso.",
+            "en": "Toasted bread with ham, crispy bacon, tomato, and a creamy dressing."
+          },
+          "longDescription": {
+            "es": "De inspiración deli, prioriza contraste de texturas entre pan dorado, proteína ahumada y frescura vegetal.",
+            "en": "Deli-inspired and texture-driven: toasted bread, smoky protein, and fresh vegetables in balance."
+          },
+          "price": {
+            "amount": 40,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/sandwich-bacon-3730bb-md.gif",
+            "originalHero360": "assets/originals/items/sandwich-bacon-3730bb.gif",
+            "rotationDirection": "ccw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/sandwich-bacon-3730bb-md.gif",
+              "medium": "assets/derived/items/sandwich-bacon-3730bb-md.gif",
+              "large": "assets/derived/items/sandwich-bacon-3730bb-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/sandwich-bacon-3730bb-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/sandwich-bacon-3730bb-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770220621189",
+          "name": {
+            "es": "Sándwich de Pollo Jerk",
+            "en": "Jerk Chicken Sandwich"
+          },
+          "description": {
+            "es": "Pechuga de pollo marinada con especias jerk, lechuga fresca y mayonesa de la casa.",
+            "en": "Chicken breast marinated in jerk spices with crisp lettuce and house mayo."
+          },
+          "longDescription": {
+            "es": "El estilo jerk nació en Jamaica con técnicas indígenas y maroon; su sello es el picor aromático del allspice y el chile.",
+            "en": "Jerk cooking was born in Jamaica from Indigenous and Maroon techniques, known for the aromatic heat of allspice and chile."
+          },
+          "price": {
+            "amount": 55,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp",
+            "originalHero360": "assets/originals/items/jerk-chicken-sandwich-62875b.webp",
+            "rotationDirection": "ccw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp",
+              "medium": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp",
+              "large": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v11-item-2of3-animated-webp-detail-original",
+              "medium": {
+                "webp": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp"
+              },
+              "large": {
+                "webp": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770220835963",
+          "name": {
+            "es": "Sándwich de Pollo Empanizado",
+            "en": "Crispy Breaded Chicken Sandwich"
+          },
+          "description": {
+            "es": "Filete de pollo empanizado y crujiente, con lechuga, jitomate y mayonesa.",
+            "en": "Crispy breaded chicken fillet with lettuce, tomato, and mayo."
+          },
+          "longDescription": {
+            "es": "Basado en la tradición de la milanesa y el pan crujiente, busca un bocado jugoso por dentro y dorado por fuera.",
+            "en": "Built on the tradition of breaded cutlets and crusty bread, aiming for juicy inside and golden crunch outside."
+          },
+          "price": {
+            "amount": 50,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            },
+            {
+              "id": "egg",
+              "label": {
+                "es": "Huevo",
+                "en": "Egg",
+                "de": "Ei"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif",
+            "originalHero360": "assets/originals/items/sandwich-filete-de-pollo-empanizado-41fbf2.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif",
+              "medium": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif",
+              "large": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        },
+        {
+          "id": "dish-1770221040005",
+          "name": {
+            "es": "Torta de Jamón de Pavo",
+            "en": "Turkey Ham Torta"
+          },
+          "description": {
+            "es": "Bolillo crujiente con jamón de pavo, aguacate, jitomate y frijoles refritos.",
+            "en": "Crisp bolillo roll with turkey ham, avocado, tomato, and refried beans."
+          },
+          "longDescription": {
+            "es": "La torta mexicana se apoya en el bolillo, pan introducido en la CDMX del siglo XIX con influencia francesa; hoy es emblema callejero.",
+            "en": "The Mexican torta relies on bolillo bread, introduced in 19th-century Mexico City with French influence; today it is a street-food staple."
+          },
+          "price": {
+            "amount": 50,
+            "currency": "MXN"
+          },
+          "allergens": [
+            {
+              "id": "gluten",
+              "label": {
+                "es": "Gluten",
+                "en": "Gluten",
+                "de": "Gluten"
+              }
+            }
+          ],
+          "vegan": false,
+          "media": {
+            "hero360": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif",
+            "originalHero360": "assets/originals/items/torta-de-jamon-de-pavo-275306.gif",
+            "rotationDirection": "cw",
+            "gallery": [],
+            "scrollAnimationMode": "hero360",
+            "scrollAnimationSrc": "",
+            "responsive": {
+              "small": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif",
+              "medium": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif",
+              "large": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif"
+            },
+            "derived": {
+              "profileId": "ffmpeg-v12-item-2of3-animated-gif-detail-original",
+              "medium": {
+                "gif": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif"
+              },
+              "large": {
+                "gif": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif"
+              }
+            }
+          },
+          "priceVisible": true
+        }
+      ],
+      "backgroundId": "bg-1770216805499"
+    }
+  ],
+  "sound": {
+    "enabled": false,
+    "theme": "bar-amber",
+    "volume": 0.6,
+    "map": {}
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 1,
+  "slug": "cafebrunch-menu",
+  "generatedAt": "2026-02-17T06:47:02.863Z",
+  "assets": [
+    {
+      "outputPath": "app.js",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "application/javascript",
+      "bytes": 120028,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/backgrounds/backery-outside-2014d5-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/backgrounds/backery-outside-2014d5-md.gif",
+      "role": "background",
+      "mime": "image/gif",
+      "bytes": 226874,
+      "responsiveVariant": null,
+      "firstView": true
+    },
+    {
+      "outputPath": "assets/derived/backgrounds/coffe-drops-544ca0-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/backgrounds/coffe-drops-544ca0-md.gif",
+      "role": "background",
+      "mime": "image/gif",
+      "bytes": 360397,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/all-berry-donut-a85640-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/all-berry-donut-a85640-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 3717827,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/b-w-cookies-45dbd5-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/b-w-cookies-45dbd5-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 4256527,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/blue-berry-pancakes-6028f0-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/blue-berry-pancakes-6028f0-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 3632126,
+      "responsiveVariant": null,
+      "firstView": true
+    },
+    {
+      "outputPath": "assets/derived/items/caramel-pie-6e6f4b-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/caramel-pie-6e6f4b-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 5947130,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/full-cheescake-3d5f52-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/full-cheescake-3d5f52-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 5007166,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/ice-cream-sandwich-5545c1-md.webp",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/ice-cream-sandwich-5545c1-md.webp",
+      "role": "hero",
+      "mime": "image/webp",
+      "bytes": 7068092,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/jerk-chicken-sandwich-62875b-md.webp",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/jerk-chicken-sandwich-62875b-md.webp",
+      "role": "hero",
+      "mime": "image/webp",
+      "bytes": 6937694,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/raspberry-cheesecake-pie-55d70e-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 3379418,
+      "responsiveVariant": null,
+      "firstView": true
+    },
+    {
+      "outputPath": "assets/derived/items/sample360food-32d517-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/sample360food-32d517-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 5547080,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/sandwich-bacon-3730bb-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/sandwich-bacon-3730bb-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 4624809,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/sandwich-filete-de-pollo-empanizado-41fbf2-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 4443701,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/derived/items/torta-de-jamon-de-pavo-275306-md.gif",
+      "role": "hero",
+      "mime": "image/gif",
+      "bytes": 3335279,
+      "responsiveVariant": null,
+      "firstView": true
+    },
+    {
+      "outputPath": "assets/originals/backgrounds/backery-outside-2014d5.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/backgrounds/backery-outside-2014d5.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 348563,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/backgrounds/coffe-drops-544ca0.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/backgrounds/coffe-drops-544ca0.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 604378,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/all-berry-donut-a85640.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/all-berry-donut-a85640.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 8040796,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/b-w-cookies-45dbd5.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/b-w-cookies-45dbd5.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 8525058,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/blue-berry-pancakes-6028f0.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/blue-berry-pancakes-6028f0.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 6256380,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/caramel-pie-6e6f4b.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/caramel-pie-6e6f4b.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 10320406,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/full-cheescake-3d5f52.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/full-cheescake-3d5f52.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 7571089,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/ice-cream-sandwich-5545c1.webp",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/ice-cream-sandwich-5545c1.webp",
+      "role": "other",
+      "mime": "image/webp",
+      "bytes": 7068092,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/jerk-chicken-sandwich-62875b.webp",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/jerk-chicken-sandwich-62875b.webp",
+      "role": "other",
+      "mime": "image/webp",
+      "bytes": 6937694,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/raspberry-cheesecake-pie-55d70e.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/raspberry-cheesecake-pie-55d70e.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 5859529,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/sample360food-32d517.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/sample360food-32d517.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 10856804,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/sandwich-bacon-3730bb.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/sandwich-bacon-3730bb.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 8740348,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/sandwich-filete-de-pollo-empanizado-41fbf2.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/sandwich-filete-de-pollo-empanizado-41fbf2.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 9020079,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "assets/originals/items/torta-de-jamon-de-pavo-275306.gif",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/items/torta-de-jamon-de-pavo-275306.gif",
+      "role": "other",
+      "mime": "image/gif",
+      "bytes": 7840448,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "favicon.ico",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "image/x-icon",
+      "bytes": 967,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "index.html",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "text/html",
+      "bytes": 706,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "menu.json",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "application/json",
+      "bytes": 31498,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "README.txt",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "text/plain",
+      "bytes": 215,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "serve.bat",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "application/octet-stream",
+      "bytes": 66,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "serve.command",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "application/octet-stream",
+      "bytes": 85,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
+      "outputPath": "styles.css",
+      "sourcePath": null,
+      "role": "shell",
+      "mime": "text/css",
+      "bytes": 43112,
+      "responsiveVariant": null,
+      "firstView": false
+    }
+  ]
+}

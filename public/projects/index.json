@@ -185,6 +185,12 @@
       "name": "Keneth's Gaussian Splattings Collection",
       "template": "focus-rows",
       "cover": "/projects/keneth-s-gaussian-splattings-collection/assets/derived/backgrounds/backgroundMannheim-md.gif"
+    },
+    {
+      "slug": "cafebrunch-menu",
+      "name": "CafeBrunch Menu",
+      "template": "jukebox",
+      "cover": "/projects/cafebrunch-menu/assets/derived/backgrounds/backery-outside-2014d5-md.gif"
     }
   ]
 }
