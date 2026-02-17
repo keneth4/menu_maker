@@ -21,6 +21,16 @@ Container-forced variants:
 - If the wrapper cannot complete in container mode, local fallback can execute (as defined in scripts).
 - strict container checks should use explicit `*:container` commands.
 
+## Current status (2026-02-17 docs sync)
+- `npm run build`: PASS
+- `npm test`: PASS (`62` files, `183` tests)
+- `npm run test:e2e`: FAIL (`33 passed`, `3 skipped`, `6 failed` in container-first run)
+- `npm run test:perf`: PASS (container-first perf gate)
+
+Notes:
+- Host shell Node resolution can differ from nvm-managed Node.
+- In this host, `npm run test:e2e` local fallback reports Node ESM mismatch unless Node path is pinned (`>=18.19`).
+
 ## Flaky-risk areas and stabilization rules
 - Section background settle timing:
   - avoid overly tight poll windows for cross-environment rendering

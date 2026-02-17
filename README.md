@@ -39,7 +39,9 @@ Main project setup:
 - project name and template selection,
 - enabled locales + default locale,
 - currency and symbol position,
-- typography selection (built-in or custom font URL),
+- typography selection (built-in or custom font source),
+- role-based typography overrides (identity, restaurant name, menu title, section, item),
+- global interaction sensitivity sliders for item/section scroll-drag (`1..10`, persisted in `meta.scrollSensitivity`),
 - actions: new, open, save project zip, export static site zip.
 
 #### `Assets` tab
@@ -115,7 +117,7 @@ Missing template defaults to `focus-rows`.
 ## 4) Data Model (Menu Project)
 
 Core shape (`menu.json`):
-- `meta`: slug, name, restaurant/title localized text, template, locales, currency, font config.
+- `meta`: slug, name, restaurant/title localized text, template, locales, currency, font config, role overrides (`fontRoles`), scroll sensitivity (`scrollSensitivity`).
 - `backgrounds[]`: media assets for rotating background.
 - `categories[]`: localized category name + dish list.
 - `categories[].items[]`: localized name/description/longDescription, price, allergens, vegan flag, media.
@@ -128,17 +130,21 @@ Core shape (`menu.json`):
 - horizontal carousel inside each section,
 - center-focused dish emphasis via scale/opacity/blur depth,
 - wheel + touch intent logic with settle/snap behavior,
+- section-edge recoil feedback when overscrolling first/last section,
 - desktop arrow support for dish stepping.
 
 ### B) `jukebox` (visual mode)
 - circular-disc style dish arrangement,
 - vertical wheel/touch rotates active dish within section,
 - horizontal section navigation with snap behavior,
+- desktop wheel routing is intent-based (horizontal for sections, vertical for items),
+- section-edge recoil feedback aligned with focus-rows boundary behavior,
 - stronger visual motion profile vs focus-rows.
 
 ### Shared template behavior
 - dish modal with long description, allergens, vegan badge, price,
 - responsive media source selection when variants exist,
+- section boundary settle/recoil behavior at first/last section,
 - fallback to static image rendering when advanced decoder path is unavailable.
 
 ## 6) Storage and Asset Modes
@@ -222,7 +228,7 @@ Export rules:
 - `src/App.svelte` is now a thin composition shell (controller mount + `AppRuntime` composition only).
 - `src/ui/components/AppRuntime.svelte` is now a thin runtime wrapper.
 - `src/ui/components/AppRuntimeScreen.svelte` is now a thin composition shell.
-- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreenContent.svelte` (`897` lines, within current closeout budget), with redistribution implemented across:
+- Runtime orchestration currently lives in `src/ui/components/AppRuntimeScreenContent.svelte` (`896` lines, within current closeout budget), with redistribution implemented across:
   - `src/application/*` workflows,
   - `src/ui/controllers/*`,
   - `src/ui/stores/*`,
@@ -269,6 +275,7 @@ Completed in Phases 1-8:
 - template capability matrix + strategy-driven preview/interaction wiring.
 
 Open product and engineering priorities:
+- close remaining Jukebox e2e parity regressions (section switching/reactivity + sensitivity assertions),
 - stronger wizard recommendations by menu size/use case,
 - accessibility hardening and reduced-motion parity across templates,
 - continue store/controller ownership migration to reduce runtime-local mutable state in `src/ui/components/AppRuntimeScreenContent.svelte`,
@@ -278,6 +285,8 @@ Open product and engineering priorities:
 
 Requirements:
 - Node.js `>=18.19.0` (Playwright ESM loader requirement)
+- if the host shell resolves an older Node, run commands with explicit path (example):
+  - `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`
 
 Commands:
 - `npm install`
@@ -289,6 +298,13 @@ Commands:
 - `npm run test:e2e:local` (forced local Playwright run)
 - `npm run test:perf` (container-first perf gate for `performance-fluidity`, local fallback)
 - `npm run test:perf:container` (forced containerized `performance-fluidity` gate)
+
+Current validation snapshot (`2026-02-17`, docs sync pass):
+- `npm run build`: PASS
+- `npm test`: PASS (`62` files, `183` tests)
+- `npm run test:e2e`: FAIL (`33 passed`, `3 skipped`, `6 failed` in container-first run; local fallback in host shell failed due Node runtime mismatch)
+- `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`: FAIL (`36 passed`, `1 skipped`, `5 failed`)
+- `npm run test:perf`: PASS (container-first perf gate)
 
 Install note:
 - `postinstall` runs `scripts/patch-parse5-for-jsdom.mjs` to apply local jsdom/parse5 compatibility fixes required by the current host runtime constraints.

@@ -105,37 +105,32 @@ This guide maps former `src/App.svelte` hotspot responsibilities to their new ho
 - `scripts/patch-parse5-for-jsdom.mjs`
   - postinstall compatibility patch for offline/local jsdom+parse5+Node runtime mismatches.
 
-## Current Closeout Status (2026-02-15)
-- Container-first gates are operational and passing:
-  - `npm run test:e2e` (container-first wrapper path)
-  - `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container` (`36 passed`, `3 skipped`)
-  - `npm run test:perf` (container-first performance path)
-- Forced container commands are explicit:
-  - `npm run test:e2e:container` runs full containerized e2e.
-  - `npm run test:perf:container` runs containerized `performance-fluidity` spec.
-- Runtime size closeout:
-  - `src/ui/components/AppRuntimeScreenContent.svelte` is now `897` lines (within `<= 900` architecture cap).
-- Phase 9.4 coherence updates shipped:
-  - Project-tab template changes now flow through controller action wiring (`setTemplate -> applyTemplate(..., { source: "project" })`) via:
-    - `src/ui/components/ProjectInfoPanel.svelte`
-    - `src/ui/components/RuntimeEditorTabContent.svelte`
-    - `src/ui/contracts/components.ts`
-  - Wizard demo preview now only activates for blank projects using:
-    - `src/application/projects/wizardShowcaseEligibility.ts`
-    - `src/ui/controllers/editorDraftController.ts`
-    - `src/ui/components/AppRuntimeScreenContent.svelte` stale-showcase guard.
-  - Jukebox desktop routing/visibility parity hardening:
-    - desktop wheel intent routing in `src/ui/controllers/runtimePreviewAdapterController.ts`,
-    - desktop-only section-nav contract in `src/ui/components/PreviewCanvasLegacy.svelte`,
-    - matching export-runtime nav gating in `src/export-runtime/fragments/runtimeScriptComposer.ts`.
-  - Template ID compatibility hardening:
-    - alias/canonical normalization in `src/core/templates/registry.ts`,
-    - normalization pipeline integration in `src/core/menu/normalization.ts`.
-- Regression + gate reliability hardening:
-  - Open-project e2e helpers now use deterministic hidden-input uploads across specs (avoids flaky `filechooser` waits under mobile emulation).
-  - Interactive modal regression now uses deterministic GIF-data fixture:
-    - `tests/e2e/interactive-modal.spec.ts`.
-  - Section-background parity settle timing stabilized:
-    - `tests/e2e/parity-section-background.spec.ts`.
-  - Perf gate now uses percentile-based frame-jitter assertions (`p95`, `p99`) with outlier cap:
-    - `tests/e2e/performance-fluidity.spec.ts`.
+## Current Runtime/Validation Status (2026-02-17)
+- Runtime size closeout remains within architecture budgets:
+  - `src/App.svelte`: `16` lines
+  - `src/ui/components/AppRuntime.svelte`: `8` lines
+  - `src/ui/components/AppRuntimeScreen.svelte`: `8` lines
+  - `src/ui/components/AppRuntimeScreenContent.svelte`: `896` lines (`<= 900`)
+  - `src/export-runtime/buildRuntimeScript.ts`: `12` lines
+- Verified gates in this docs-sync pass:
+  - `npm run build`: PASS
+  - `npm test`: PASS (`62` files, `183` tests)
+  - `npm run test:e2e`: FAIL in container-first path (`33 passed`, `3 skipped`, `6 failed`)
+  - `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`: FAIL (`36 passed`, `1 skipped`, `5 failed`)
+  - `npm run test:perf`: PASS (container-first performance path)
+
+Primary open parity regressions are currently concentrated in Jukebox interaction paths:
+- `tests/e2e/jukebox-import-reactivity.spec.ts`
+- `tests/e2e/jukebox-scroll-parity.spec.ts`
+- Jukebox template-switch section assertion in `tests/e2e/app.spec.ts`
+
+Recent architecture/functionality additions reflected in current code:
+- project-level interaction sensitivity contract:
+  - `src/application/preview/scrollSensitivityWorkflow.ts`
+  - `src/ui/controllers/runtimePreviewAdapterController.ts`
+  - `src/core/menu/normalization.ts`
+  - `src/ui/components/ProjectInfoPanel.svelte`
+- role-scoped typography controls for identity/restaurant/title/section/item:
+  - `src/lib/types.ts` (`meta.fontRoles`)
+  - `src/ui/controllers/editorDraftController.ts`
+  - `src/ui/controllers/fontStyleController.ts`

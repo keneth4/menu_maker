@@ -30,6 +30,7 @@ State coherence is managed by:
 - typed store slices (`ui/stores/*`)
 - binding bridge (`runtimeStateBridgeController`)
 - reactive orchestration in runtime content host
+- project-scoped interaction sensitivity (`meta.scrollSensitivity`) resolved through `application/preview/scrollSensitivityWorkflow.ts` and injected into carousel + preview adapter config
 
 Critical rule: state ownership should remain explicit per controller; avoid hidden cross-controller mutation paths.
 

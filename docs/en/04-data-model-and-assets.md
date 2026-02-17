@@ -4,6 +4,7 @@
 Primary structure:
 - `meta`
   - slug, name, template, locales/defaultLocale, currency, typography, identity fields
+  - `fontRoles` role overrides (`identity`, `restaurant`, `title`, `section`, `item`)
   - `scrollSensitivity` (global runtime interaction tuning)
     - `item`: `1..10` (item wheel/drag sensitivity)
     - `section`: `1..10` (horizontal section-switch sensitivity)
@@ -21,6 +22,23 @@ Normalization path:
 - scroll sensitivity clamp/default in `normalizeProject`:
   - default `{ item: 5, section: 5 }`
   - clamp rule `1..10`
+
+## Sensitivity runtime rules
+Canonical formulas live in `src/application/preview/scrollSensitivityWorkflow.ts` and are shared by preview/export runtime paths.
+
+- level normalization:
+  - `level = clamp(round(value), 1, 10)`
+  - default level is `5`
+- threshold multiplier (`higher level => lower threshold => more sensitive`):
+  - level `5` -> `1.00`
+  - level `10` -> `0.18`
+  - level `1` -> `3.80`
+- touch multiplier:
+  - level `5` -> `1.00`
+  - level `10` -> `2.60`
+  - level `1` -> `0.28`
+- hard low-sensitivity guard:
+  - at level `1`, `maxStepPerInput = 1` (prevents multi-step jumps from a single wheel/drag input)
 
 ## Template normalization rules
 Template IDs are canonicalized with alias mapping and safe fallback:

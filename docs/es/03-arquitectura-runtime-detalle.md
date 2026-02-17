@@ -30,6 +30,7 @@ La coherencia de estado se soporta con:
 - slices tipados en `ui/stores/*`
 - bridge de estado (`runtimeStateBridgeController`)
 - orquestacion reactiva en `AppRuntimeScreenContent`
+- sensibilidad de interaccion por proyecto (`meta.scrollSensitivity`) resuelta por `application/preview/scrollSensitivityWorkflow.ts` e inyectada en configuracion de carousel + preview adapter
 
 Regla critica: ownership explicito por controller; evitar mutaciones cruzadas opacas.
 

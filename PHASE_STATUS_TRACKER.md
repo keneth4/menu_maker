@@ -11,7 +11,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 ## Current phase
 - Active phase: `9 (App.svelte redistribution redesign)`
 - Started: `2026-02-13`
-- Status: `DONE`
+- Status: `IN_PROGRESS`
 
 ## Phase board
 | Phase | Name | Status | Notes |
@@ -23,7 +23,7 @@ This file tracks phase status for the current improvement roadmap. Keep this fil
 | 4 | Image loading optimization | DONE | Startup/detail load policy + derived source usage + loading placeholder polish (spinner, no white blocks). |
 | 5 | Desktop keyboard controls | DONE | Added desktop arrow-key navigation and `Escape` modal close for preview + export runtime parity. |
 | 6 | Validation + docs sync | DONE | Validation gates + docs/tracker sync completed for current architecture decisions. |
-| 9 | App runtime redistribution redesign | DONE | Runtime shell split is complete (`AppRuntimeScreen.svelte`: 8 lines, `AppRuntimeScreenContent.svelte`: 897 lines), regression fixes landed, and build/unit/e2e/perf gates are green on container-first path. |
+| 9 | App runtime redistribution redesign | IN_PROGRESS | Runtime shell split remains complete (`AppRuntimeScreen.svelte`: 8 lines, `AppRuntimeScreenContent.svelte`: 896 lines) and build/unit/perf are green; Jukebox parity regressions remain open in e2e gate. |
 
 ## Documentation references
 - English architecture + state docs: `docs/en/INDEX.md`
@@ -660,3 +660,22 @@ Tracking checklist:
     - `README.md`
     - `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
     - `PHASE_STATUS_TRACKER.md`
+- Documentation alignment + validation snapshot refresh pass:
+  - Updated architecture/current-state/testing docs to match current runtime contracts:
+    - `README.md`
+    - `docs/en/03-architecture-runtime-deep-dive.md`
+    - `docs/es/03-arquitectura-runtime-detalle.md`
+    - `docs/en/04-data-model-and-assets.md`
+    - `docs/es/04-modelo-de-datos-y-assets.md`
+    - `docs/en/06-testing-and-gates.md`
+    - `docs/es/06-pruebas-y-gates.md`
+    - `docs/en/08-current-state-snapshot-and-delta.md`
+    - `docs/es/08-estado-actual-snapshot-y-delta.md`
+    - `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
+  - Refreshed validation status with live command output:
+    - `npm run build`: PASS
+    - `npm test`: PASS (`62` files, `183` tests)
+    - `npm run test:e2e`: FAIL (container-first: `33 passed`, `3 skipped`, `6 failed`)
+    - `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`: FAIL (`36 passed`, `1 skipped`, `5 failed`)
+    - `npm run test:perf`: PASS (container-first perf gate)
+  - Updated tracker phase status to `IN_PROGRESS` while Jukebox e2e parity regressions remain open.

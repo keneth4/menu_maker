@@ -1,62 +1,53 @@
 # 08 - Current-State Snapshot and Delta
 
-## Snapshot baseline (as of 2026-02-16)
+## Snapshot baseline (as of 2026-02-17)
 
 ### Branch + commit context
 - Working branch: `codex/refactor-isolation`
-- Snapshot commit observed during documentation: `5dfc273`
+- Snapshot commit observed during documentation: `16a3a25`
 
 ### Architecture status
 - Thin shell composition remains in place:
-  - `src/App.svelte`
-  - `src/ui/components/AppRuntime.svelte`
-  - `src/ui/components/AppRuntimeScreen.svelte`
+  - `src/App.svelte` (`16` lines)
+  - `src/ui/components/AppRuntime.svelte` (`8` lines)
+  - `src/ui/components/AppRuntimeScreen.svelte` (`8` lines)
 - Runtime orchestration host:
-  - `src/ui/components/AppRuntimeScreenContent.svelte`
+  - `src/ui/components/AppRuntimeScreenContent.svelte` (`896` lines)
+- Export runtime orchestrator:
+  - `src/export-runtime/buildRuntimeScript.ts` (`12` lines)
 
 ### Line-budget status
 From `src/App.architecture.test.ts` + measured file state:
-- `App.svelte <= 900` (guard present)
-- `AppRuntime.svelte <= 900` (guard present)
-- `AppRuntimeScreen.svelte <= 1100` (guard present)
-- `AppRuntimeScreenContent.svelte <= 900` (guard present, measured `897`)
-- `buildRuntimeScript.ts <= 900` (guard present)
+- `App.svelte <= 900` (guard present, measured `16`)
+- `AppRuntime.svelte <= 900` (guard present, measured `8`)
+- `AppRuntimeScreen.svelte <= 1100` (guard present, measured `8`)
+- `AppRuntimeScreenContent.svelte <= 900` (guard present, measured `896`)
+- `buildRuntimeScript.ts <= 900` (guard present, measured `12`)
 
-### Gate status (latest validated baseline)
+### Gate status (latest verified run)
 - `npm run build`: PASS
-- `npm test`: PASS (60 files, 162 tests)
-- `ALLOW_CONTAINER_BUILD=1 npm run test:e2e:container`: PASS (36 passed, 3 skipped)
-- `npm run test:perf`: PASS (container-first perf path)
+- `npm test`: PASS (`62` files, `183` tests)
+- `npm run test:e2e`: FAIL (container-first run: `33 passed`, `3 skipped`, `6 failed`)
+- `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`: FAIL (`36 passed`, `1 skipped`, `5 failed`)
+- `npm run test:perf`: PASS (container-first perf gate)
+
+Current failing e2e areas:
+- Jukebox section/item reactivity specs (`tests/e2e/jukebox-import-reactivity.spec.ts`)
+- Jukebox wheel parity + sensitivity specs (`tests/e2e/jukebox-scroll-parity.spec.ts`)
+- Project-tab template-switch section assertion (`tests/e2e/app.spec.ts`)
+- Perf fluidity spec under full container e2e sweep (`tests/e2e/performance-fluidity.spec.ts`)
 
 ## Delta: in-flight working tree surface
-Current branch includes uncommitted changes across multiple domains.
-
-### Domain groups
-- UI controllers/components:
-  - `src/ui/controllers/*`
-  - `src/ui/components/*`
-  - `src/ui/contracts/components.ts`
-- Application workflows:
-  - `src/application/projects/*`
-  - `src/application/export/*`
-  - `src/core/menu/*`
-  - `src/core/templates/*`
-- E2E and gate harness:
-  - `tests/e2e/*`
-  - `scripts/test-e2e.sh`
-  - `scripts/test-perf.sh`
-  - `scripts/container-smoke.sh`
-- Documentation/tracking:
-  - `README.md`
-  - `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
-  - `PHASE_STATUS_TRACKER.md`
-- Project index/sample state:
-  - `public/projects/index.json`
+Current in-flight delta for this pass is documentation alignment only:
+- `README.md`
+- `docs/en/*` and `docs/es/*` current-state/testing/runtime docs
+- `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
+- `PHASE_STATUS_TRACKER.md`
 
 ### Known residual risks
-- Large in-flight diff increases merge/review complexity; phase-based commits are recommended before PR.
-- Container performance can vary by host resource pressure; percentile perf assertions mitigate but do not remove resource sensitivity.
-- ffmpeg fixture processing may emit warning logs in bridge-derive tests for intentionally tiny/corrupt-edge fixtures; test contracts should assert outcomes, not warning absence.
+- E2E parity remains open for Jukebox interaction paths after recent sensitivity/recoil changes.
+- Container performance variance can trigger percentile perf threshold failures during full e2e runs.
+- Local fallback in `npm run test:e2e` can fail on hosts where shell Node resolution is below Playwright ESM requirements.
 
 ## Operational references
 - Architecture guardrails: `src/App.architecture.test.ts`
