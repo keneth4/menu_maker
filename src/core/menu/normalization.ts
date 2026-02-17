@@ -104,6 +104,20 @@ const normalizeFontRoles = (value: unknown) => {
 const normalizeScrollAnimationMode = (value: unknown): "hero360" | "alternate" =>
   value === "alternate" ? "alternate" : "hero360";
 
+const normalizeSensitivityLevel = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 5;
+  return Math.min(10, Math.max(1, Math.round(parsed)));
+};
+
+const normalizeProjectScrollSensitivity = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return {
+    item: normalizeSensitivityLevel(source.item),
+    section: normalizeSensitivityLevel(source.section)
+  };
+};
+
 export const normalizeProject = (value: MenuProject): MenuProject => {
   const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
   value.meta.locales = locales;
@@ -134,6 +148,7 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
   value.meta.backgroundDisplayMode = normalizeBackgroundDisplayMode(
     value.meta.backgroundDisplayMode
   );
+  value.meta.scrollSensitivity = normalizeProjectScrollSensitivity(value.meta.scrollSensitivity);
   value.meta.fontRoles = normalizeFontRoles(value.meta.fontRoles);
 
   const defaultLocale = value.meta.defaultLocale ?? "en";

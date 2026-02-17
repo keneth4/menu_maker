@@ -13,7 +13,10 @@ const openProjectFromLanding = async (page: Page, fixturePath: string) => {
     .setInputFiles(fixturePath);
 };
 
-const writeJukeboxFixture = async (testInfo: TestInfo) => {
+const writeJukeboxFixture = async (
+  testInfo: TestInfo,
+  sensitivity: { item: number; section: number } = { item: 5, section: 5 }
+) => {
   const fixture = {
     meta: {
       slug: "jukebox-scroll-parity",
@@ -31,7 +34,8 @@ const writeJukeboxFixture = async (testInfo: TestInfo) => {
       currency: "MXN",
       currencyPosition: "left",
       backgroundCarouselSeconds: 9,
-      backgroundDisplayMode: "section"
+      backgroundDisplayMode: "section",
+      scrollSensitivity: sensitivity
     },
     backgrounds: [
       {
@@ -150,6 +154,26 @@ const writeJukeboxFixture = async (testInfo: TestInfo) => {
   return fixturePath;
 };
 
+const getClosestHorizontalSectionIndex = async (page: Page) =>
+  await page.evaluate(() => {
+    const container = document.querySelector<HTMLElement>(".menu-scroll");
+    if (!container) return -1;
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (!sections.length) return -1;
+    const centerX = container.scrollLeft + container.clientWidth / 2;
+    let closest = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+      const distance = Math.abs(sectionCenter - centerX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = index;
+      }
+    });
+    return closest;
+  });
+
 const wheelOnLocatorPoint = async (
   page: Page,
   locator: Locator,
@@ -184,26 +208,6 @@ test("jukebox wheel routing keeps vertical for cards and horizontal for sections
   await expect(sectionNav).toBeVisible();
   await expect(outsideWheelTarget).toBeVisible();
 
-  const getClosestHorizontalSectionIndex = async () =>
-    await page.evaluate(() => {
-      const container = document.querySelector<HTMLElement>(".menu-scroll");
-      if (!container) return -1;
-      const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
-      if (!sections.length) return -1;
-      const centerX = container.scrollLeft + container.clientWidth / 2;
-      let closest = 0;
-      let minDistance = Number.POSITIVE_INFINITY;
-      sections.forEach((section, index) => {
-        const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
-        const distance = Math.abs(sectionCenter - centerX);
-        if (distance < minDistance) {
-          minDistance = distance;
-          closest = index;
-        }
-      });
-      return closest;
-    });
-
   const readActiveTitle = async () =>
     (await page
       .locator(".menu-section")
@@ -219,21 +223,21 @@ test("jukebox wheel routing keeps vertical for cards and horizontal for sections
   await expect
     .poll(async () => await readActiveTitle(), { timeout: 1400 })
     .not.toBe(beforeVertical);
-  expect(await getClosestHorizontalSectionIndex()).toBe(0);
+  expect(await getClosestHorizontalSectionIndex(page)).toBe(0);
 
   await wheelOnLocatorPoint(page, activeCardImage, -2200, 14);
   await wheelOnLocatorPoint(page, activeCardImage, -2000, 10);
   await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1200 })
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
     .toBe(0);
 
-  const beforeImageHorizontal = await getClosestHorizontalSectionIndex();
+  const beforeImageHorizontal = await getClosestHorizontalSectionIndex(page);
   await wheelOnLocatorPoint(page, activeCardImage, 2400, 18);
   await wheelOnLocatorPoint(page, activeCardImage, 1800, 12);
   await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 2600 })
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
     .not.toBe(beforeImageHorizontal);
-  const afterImageHorizontal = await getClosestHorizontalSectionIndex();
+  const afterImageHorizontal = await getClosestHorizontalSectionIndex(page);
 
   const beforeOutsideHorizontalScroll = await page
     .locator(".menu-scroll")
@@ -252,6 +256,46 @@ test("jukebox wheel routing keeps vertical for cards and horizontal for sections
   await wheelOnLocatorPoint(page, activeCardImage, 2200, 14);
   await wheelOnLocatorPoint(page, activeCardImage, 2100, 10);
   await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1200 })
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(1);
+});
+
+test("section sensitivity level changes horizontal section threshold in project panel", async ({
+  page
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixturePath = await writeJukeboxFixture(testInfo, { item: 5, section: 1 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  await page.locator(".editor-close").first().click();
+  const activeCardImage = page
+    .locator(".menu-section")
+    .first()
+    .locator(".carousel-card.active .carousel-media img")
+    .first();
+  await expect(activeCardImage).toBeVisible();
+  expect(await getClosestHorizontalSectionIndex(page)).toBe(0);
+
+  await wheelOnLocatorPoint(page, activeCardImage, 110, 8);
+  await wheelOnLocatorPoint(page, activeCardImage, 102, 7);
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(0);
+
+  await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
+  await expect(page.locator(".editor-panel")).toHaveClass(/open/);
+  const sectionSensitivitySlider = page.locator(".editor-panel input[type='range']").nth(1);
+  await sectionSensitivitySlider.evaluate((input) => {
+    (input as HTMLInputElement).value = "10";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator(".editor-close").first().click();
+
+  await wheelOnLocatorPoint(page, activeCardImage, 110, 8);
+  await wheelOnLocatorPoint(page, activeCardImage, 102, 7);
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2200 })
     .toBe(1);
 });

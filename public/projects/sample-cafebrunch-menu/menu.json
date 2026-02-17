@@ -19,7 +19,11 @@
     ],
     "defaultLocale": "en",
     "currency": "MXN",
-    "currencyPosition": "left"
+    "currencyPosition": "left",
+    "scrollSensitivity": {
+      "item": 5,
+      "section": 5
+    }
   },
   "backgrounds": [
     {

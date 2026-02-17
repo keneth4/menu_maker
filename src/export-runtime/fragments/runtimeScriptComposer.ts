@@ -1,4 +1,17 @@
 import type { MenuProject } from "../../lib/types";
+import {
+  FOCUS_ROWS_TOUCH_DELTA_SCALE,
+  FOCUS_ROWS_WHEEL_STEP_THRESHOLD
+} from "../../core/templates/strategies/focusRows";
+import {
+  JUKEBOX_TOUCH_DELTA_SCALE,
+  JUKEBOX_WHEEL_STEP_THRESHOLD
+} from "../../core/templates/strategies/jukebox";
+import {
+  getProjectScrollSensitivity,
+  resolveCarouselConfigWithSensitivity,
+  resolveJukeboxSectionThresholdPx
+} from "../../application/preview/scrollSensitivityWorkflow";
 import { buildRuntimeDataFragment } from "./runtimeDataFragment";
 import { buildRuntimeImageSourcesFragment } from "./runtimeImageSourcesFragment";
 
@@ -16,6 +29,25 @@ export const buildRuntimeScript = (data: MenuProject, options: BuildRuntimeScrip
     maxBackgroundCarouselSeconds: MAX_BACKGROUND_CAROUSEL_SECONDS,
     instructionCopy
   } = options;
+    const scrollSensitivity = getProjectScrollSensitivity(data);
+    const focusRowsSensitivity = resolveCarouselConfigWithSensitivity(
+      {
+        wheelStepThreshold: FOCUS_ROWS_WHEEL_STEP_THRESHOLD,
+        touchDeltaScale: FOCUS_ROWS_TOUCH_DELTA_SCALE
+      },
+      scrollSensitivity.item
+    );
+    const jukeboxSensitivity = resolveCarouselConfigWithSensitivity(
+      {
+        wheelStepThreshold: JUKEBOX_WHEEL_STEP_THRESHOLD,
+        touchDeltaScale: JUKEBOX_TOUCH_DELTA_SCALE
+      },
+      scrollSensitivity.item
+    );
+    const jukeboxHorizontalSectionThresholdPx = resolveJukeboxSectionThresholdPx(
+      300,
+      scrollSensitivity.section
+    );
     const payload = JSON.stringify(data);
     const dataFragment = buildRuntimeDataFragment(payload);
     return `
@@ -23,10 +55,11 @@ ${dataFragment}
 const currencySymbols = {
   MXN: "$", USD: "$", EUR: "€", GBP: "£", JPY: "¥", COP: "$", ARS: "$"
 };
-const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 260;
+const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = ${focusRowsSensitivity.wheelStepThreshold};
 const FOCUS_ROWS_WHEEL_SETTLE_MS = 200;
 const FOCUS_ROWS_WHEEL_DELTA_CAP = 140;
-const FOCUS_ROWS_TOUCH_DELTA_SCALE = 2.2;
+const FOCUS_ROWS_TOUCH_DELTA_SCALE = ${focusRowsSensitivity.touchDeltaScale};
+const FOCUS_ROWS_MAX_STEP_PER_INPUT = ${focusRowsSensitivity.maxStepPerInput ?? 0};
 const FOCUS_ROWS_TOUCH_INTENT_THRESHOLD = 10;
 let locale = DATA.meta.defaultLocale || DATA.meta.locales[0] || "es";
 const fontFamily = DATA.meta.fontFamily || "Fraunces";
@@ -91,16 +124,17 @@ let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
 let startupBlockingSourceSet = null;
-const JUKEBOX_WHEEL_STEP_THRESHOLD = 260;
+const JUKEBOX_WHEEL_STEP_THRESHOLD = ${jukeboxSensitivity.wheelStepThreshold};
 const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
 const JUKEBOX_VERTICAL_DOMINANCE_RATIO = 2.2;
 const JUKEBOX_VERTICAL_WHEEL_MIN_PX = 10;
 const JUKEBOX_HORIZONTAL_WHEEL_MIN_PX = 0.1;
-const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 300;
+const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = ${jukeboxHorizontalSectionThresholdPx};
 const JUKEBOX_SECTION_WHEEL_COOLDOWN_MS = 240;
 const JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS = 240;
-const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
+const JUKEBOX_TOUCH_DELTA_SCALE = ${jukeboxSensitivity.touchDeltaScale};
+const JUKEBOX_MAX_STEP_PER_INPUT = ${jukeboxSensitivity.maxStepPerInput ?? 0};
 const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 const INTERACTIVE_GIF_MAX_FRAMES = 72;
 const INTERACTIVE_KEEP_ORIGINAL_PLACEMENT = true;
@@ -1982,6 +2016,30 @@ const centerSectionHorizontally = (container, index, behavior = "smooth") => {
   container.scrollTo({ left: targetLeft, behavior });
 };
 
+const recoilResetTimers = new WeakMap();
+const triggerSectionBoundaryRecoil = (container, axis, direction) => {
+  if (!container) return;
+  const activeTimer = recoilResetTimers.get(container);
+  if (activeTimer) {
+    window.clearTimeout(activeTimer);
+  }
+  const offset = (axis === "horizontal" ? 18 : 14) * -Math.sign(direction || 1);
+  container.classList.add("menu-scroll--recoil");
+  container.style.setProperty("--menu-recoil-x", axis === "horizontal" ? offset + "px" : "0px");
+  container.style.setProperty("--menu-recoil-y", axis === "vertical" ? offset + "px" : "0px");
+  requestAnimationFrame(() => {
+    container.style.setProperty("--menu-recoil-x", "0px");
+    container.style.setProperty("--menu-recoil-y", "0px");
+  });
+  const timer = window.setTimeout(() => {
+    container.classList.remove("menu-scroll--recoil");
+    container.style.removeProperty("--menu-recoil-x");
+    container.style.removeProperty("--menu-recoil-y");
+    recoilResetTimers.delete(container);
+  }, 190);
+  recoilResetTimers.set(container, timer);
+};
+
 const shiftSection = (direction) => {
   const container = app.querySelector(".menu-scroll");
   if (!container) return;
@@ -1992,7 +2050,14 @@ const shiftSection = (direction) => {
     : getClosestSectionIndex(container);
   if (current < 0) return;
   const next = Math.min(sections.length - 1, Math.max(0, current + direction));
-  if (next === current) return;
+  if (next === current) {
+    triggerSectionBoundaryRecoil(
+      container,
+      isJukeboxTemplate() ? "horizontal" : "vertical",
+      direction
+    );
+    return;
+  }
   if (isJukeboxTemplate()) {
     centerSectionHorizontally(container, next, "smooth");
     syncBackgroundForSectionIndex(next);
@@ -2135,8 +2200,19 @@ const bindCarousels = () => {
       };
       const applyDelta = (delta) => {
         if (!delta) return;
+        const cappedDelta =
+          JUKEBOX_MAX_STEP_PER_INPUT > 0
+            ? Math.max(
+                -JUKEBOX_WHEEL_STEP_THRESHOLD * JUKEBOX_MAX_STEP_PER_INPUT,
+                Math.min(JUKEBOX_WHEEL_STEP_THRESHOLD * JUKEBOX_MAX_STEP_PER_INPUT, delta)
+              )
+            : delta;
+        if (!cappedDelta) return;
         const current = Number(container.dataset.activeIndex || "0") || 0;
-        const next = wrapCarouselIndex(current + delta / JUKEBOX_WHEEL_STEP_THRESHOLD, count);
+        const next = wrapCarouselIndex(
+          current + cappedDelta / JUKEBOX_WHEEL_STEP_THRESHOLD,
+          count
+        );
         container.dataset.activeIndex = String(next);
         applyFocusState(container, next, count);
         queueSnap();
@@ -2179,6 +2255,7 @@ const bindCarousels = () => {
               (direction > 0 && currentIndex >= sections.length - 1))
           ) {
             state.sectionCarry = 0;
+            triggerSectionBoundaryRecoil(menuScroll, "horizontal", direction);
             return;
           }
           state.sectionCarry = 0;
@@ -2272,8 +2349,16 @@ const bindCarousels = () => {
     };
     const applyDelta = (delta) => {
       if (!delta) return;
+      const cappedDelta =
+        FOCUS_ROWS_MAX_STEP_PER_INPUT > 0
+          ? Math.max(
+              -FOCUS_ROWS_WHEEL_STEP_THRESHOLD * FOCUS_ROWS_MAX_STEP_PER_INPUT,
+              Math.min(FOCUS_ROWS_WHEEL_STEP_THRESHOLD * FOCUS_ROWS_MAX_STEP_PER_INPUT, delta)
+            )
+          : delta;
+      if (!cappedDelta) return;
       const current = Number(container.dataset.activeIndex || "0") || 0;
-      const next = wrapCarouselIndex(current + delta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
+      const next = wrapCarouselIndex(current + cappedDelta / FOCUS_ROWS_WHEEL_STEP_THRESHOLD, count);
       container.dataset.activeIndex = String(next);
       applyFocusState(container, next, count);
       queueSnap();

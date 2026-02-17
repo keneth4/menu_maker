@@ -4,6 +4,9 @@
 Estructura principal:
 - `meta`
   - slug, name, template, locales/defaultLocale, currency, typography, identidad
+  - `scrollSensitivity` (ajuste global de interaccion runtime)
+    - `item`: `1..10` (sensibilidad wheel/drag entre items)
+    - `section`: `1..10` (sensibilidad para cambio horizontal de seccion)
 - `backgrounds[]`
   - `id`, `label`, `src`, opcional `originalSrc`, opcional `derived`
 - `categories[]`
@@ -15,6 +18,9 @@ Estructura principal:
 Ruta de normalizacion:
 - `normalizeProject` en `src/core/menu/normalization.ts`
 - canonicalizacion de template con `resolveTemplateId` en `src/core/templates/registry.ts`
+- clamp/default de sensibilidad en `normalizeProject`:
+  - default `{ item: 5, section: 5 }`
+  - rango permitido `1..10`
 
 ## Reglas de normalizacion de template
 Los IDs se canonicalizan con alias + fallback seguro:

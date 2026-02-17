@@ -5,6 +5,7 @@ import type {
   MenuProject,
   ProjectFontRole
 } from "../../lib/types";
+import { normalizeSensitivityLevel } from "../../application/preview/scrollSensitivityWorkflow";
 
 type CommonAllergen = {
   id: string;
@@ -94,6 +95,8 @@ export type EditorDraftController = {
   handleFontChoice: (value: string) => void;
   handleFontSelect: (event: Event) => void;
   handleCustomFontSourceInput: (event: Event) => void;
+  setItemScrollSensitivity: (level: number) => void;
+  setSectionScrollSensitivity: (level: number) => void;
   setIdentityMode: (mode: "text" | "logo") => void;
   setLogoSrc: (src: string) => void;
   setFontRoleSource: (role: ProjectFontRole, source: string) => void;
@@ -633,6 +636,32 @@ export const createEditorDraftController = (
     deps.touchDraft();
   };
 
+  const setItemScrollSensitivity = (level: number) => {
+    const state = deps.getState();
+    if (!state.draft) return;
+    const normalized = normalizeSensitivityLevel(level);
+    const current = state.draft.meta.scrollSensitivity ?? {};
+    if (current.item === normalized && current.section !== undefined) return;
+    state.draft.meta.scrollSensitivity = {
+      item: normalized,
+      section: normalizeSensitivityLevel(current.section)
+    };
+    deps.touchDraft();
+  };
+
+  const setSectionScrollSensitivity = (level: number) => {
+    const state = deps.getState();
+    if (!state.draft) return;
+    const normalized = normalizeSensitivityLevel(level);
+    const current = state.draft.meta.scrollSensitivity ?? {};
+    if (current.section === normalized && current.item !== undefined) return;
+    state.draft.meta.scrollSensitivity = {
+      item: normalizeSensitivityLevel(current.item),
+      section: normalized
+    };
+    deps.touchDraft();
+  };
+
   const setIdentityMode = (mode: "text" | "logo") => {
     const state = deps.getState();
     if (!state.draft) return;
@@ -740,6 +769,8 @@ export const createEditorDraftController = (
     handleFontChoice,
     handleFontSelect,
     handleCustomFontSourceInput,
+    setItemScrollSensitivity,
+    setSectionScrollSensitivity,
     setIdentityMode,
     setLogoSrc,
     setFontRoleSource,

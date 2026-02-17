@@ -4,6 +4,9 @@
 Primary structure:
 - `meta`
   - slug, name, template, locales/defaultLocale, currency, typography, identity fields
+  - `scrollSensitivity` (global runtime interaction tuning)
+    - `item`: `1..10` (item wheel/drag sensitivity)
+    - `section`: `1..10` (horizontal section-switch sensitivity)
 - `backgrounds[]`
   - `id`, `label`, `src`, optional `originalSrc`, optional `derived`
 - `categories[]`
@@ -15,6 +18,9 @@ Primary structure:
 Normalization path:
 - `normalizeProject` in `src/core/menu/normalization.ts`
 - template canonicalization via `resolveTemplateId` in `src/core/templates/registry.ts`
+- scroll sensitivity clamp/default in `normalizeProject`:
+  - default `{ item: 5, section: 5 }`
+  - clamp rule `1..10`
 
 ## Template normalization rules
 Template IDs are canonicalized with alias mapping and safe fallback:

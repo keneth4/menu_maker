@@ -73,6 +73,35 @@ export const centerSectionHorizontally = (
   container.scrollTo({ left: targetLeft, behavior });
 };
 
+const recoilResetTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+export const triggerSectionBoundaryRecoil = (
+  container: HTMLElement,
+  axis: "horizontal" | "vertical",
+  direction: number
+) => {
+  if (typeof window === "undefined") return;
+  const activeTimer = recoilResetTimers.get(container);
+  if (activeTimer) {
+    clearTimeout(activeTimer);
+  }
+  const offset = (axis === "horizontal" ? 18 : 14) * -Math.sign(direction || 1);
+  container.classList.add("menu-scroll--recoil");
+  container.style.setProperty("--menu-recoil-x", axis === "horizontal" ? `${offset}px` : "0px");
+  container.style.setProperty("--menu-recoil-y", axis === "vertical" ? `${offset}px` : "0px");
+  requestAnimationFrame(() => {
+    container.style.setProperty("--menu-recoil-x", "0px");
+    container.style.setProperty("--menu-recoil-y", "0px");
+  });
+  const timer = setTimeout(() => {
+    container.classList.remove("menu-scroll--recoil");
+    container.style.removeProperty("--menu-recoil-x");
+    container.style.removeProperty("--menu-recoil-y");
+    recoilResetTimers.delete(container);
+  }, 190);
+  recoilResetTimers.set(container, timer);
+};
+
 export const isKeyboardEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;

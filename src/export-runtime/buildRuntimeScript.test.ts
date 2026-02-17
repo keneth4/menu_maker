@@ -69,4 +69,24 @@ describe("buildRuntimeScript", () => {
     expect(script).toContain("if (!Number.isFinite(parsed)) return 11;");
     expect(script).toContain("return Math.min(44, Math.max(4, Math.round(parsed)));");
   });
+
+  it("injects sensitivity-adjusted thresholds and touch scales", () => {
+    const project = makeProject();
+    project.meta.scrollSensitivity = {
+      item: 10,
+      section: 10
+    };
+    const script = buildRuntimeScript(project, {
+      defaultBackgroundCarouselSeconds: 9,
+      minBackgroundCarouselSeconds: 2,
+      maxBackgroundCarouselSeconds: 60,
+      instructionCopy: { es: {}, en: {} }
+    });
+
+    expect(script).toContain("const FOCUS_ROWS_WHEEL_STEP_THRESHOLD = 47;");
+    expect(script).toContain("const FOCUS_ROWS_TOUCH_DELTA_SCALE = 5.72;");
+    expect(script).toContain("const JUKEBOX_WHEEL_STEP_THRESHOLD = 47;");
+    expect(script).toContain("const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 54;");
+    expect(script).toContain("const JUKEBOX_TOUCH_DELTA_SCALE = 5.46;");
+  });
 });

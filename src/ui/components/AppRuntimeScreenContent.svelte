@@ -15,6 +15,7 @@
   import { buildAssetOptionSourcePaths as buildAssetOptionSourcePathsWorkflow, buildFontAssetOptions as buildFontAssetOptionsWorkflow, buildProjectAssetEntries as buildProjectAssetEntriesWorkflow } from "../../application/assets/projectAssetWorkflow";
   import { buildExportStyles as buildExportStylesWorkflow } from "../../application/export/exportStylesWorkflow";
   import { buildAssetOptions as buildAssetOptionsWorkflow, isLockedManagedAssetRoot as isLockedManagedAssetRootWorkflow, isManagedAssetRelativePath as isManagedAssetRelativePathWorkflow, isManagedAssetSourcePath as isManagedAssetSourcePathWorkflow, joinAssetFolderPath as joinAssetFolderPathWorkflow, mapLegacyAssetRelativeToManaged as mapLegacyAssetRelativeToManagedWorkflow, normalizeAssetFolderPath as normalizeAssetFolderPathWorkflow, toAssetRelativeForUi as toAssetRelativeForUiWorkflow, USER_MANAGED_ASSET_ROOTS as USER_MANAGED_ASSET_ROOTS_WORKFLOW } from "../../application/assets/workspaceWorkflow";
+  import { getProjectScrollSensitivity as getProjectScrollSensitivityWorkflow, resolveCarouselConfigWithSensitivity as resolveCarouselConfigWithSensitivityWorkflow, resolveJukeboxSectionThresholdPx as resolveJukeboxSectionThresholdPxWorkflow } from "../../application/preview/scrollSensitivityWorkflow";
   import { autoAssignSectionBackgroundsByOrder as autoAssignSectionBackgroundsByOrderWorkflow, buildSectionBackgroundIndexByCategory as buildSectionBackgroundIndexByCategoryWorkflow, buildSectionBackgroundState as buildSectionBackgroundStateWorkflow, getNextUnusedSectionBackgroundId as getNextUnusedSectionBackgroundIdWorkflow, getSectionModeBackgroundEntries as getSectionModeBackgroundEntriesWorkflow, normalizeSectionBackgroundId as normalizeSectionBackgroundIdWorkflow } from "../../application/preview/sectionBackgroundWorkflow";
   import { buildPreviewFontVarStyle as buildPreviewFontVarStyleWorkflow, buildProjectFontFaceCss as buildProjectFontFaceCssWorkflow, buildFontStack as buildFontStackWorkflow, collectProjectBuiltinFontHrefs as collectProjectBuiltinFontHrefsWorkflow, getItemFontStyle as getItemFontStyleWorkflow, getProjectInterfaceFontConfig as getProjectInterfaceFontConfigWorkflow } from "../../application/typography/fontWorkflow";
   import { onDestroy, onMount, tick } from "svelte";
@@ -162,11 +163,9 @@
   let previewBackgrounds: { id: string; src: string }[] = [];
   let loadedPreviewBackgroundIndexes: number[] = [];
   let activeBackgroundIndex = 0;
+  let projectScrollSensitivity = { item: 5, section: 5 };
   let sectionBackgroundIndexByCategory: Record<string, number> = {};
-  let sectionBackgroundOptionsByCategory: Record<
-    string,
-    { value: string; label: string }[]
-  > = {};
+  let sectionBackgroundOptionsByCategory: Record<string, { value: string; label: string }[]> = {};
   let sectionBackgroundNeedsCoverage = false;
   let sectionBackgroundHasDuplicates = false;
   let sectionBackgroundMappingValid = true;
@@ -184,7 +183,7 @@
     },
     getItemCount: (categoryId) =>
       activeProject?.categories.find((item) => item.id === categoryId)?.items.length ?? 0,
-    getConfig: () => activeTemplateCapabilities.carousel,
+    getConfig: () => resolveCarouselConfigWithSensitivityWorkflow(activeTemplateCapabilities.carousel, projectScrollSensitivity.item),
     normalizeWheelDelta: (event) => activeTemplateStrategy.normalizeWheelDelta(event),
     wrapIndex: wrapCarouselIndex
   });
@@ -215,6 +214,7 @@
       carouselActive = next;
     },
     wrapCarouselIndex,
+    getJukeboxHorizontalSectionThresholdPx: () => resolveJukeboxSectionThresholdPxWorkflow(300, projectScrollSensitivity.section),
     carouselController,
     previewController,
     previewNavigationController
@@ -253,10 +253,7 @@
     `/projects/${TEMPLATE_DEMO_PROJECT_SLUG}/assets/`,
     "/projects/demo/assets/"
   ] as const;
-  const READ_ONLY_ASSET_PROJECTS = new Set<string>([
-    TEMPLATE_DEMO_PROJECT_SLUG,
-    "demo"
-  ]);
+  const READ_ONLY_ASSET_PROJECTS = new Set<string>([TEMPLATE_DEMO_PROJECT_SLUG, "demo"]);
   const USER_MANAGED_ASSET_ROOTS = USER_MANAGED_ASSET_ROOTS_WORKFLOW;
   const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 9;
   const MIN_BACKGROUND_CAROUSEL_SECONDS = 2;
@@ -452,6 +449,7 @@
     activeTemplateId = resolveTemplateId(activeProject?.meta.template);
     activeTemplateCapabilities = getTemplateCapabilities(activeTemplateId);
     activeTemplateStrategy = getTemplateStrategy(activeTemplateId);
+    projectScrollSensitivity = getProjectScrollSensitivityWorkflow(activeProject);
   }
   $: assetProjectReadOnly = isProtectedAssetProjectSlug(
     draft?.meta.slug || activeSlug || "nuevo-proyecto"

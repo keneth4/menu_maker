@@ -26,7 +26,11 @@ export const createEmptyProject = (
     currency: "MXN",
     currencyPosition: "left",
     backgroundCarouselSeconds: defaultBackgroundCarouselSeconds,
-    backgroundDisplayMode: "carousel"
+    backgroundDisplayMode: "carousel",
+    scrollSensitivity: {
+      item: 5,
+      section: 5
+    }
   },
   backgrounds: [],
   categories: [],

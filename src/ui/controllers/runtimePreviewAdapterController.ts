@@ -20,6 +20,7 @@ type RuntimePreviewAdapterDeps = {
   getCarouselActive: () => Record<string, number>;
   setCarouselActive: (next: Record<string, number>) => void;
   wrapCarouselIndex: (index: number, count: number) => number;
+  getJukeboxHorizontalSectionThresholdPx: () => number;
   carouselController: CarouselController;
   previewController: PreviewController;
   previewNavigationController: PreviewNavigationController;
@@ -45,7 +46,6 @@ export const createRuntimePreviewAdapterController = (
   const JUKEBOX_HORIZONTAL_WHEEL_MIN_PX = 0.1;
   const JUKEBOX_VERTICAL_DOMINANCE_RATIO = 2.2;
   const JUKEBOX_VERTICAL_WHEEL_MIN_PX = 10;
-  const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 300;
   const JUKEBOX_SECTION_WHEEL_COOLDOWN_MS = 240;
   const JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS = 240;
   let sectionWheelCarryByCategory: Record<string, number> = {};
@@ -148,7 +148,8 @@ export const createRuntimePreviewAdapterController = (
         ...sectionWheelCarryByCategory,
         [categoryId]: nextCarry
       };
-      if (Math.abs(nextCarry) < JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX) return true;
+      const sectionThresholdPx = Math.max(1, deps.getJukeboxHorizontalSectionThresholdPx());
+      if (Math.abs(nextCarry) < sectionThresholdPx) return true;
       const direction = nextCarry > 0 ? 1 : -1;
       const menuScroll = deps.queryMenuScroll();
       if (menuScroll) {
@@ -164,6 +165,7 @@ export const createRuntimePreviewAdapterController = (
             ...sectionWheelCarryByCategory,
             [categoryId]: 0
           };
+          deps.previewNavigationController.recoilSectionBoundary(direction);
           return true;
         }
       }

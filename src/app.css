@@ -840,6 +840,8 @@ body {
 }
 
 .menu-scroll {
+  --menu-recoil-x: 0px;
+  --menu-recoil-y: 0px;
   position: relative;
   z-index: 2;
   flex: 1;
@@ -851,6 +853,12 @@ body {
   scroll-behavior: smooth;
   scroll-padding-block: 20px;
   scrollbar-width: none;
+}
+
+.menu-scroll.menu-scroll--recoil {
+  transform: translate3d(var(--menu-recoil-x), var(--menu-recoil-y), 0);
+  transition: transform 180ms cubic-bezier(0.16, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .menu-scroll::-webkit-scrollbar {

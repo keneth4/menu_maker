@@ -24,6 +24,18 @@
     templateValue = target.value;
     await actions.setTemplate(templateValue);
   };
+
+  const handleItemSensitivityInput = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    actions.setItemScrollSensitivity(Number(target.value));
+  };
+
+  const handleSectionSensitivityInput = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    actions.setSectionScrollSensitivity(Number(target.value));
+  };
 </script>
 
 <div class="editor-toolbar">
@@ -223,5 +235,30 @@
         {/if}
       </label>
     {/if}
+    <div class="editor-field">
+      <span>{model.t("scrollSensitivityItem")}: {model.scrollSensitivity.item}</span>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        step="1"
+        class="editor-range"
+        value={model.scrollSensitivity.item}
+        on:input={handleItemSensitivityInput}
+      />
+    </div>
+    <div class="editor-field">
+      <span>{model.t("scrollSensitivitySection")}: {model.scrollSensitivity.section}</span>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        step="1"
+        class="editor-range"
+        value={model.scrollSensitivity.section}
+        on:input={handleSectionSensitivityInput}
+      />
+    </div>
+    <p class="text-[10px] text-emerald-200/80">{model.t("scrollSensitivityHint")}</p>
   </div>
 {/if}

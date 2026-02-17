@@ -14,6 +14,7 @@ export type CarouselControllerConfig = {
   wheelSettleMs: number;
   touchIntentThreshold: number;
   touchDeltaScale: number;
+  maxStepPerInput?: number;
 };
 
 type CreateCarouselControllerDeps = {
@@ -77,8 +78,19 @@ export const createCarouselController = (
   const applyDelta = (categoryId: string, count: number, delta: number) => {
     if (!delta || count <= 1) return;
     const config = deps.getConfig();
+    const maxStepPerInput =
+      typeof config.maxStepPerInput === "number" && config.maxStepPerInput > 0
+        ? config.maxStepPerInput
+        : null;
+    const cappedDelta = maxStepPerInput
+      ? Math.max(
+          -config.wheelStepThreshold * maxStepPerInput,
+          Math.min(config.wheelStepThreshold * maxStepPerInput, delta)
+        )
+      : delta;
+    if (!cappedDelta) return;
     const current = deps.getActive()[categoryId] ?? 0;
-    const next = deps.wrapIndex(current + delta / config.wheelStepThreshold, count);
+    const next = deps.wrapIndex(current + cappedDelta / config.wheelStepThreshold, count);
     deps.setActive({ ...deps.getActive(), [categoryId]: next });
     queueSnap(categoryId, count);
   };

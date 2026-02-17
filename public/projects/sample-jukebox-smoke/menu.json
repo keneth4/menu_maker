@@ -16,7 +16,11 @@
     "locales": ["es", "en"],
     "defaultLocale": "es",
     "currency": "USD",
-    "currencyPosition": "left"
+    "currencyPosition": "left",
+    "scrollSensitivity": {
+      "item": 5,
+      "section": 5
+    }
   },
   "backgrounds": [],
   "categories": [
@@ -94,4 +98,3 @@
     "map": {}
   }
 }
-

@@ -258,6 +258,35 @@ Tracking checklist:
   - `npm run build`: PASS
   - `npm test`: PASS
   - `npm run test:e2e`: BLOCKED (`playwright.config.ts` reports Node ESM gate failure in this host)
+
+### 2026-02-17
+- Implemented Phase 9.7 scroll/drag sensitivity feature with project-level controls:
+  - Added `meta.scrollSensitivity` (`item`, `section`) to `MenuProject` with backward-compatible normalization defaults (`{ item: 5, section: 5 }`).
+  - Added shared workflow `src/application/preview/scrollSensitivityWorkflow.ts` with canonical level clamp + multiplier formulas.
+  - Added `EditorDraftController` setters (`setItemScrollSensitivity`, `setSectionScrollSensitivity`) and wired Project tab UI sliders (`1..10`).
+  - Applied sensitivity to runtime preview behavior:
+    - item wheel/drag thresholds via `createCarouselController` config derivation,
+    - Jukebox section threshold via `runtimePreviewAdapterController` injected threshold.
+  - Applied export parity by injecting sensitivity-adjusted constants in `src/export-runtime/fragments/runtimeScriptComposer.ts`.
+  - Updated sample fixtures to explicit baseline defaults:
+    - `public/projects/sample-cafebrunch-menu/menu.json`
+    - `public/projects/sample-jukebox-smoke/menu.json`
+- Added/updated coverage:
+  - `src/application/preview/scrollSensitivityWorkflow.test.ts`
+  - `src/core/menu/normalization.test.ts`
+  - `src/ui/controllers/editorDraftController.test.ts`
+  - `src/ui/components/ProjectInfoPanel.test.ts`
+  - `src/ui/controllers/runtimePreviewAdapterController.test.ts`
+  - `src/export-runtime/buildRuntimeScript.test.ts`
+  - `tests/e2e/jukebox-scroll-parity.spec.ts` (sensitivity scenario).
+- Documentation sync:
+  - `docs/en/04-data-model-and-assets.md`
+  - `docs/es/04-modelo-de-datos-y-assets.md`
+- Gate status for this pass:
+  - `npm run build`: PASS
+  - `npm test`: PASS
+  - `npm run test:e2e`: FAIL (existing Jukebox reactivity e2e failures remain in container run)
+  - `npm run test:perf`: PASS
   - `npm run test:perf`: BLOCKED (same Playwright mismatch plus Docker socket permission in this host)
 - Extracted section-background derived-state workflows from `AppRuntime` into `src/application/preview/sectionBackgroundWorkflow.ts`:
   - section-mode background entry normalization,

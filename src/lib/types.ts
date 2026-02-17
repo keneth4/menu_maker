@@ -111,6 +111,10 @@ export type MenuProject = {
     currencyPosition?: "left" | "right";
     backgroundCarouselSeconds?: number;
     backgroundDisplayMode?: "carousel" | "section";
+    scrollSensitivity?: {
+      item?: number;
+      section?: number;
+    };
   };
   backgrounds: MediaAsset[];
   categories: MenuCategory[];

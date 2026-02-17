@@ -102,4 +102,36 @@ describe("createCarouselController", () => {
     expect(secondaryMovePreventDefault).not.toHaveBeenCalled();
     expect(active.featured).toBe(afterPrimary);
   });
+
+  it("limits wheel progression to one item per input at minimum sensitivity", () => {
+    let active: Record<string, number> = { featured: 0 };
+    const controller = createCarouselController({
+      getActive: () => active,
+      setActive: (next) => {
+        active = next;
+      },
+      getItemCount: () => 6,
+      getConfig: () => ({
+        primaryAxis: "vertical",
+        wheelStepThreshold: 100,
+        wheelSettleMs: 80,
+        touchIntentThreshold: 6,
+        touchDeltaScale: 0.5,
+        maxStepPerInput: 1
+      }),
+      normalizeWheelDelta: () => 450,
+      wrapIndex
+    });
+
+    controller.handleWheel(
+      "featured",
+      {
+        deltaX: 0,
+        deltaY: 500,
+        preventDefault: vi.fn()
+      } as unknown as WheelEvent
+    );
+
+    expect(active.featured).toBe(1);
+  });
 });

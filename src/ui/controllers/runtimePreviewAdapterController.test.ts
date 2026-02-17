@@ -61,6 +61,7 @@ describe("createRuntimePreviewAdapterController", () => {
         carouselActive = next;
       },
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -81,6 +82,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection: vi.fn(),
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }
@@ -107,6 +109,7 @@ describe("createRuntimePreviewAdapterController", () => {
       getCarouselActive: () => ({}),
       setCarouselActive: () => undefined,
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -127,6 +130,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection,
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }
@@ -151,6 +155,68 @@ describe("createRuntimePreviewAdapterController", () => {
     expect(handleWheel).not.toHaveBeenCalled();
   });
 
+  it("uses injected section threshold when routing desktop jukebox horizontal wheel", () => {
+    const shiftSection = vi.fn();
+    const controller = createRuntimePreviewAdapterController({
+      tick: async () => undefined,
+      queryMenuScroll: () => null,
+      getActiveTemplateCapabilities: () => ({
+        sectionSnapAxis: "horizontal",
+        sectionSnapDelayMs: 120,
+        carousel: { primaryAxis: "vertical" }
+      }),
+      getDeviceMode: () => "desktop",
+      getActiveProject: () => buildProject(),
+      getCarouselActive: () => ({}),
+      setCarouselActive: () => undefined,
+      wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 500,
+      carouselController: {
+        clear: vi.fn(),
+        shift: vi.fn(),
+        handleWheel: vi.fn(),
+        handleTouchStart: vi.fn(),
+        handleTouchMove: vi.fn(),
+        handleTouchEnd: vi.fn()
+      },
+      previewController: {
+        syncFocus: vi.fn(),
+        snapVertical: vi.fn(),
+        snapHorizontal: vi.fn(),
+        handleMenuScroll: vi.fn(),
+        destroy: vi.fn()
+      },
+      previewNavigationController: {
+        applySectionFocus: vi.fn(),
+        syncSectionBackgroundByIndex: vi.fn(),
+        resolveHorizontalSectionIndex: vi.fn(() => 0),
+        shiftSection,
+        recoilSectionBoundary: vi.fn(),
+        getActiveSectionCategoryId: vi.fn(() => "c1"),
+        handleDesktopPreviewKeydown: vi.fn()
+      }
+    });
+
+    controller.handleCarouselWheel(
+      "c1",
+      {
+        deltaX: 170,
+        deltaY: 6,
+        preventDefault: vi.fn()
+      } as unknown as WheelEvent
+    );
+    controller.handleCarouselWheel(
+      "c1",
+      {
+        deltaX: 160,
+        deltaY: 5,
+        preventDefault: vi.fn()
+      } as unknown as WheelEvent
+    );
+
+    expect(shiftSection).not.toHaveBeenCalled();
+  });
+
   it("routes mixed near-threshold deltas to horizontal section scrolling", () => {
     const shiftSection = vi.fn();
     const handleWheel = vi.fn();
@@ -167,6 +233,7 @@ describe("createRuntimePreviewAdapterController", () => {
       getCarouselActive: () => ({}),
       setCarouselActive: () => undefined,
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -187,6 +254,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection,
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }
@@ -228,6 +296,7 @@ describe("createRuntimePreviewAdapterController", () => {
       getCarouselActive: () => ({}),
       setCarouselActive: () => undefined,
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -248,6 +317,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection,
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }
@@ -295,6 +365,7 @@ describe("createRuntimePreviewAdapterController", () => {
       getCarouselActive: () => ({}),
       setCarouselActive: () => undefined,
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -315,6 +386,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection,
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }
@@ -372,6 +444,7 @@ describe("createRuntimePreviewAdapterController", () => {
       getCarouselActive: () => ({}),
       setCarouselActive: () => undefined,
       wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      getJukeboxHorizontalSectionThresholdPx: () => 300,
       carouselController: {
         clear: vi.fn(),
         shift: vi.fn(),
@@ -392,6 +465,7 @@ describe("createRuntimePreviewAdapterController", () => {
         syncSectionBackgroundByIndex: vi.fn(),
         resolveHorizontalSectionIndex: vi.fn(() => 0),
         shiftSection,
+        recoilSectionBoundary: vi.fn(),
         getActiveSectionCategoryId: vi.fn(() => "c1"),
         handleDesktopPreviewKeydown: vi.fn()
       }

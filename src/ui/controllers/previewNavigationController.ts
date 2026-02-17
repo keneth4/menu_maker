@@ -3,7 +3,8 @@ import {
   centerSection as centerSectionWorkflow,
   centerSectionHorizontally as centerSectionHorizontallyWorkflow,
   getClosestSectionIndex as getClosestSectionIndexWorkflow,
-  isKeyboardEditableTarget as isKeyboardEditableTargetWorkflow
+  isKeyboardEditableTarget as isKeyboardEditableTargetWorkflow,
+  triggerSectionBoundaryRecoil as triggerSectionBoundaryRecoilWorkflow
 } from "../../application/preview/navigationWorkflow";
 import type { MenuProject } from "../../lib/types";
 
@@ -32,6 +33,7 @@ export type PreviewNavigationController = {
   applySectionFocus: (container: HTMLElement) => void;
   syncSectionBackgroundByIndex: (index: number) => void;
   resolveHorizontalSectionIndex: (container: HTMLElement) => number;
+  recoilSectionBoundary: (direction: number) => void;
   shiftSection: (direction: number) => void;
   getActiveSectionCategoryId: () => string | null;
   handleDesktopPreviewKeydown: (event: KeyboardEvent) => void;
@@ -101,6 +103,13 @@ export const createPreviewNavigationController = (
     return closestIndex;
   };
 
+  const recoilSectionBoundary = (direction: number) => {
+    const container = queryMenuScrollContainer();
+    if (!container) return;
+    const capabilities = deps.getTemplateCapabilities();
+    triggerSectionBoundaryRecoilWorkflow(container, capabilities.sectionSnapAxis, direction);
+  };
+
   const shiftSection = (direction: number) => {
     const container = queryMenuScrollContainer();
     if (!container) return;
@@ -113,7 +122,10 @@ export const createPreviewNavigationController = (
         : getClosestSectionIndexWorkflow(container);
     if (current < 0) return;
     const next = Math.min(sections.length - 1, Math.max(0, current + direction));
-    if (next === current) return;
+    if (next === current) {
+      recoilSectionBoundary(direction);
+      return;
+    }
     if (capabilities.sectionSnapAxis === "horizontal") {
       centerSectionHorizontallyWorkflow(container, next, "smooth");
       syncSectionBackgroundByIndex(next);
@@ -207,6 +219,7 @@ export const createPreviewNavigationController = (
     applySectionFocus,
     syncSectionBackgroundByIndex,
     resolveHorizontalSectionIndex,
+    recoilSectionBoundary,
     shiftSection,
     getActiveSectionCategoryId,
     handleDesktopPreviewKeydown

@@ -208,6 +208,10 @@ export type ProjectInfoPanelModel = {
   workflowProgress: number;
   fontChoice: string;
   fontAssetOptions: Array<{ value: string; label: string }>;
+  scrollSensitivity: {
+    item: number;
+    section: number;
+  };
 };
 
 export type ProjectInfoPanelActions = {
@@ -221,6 +225,8 @@ export type ProjectInfoPanelActions = {
   toggleCurrencyPosition: () => void;
   handleFontSelect: (event: Event) => void;
   handleCustomFontSourceInput: (event: Event) => void;
+  setItemScrollSensitivity: (level: number) => void;
+  setSectionScrollSensitivity: (level: number) => void;
 };
 
 export type PreviewBackgroundModel = {

@@ -266,4 +266,17 @@ describe("editorDraftController", () => {
     expect(getState().draft?.categories[0]?.items.length).toBe(2);
     expect(touchDraft).toHaveBeenCalled();
   });
+
+  it("updates project scroll sensitivity levels with clamping", () => {
+    const { controller, getState, touchDraft } = createHarness();
+
+    controller.setItemScrollSensitivity(10);
+    controller.setSectionScrollSensitivity(0);
+
+    expect(getState().draft?.meta.scrollSensitivity).toEqual({
+      item: 10,
+      section: 1
+    });
+    expect(touchDraft).toHaveBeenCalled();
+  });
 });

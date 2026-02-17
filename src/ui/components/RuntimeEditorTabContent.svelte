@@ -120,7 +120,11 @@
       workflowStep,
       workflowProgress,
       fontChoice,
-      fontAssetOptions
+      fontAssetOptions,
+      scrollSensitivity: {
+        item: draft?.meta.scrollSensitivity?.item ?? 5,
+        section: draft?.meta.scrollSensitivity?.section ?? 5
+      }
     }}
     actions={{
       createNewProject: projectWorkflowController.createNewProject,
@@ -133,7 +137,9 @@
       handleCurrencyChange: editorDraftController.handleCurrencyChange,
       toggleCurrencyPosition: editorDraftController.toggleCurrencyPosition,
       handleFontSelect: editorDraftController.handleFontSelect,
-      handleCustomFontSourceInput: editorDraftController.handleCustomFontSourceInput
+      handleCustomFontSourceInput: editorDraftController.handleCustomFontSourceInput,
+      setItemScrollSensitivity: editorDraftController.setItemScrollSensitivity,
+      setSectionScrollSensitivity: editorDraftController.setSectionScrollSensitivity
     }}
   />
 {:else if editorTab === "assets"}
