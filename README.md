@@ -215,24 +215,30 @@ Export rules:
 - export diagnostics include deterministic manifest + budget report data,
 - output expects serving over local HTTP (not direct `file://` open).
 
-### Deploy exported sample sites to GitHub Pages
-This repository includes `.github/workflows/deploy-exported-site.yml` to publish all client demos under `exported-sites/`.
+### Deploy exported sample sites to `keneth4.github.io`
+This repository includes `.github/workflows/deploy-exported-site.yml` to publish all client demos from `exported-sites/` into `keneth4/keneth4.github.io` (your user site repo).
 
+One-time setup:
+1. In `keneth4/keneth4.github.io`, set GitHub Pages source to `Deploy from a branch`, branch `main`, folder `/ (root)`.
+2. Create a Personal Access Token with write access to `keneth4/keneth4.github.io`.
+3. Add that token as repository secret `PAGES_DEPLOY_TOKEN` in this source repo (`menu_maker`).
+
+Daily flow:
 1. Export from the app (`Export site`) to get `<slug>-export.zip`.
 2. Extract each sample into its own tracked folder, for example:
    - `exported-sites/client-demo-1/`
    - `exported-sites/client-demo-2/`
-3. Commit and push your changes.
-4. GitHub Actions automatically runs `Deploy Exported Sites Showcase` on pushes that modify `exported-sites/**`.
-5. Share your Pages root URL; it includes a generated index page linking every sample folder.
+3. Commit and push your changes to this repo.
+4. GitHub Actions runs `Publish Exported Sites Showcase` and syncs `exported-sites/` into `keneth4.github.io`.
+5. Share `https://keneth4.github.io/` (a generated index page links every sample folder).
 
 Manual trigger:
-- You can also run `Deploy Exported Sites Showcase` from `Actions` -> `Run workflow` to republish without additional content changes.
+- You can run `Publish Exported Sites Showcase` from `Actions` -> `Run workflow` to republish on demand.
 
 Notes:
-- Exported shell files are relative (`index.html`, `styles.css`, `app.js`, `menu.json`), which works correctly on GitHub Pages subpaths.
-- The workflow regenerates `exported-sites/index.html` on each deploy so the showcase list stays current.
-- Keep only client-ready exported files in each sample folder (project-source zips are not required in `exported-sites/`).
+- Exported shell files are relative (`index.html`, `styles.css`, `app.js`, `menu.json`), so they work correctly in sample subfolders.
+- The workflow regenerates `exported-sites/index.html` on each publish to keep the showcase list current.
+- `CNAME` in the target repo is preserved by the sync step if you configure a custom domain.
 
 ## 8) Import Rules and Constraints
 

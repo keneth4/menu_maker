@@ -1,4 +1,4 @@
-name: Deploy Exported Sites Showcase
+name: Publish Exported Sites Showcase
 
 on:
   push:
@@ -11,34 +11,32 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "publish-user-site"
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      SOURCE_DIR: exported-sites
+      TARGET_REPO: keneth4/keneth4.github.io
+      TARGET_BRANCH: main
     steps:
-      - name: Checkout
+      - name: Checkout source repo
         uses: actions/checkout@v4
 
       - name: Validate showcase folder
         run: |
-          ROOT="exported-sites"
-          if [ ! -d "$ROOT" ]; then
-            echo "Showcase folder does not exist: $ROOT" >&2
+          if [ ! -d "${SOURCE_DIR}" ]; then
+            echo "Showcase folder does not exist: ${SOURCE_DIR}" >&2
             exit 1
           fi
 
       - name: Build showcase index
         run: |
-          ROOT="exported-sites"
+          ROOT="${SOURCE_DIR}"
           INDEX_PATH="${ROOT}/index.html"
           mapfile -t SITE_INDEXES < <(find "$ROOT" -mindepth 2 -maxdepth 2 -type f -name "index.html" | sort)
 
@@ -80,14 +78,35 @@ jobs:
             echo "</html>"
           } > "$INDEX_PATH"
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: Sync showcase to user site repo
+        env:
+          PAGES_DEPLOY_TOKEN: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "${PAGES_DEPLOY_TOKEN}" ]; then
+            echo "Missing required secret: PAGES_DEPLOY_TOKEN" >&2
+            exit 1
+          fi
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: exported-sites
+          TARGET_DIR="${RUNNER_TEMP}/user-site"
+          git clone --depth 1 --branch "${TARGET_BRANCH}" \
+            "https://x-access-token:${PAGES_DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" \
+            "${TARGET_DIR}"
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          rsync -av --delete \
+            --exclude ".git/" \
+            --exclude "CNAME" \
+            "${SOURCE_DIR}/" "${TARGET_DIR}/"
+
+          touch "${TARGET_DIR}/.nojekyll"
+
+          cd "${TARGET_DIR}"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No publish changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish demos from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          git push origin "${TARGET_BRANCH}"
