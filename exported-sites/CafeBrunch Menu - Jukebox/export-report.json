@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "slug": "cafebrunch-menu",
-  "generatedAt": "2026-02-17T06:47:02.863Z",
+  "generatedAt": "2026-02-17T07:04:46.753Z",
   "totals": {
     "files": 36,
     "assetFiles": 28,
     "shellFiles": 8,
-    "totalBytes": 156670461,
+    "totalBytes": 156677381,
     "assetBytes": 156473784,
-    "shellBytes": 196677,
+    "shellBytes": 203597,
     "firstViewAssetFiles": 4,
     "firstViewImageBytes": 10573697,
     "missingAssets": 0
@@ -29,7 +29,7 @@
         "key": "jsGzipBytes",
         "label": "Export JS (gzip)",
         "threshold": 97280,
-        "actual": 28164,
+        "actual": 29557,
         "status": "pass"
       },
       {
