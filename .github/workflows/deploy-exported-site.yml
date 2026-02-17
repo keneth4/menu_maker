@@ -1,13 +1,13 @@
-name: Deploy Exported Site
+name: Deploy Exported Sites Showcase
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - "exported-sites/**"
+      - ".github/workflows/deploy-exported-site.yml"
   workflow_dispatch:
-    inputs:
-      site_path:
-        description: "Path to extracted export folder (must contain index.html)"
-        required: true
-        default: "exported-sites/current"
-        type: string
 
 permissions:
   contents: read
@@ -28,17 +28,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate site folder
+      - name: Validate showcase folder
         run: |
-          SITE_PATH="${{ github.event.inputs.site_path }}"
-          if [ ! -d "$SITE_PATH" ]; then
-            echo "Site path does not exist: $SITE_PATH" >&2
+          ROOT="exported-sites"
+          if [ ! -d "$ROOT" ]; then
+            echo "Showcase folder does not exist: $ROOT" >&2
             exit 1
           fi
-          if [ ! -f "$SITE_PATH/index.html" ]; then
-            echo "Site path must contain index.html: $SITE_PATH/index.html" >&2
-            exit 1
-          fi
+
+      - name: Build showcase index
+        run: |
+          ROOT="exported-sites"
+          INDEX_PATH="${ROOT}/index.html"
+          mapfile -t SITE_INDEXES < <(find "$ROOT" -mindepth 2 -maxdepth 2 -type f -name "index.html" | sort)
+
+          {
+            echo "<!doctype html>"
+            echo "<html lang=\"en\">"
+            echo "  <head>"
+            echo "    <meta charset=\"UTF-8\" />"
+            echo "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />"
+            echo "    <title>MenuMaker Client Demos</title>"
+            echo "    <style>"
+            echo "      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; background: #f4f6f8; color: #1f2937; }"
+            echo "      main { max-width: 900px; margin: 0 auto; padding: 2.5rem 1rem 3rem; }"
+            echo "      h1 { margin: 0 0 0.5rem; font-size: 2rem; }"
+            echo "      p { margin: 0 0 1.5rem; color: #4b5563; }"
+            echo "      ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }"
+            echo "      a { display: block; padding: 0.85rem 1rem; border-radius: 0.65rem; background: #ffffff; border: 1px solid #d1d5db; text-decoration: none; color: #111827; font-weight: 600; }"
+            echo "      a:hover { border-color: #111827; }"
+            echo "      .empty { padding: 0.85rem 1rem; border-radius: 0.65rem; background: #ffffff; border: 1px dashed #d1d5db; color: #6b7280; }"
+            echo "    </style>"
+            echo "  </head>"
+            echo "  <body>"
+            echo "    <main>"
+            echo "      <h1>MenuMaker Client Demos</h1>"
+            echo "      <p>Published samples from <code>exported-sites/</code>.</p>"
+            echo "      <ul>"
+            if [ "${#SITE_INDEXES[@]}" -eq 0 ]; then
+              echo "        <li class=\"empty\">No sample sites found yet.</li>"
+            else
+              for site_index in "${SITE_INDEXES[@]}"; do
+                site_dir="$(dirname "$site_index")"
+                site_slug="${site_dir#${ROOT}/}"
+                printf "        <li><a href=\"./%s/\">%s</a></li>\n" "$site_slug" "$site_slug"
+              done
+            fi
+            echo "      </ul>"
+            echo "    </main>"
+            echo "  </body>"
+            echo "</html>"
+          } > "$INDEX_PATH"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -46,7 +86,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ github.event.inputs.site_path }}
+          path: exported-sites
 
       - name: Deploy to GitHub Pages
         id: deployment

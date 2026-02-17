@@ -215,20 +215,24 @@ Export rules:
 - export diagnostics include deterministic manifest + budget report data,
 - output expects serving over local HTTP (not direct `file://` open).
 
-### Deploy an exported site to GitHub Pages
-This repository includes `.github/workflows/deploy-exported-site.yml` to publish a chosen exported site folder.
+### Deploy exported sample sites to GitHub Pages
+This repository includes `.github/workflows/deploy-exported-site.yml` to publish all client demos under `exported-sites/`.
 
 1. Export from the app (`Export site`) to get `<slug>-export.zip`.
-2. Extract that zip into a tracked repo folder, for example:
+2. Extract each sample into its own tracked folder, for example:
    - `exported-sites/client-demo-1/`
-3. Commit and push the extracted files to your GitHub repository.
-4. In GitHub, open `Actions` -> `Deploy Exported Site` -> `Run workflow`.
-5. Set `site_path` to the folder you extracted (example: `exported-sites/client-demo-1`) and run it.
-6. Share the Pages URL produced by the workflow (also visible under repo `Settings` -> `Pages`).
+   - `exported-sites/client-demo-2/`
+3. Commit and push your changes.
+4. GitHub Actions automatically runs `Deploy Exported Sites Showcase` on pushes that modify `exported-sites/**`.
+5. Share your Pages root URL; it includes a generated index page linking every sample folder.
+
+Manual trigger:
+- You can also run `Deploy Exported Sites Showcase` from `Actions` -> `Run workflow` to republish without additional content changes.
 
 Notes:
-- Exported shell files are relative (`index.html`, `styles.css`, `app.js`, `menu.json`), so this works on project Pages URLs.
-- Keep only the client-ready exported files in the selected folder (no project-source zip needed there).
+- Exported shell files are relative (`index.html`, `styles.css`, `app.js`, `menu.json`), which works correctly on GitHub Pages subpaths.
+- The workflow regenerates `exported-sites/index.html` on each deploy so the showcase list stays current.
+- Keep only client-ready exported files in each sample folder (project-source zips are not required in `exported-sites/`).
 
 ## 8) Import Rules and Constraints
 
