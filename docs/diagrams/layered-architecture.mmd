@@ -1,0 +1,35 @@
+flowchart TB
+  subgraph UI["UI Layer"]
+    Components["ui/components"]
+    Controllers["ui/controllers"]
+    Stores["ui/stores + ui/contracts"]
+  end
+
+  subgraph APP["Application Layer"]
+    Workflows["application/* workflows"]
+  end
+
+  subgraph CORE["Core Layer"]
+    Domain["core/menu, core/templates, core/media"]
+  end
+
+  subgraph INFRA["Infrastructure Layer"]
+    Bridge["infrastructure/bridge"]
+    Filesystem["infrastructure/filesystem"]
+  end
+
+  subgraph EXPORT["Export Runtime"]
+    RuntimeBuilder["export-runtime/buildRuntimeScript + fragments"]
+  end
+
+  Components --> Controllers
+  Controllers --> Stores
+  Controllers --> Workflows
+  Workflows --> Domain
+  Workflows --> Bridge
+  Workflows --> Filesystem
+  Workflows --> RuntimeBuilder
+
+  Domain -."forbidden".-> Components
+  Bridge -."forbidden".-> Components
+  RuntimeBuilder -."forbidden".-> Controllers

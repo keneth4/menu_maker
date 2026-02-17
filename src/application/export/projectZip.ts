@@ -11,6 +11,16 @@ export type ProjectAssetPair = {
   zipPath: string;
 };
 
+const isExternalOrInlineSource = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("http://") ||
+    normalized.startsWith("https://") ||
+    normalized.startsWith("data:") ||
+    normalized.startsWith("blob:")
+  );
+};
+
 const collectFontConfigSource = (
   assets: Set<string>,
   fontConfig?: { family?: string; source?: string }
@@ -27,6 +37,8 @@ export const collectProjectAssetPaths = (
     assets.add(project.meta.fontSource);
   }
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) {
@@ -44,7 +56,7 @@ export const collectProjectAssetPaths = (
   });
   return Array.from(assets)
     .map((path) => normalizePath(path))
-    .filter((path) => path && !path.startsWith("http"));
+    .filter((path) => path && !isExternalOrInlineSource(path));
 };
 
 const collectDerivedVariantPaths = (assets: Set<string>, value?: DerivedMediaVariant) => {
@@ -73,7 +85,7 @@ const normalizeCollectedAssetPaths = (
 ) =>
   Array.from(assets)
     .map((path) => normalizePath(path))
-    .filter((path) => path && !path.startsWith("http"));
+    .filter((path) => path && !isExternalOrInlineSource(path));
 
 export const collectExportProjectAssetPaths = (
   project: MenuProject,
@@ -82,6 +94,8 @@ export const collectExportProjectAssetPaths = (
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
@@ -129,6 +143,8 @@ export const collectSaveProjectAssetPaths = (
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
@@ -213,6 +229,12 @@ export const rewriteProjectForSaveZip = (
     exportProject.meta.fontRoles = {
       ...(exportProject.meta.fontRoles.identity
         ? { identity: rewriteFontConfig(exportProject.meta.fontRoles.identity) }
+        : {}),
+      ...(exportProject.meta.fontRoles.restaurant
+        ? { restaurant: rewriteFontConfig(exportProject.meta.fontRoles.restaurant) }
+        : {}),
+      ...(exportProject.meta.fontRoles.title
+        ? { title: rewriteFontConfig(exportProject.meta.fontRoles.title) }
         : {}),
       ...(exportProject.meta.fontRoles.section
         ? { section: rewriteFontConfig(exportProject.meta.fontRoles.section) }

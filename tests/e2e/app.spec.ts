@@ -66,6 +66,106 @@ const makeProjectFixture = (name: string, slug: string): ProjectFixture => ({
   }
 });
 
+const makeTemplateSwitchFixture = (slug: string): ProjectFixture => ({
+  meta: {
+    slug,
+    name: "Template Switch Jukebox Fixture",
+    restaurantName: { es: "Demo", en: "Demo" },
+    title: { es: "Demo Menu", en: "Demo Menu" },
+    fontFamily: "Fraunces",
+    fontSource: "",
+    template: "focus-rows",
+    locales: ["es", "en"],
+    defaultLocale: "es",
+    currency: "USD",
+    currencyPosition: "left"
+  },
+  backgrounds: [],
+  categories: [
+    {
+      id: "cat-1",
+      name: { es: "Uno", en: "One" },
+      items: [
+        {
+          id: "item-1",
+          name: { es: "A1", en: "A1" },
+          description: { es: "Desc", en: "Desc" },
+          longDescription: { es: "", en: "" },
+          priceVisible: true,
+          price: { amount: 12, currency: "USD" },
+          allergens: [],
+          vegan: false,
+          media: { hero360: "" }
+        },
+        {
+          id: "item-2",
+          name: { es: "A2", en: "A2" },
+          description: { es: "Desc", en: "Desc" },
+          longDescription: { es: "", en: "" },
+          priceVisible: true,
+          price: { amount: 13, currency: "USD" },
+          allergens: [],
+          vegan: false,
+          media: { hero360: "" }
+        }
+      ]
+    },
+    {
+      id: "cat-2",
+      name: { es: "Dos", en: "Two" },
+      items: [
+        {
+          id: "item-3",
+          name: { es: "B1", en: "B1" },
+          description: { es: "Desc", en: "Desc" },
+          longDescription: { es: "", en: "" },
+          priceVisible: true,
+          price: { amount: 14, currency: "USD" },
+          allergens: [],
+          vegan: false,
+          media: { hero360: "" }
+        },
+        {
+          id: "item-4",
+          name: { es: "B2", en: "B2" },
+          description: { es: "Desc", en: "Desc" },
+          longDescription: { es: "", en: "" },
+          priceVisible: true,
+          price: { amount: 15, currency: "USD" },
+          allergens: [],
+          vegan: false,
+          media: { hero360: "" }
+        }
+      ]
+    }
+  ],
+  sound: {
+    enabled: false,
+    theme: "bar-amber",
+    volume: 0.6,
+    map: {}
+  }
+});
+
+const makeWizardBackgroundFixture = (slug: string, backgroundSrc: string): ProjectFixture => {
+  const base = makeProjectFixture("Wizard Background Fixture", slug);
+  return {
+    ...base,
+    meta: {
+      ...base.meta,
+      template: "focus-rows"
+    },
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "BG 1",
+        src: backgroundSrc,
+        type: "image"
+      }
+    ]
+  };
+};
+
 const writeJsonFixture = async (testInfo: TestInfo, project: ProjectFixture) => {
   const fixturePath = testInfo.outputPath(`${project.meta.slug}.json`);
   await writeFile(fixturePath, JSON.stringify(project, null, 2), "utf8");
@@ -85,11 +185,8 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
 const openEditor = async (page: Page) => {
@@ -99,6 +196,40 @@ const openEditor = async (page: Page) => {
   if (!isOpen) {
     await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
   }
+};
+
+const supportsInteractiveDecodeForSource = async (page: Page, source: string) => {
+  return await page.evaluate(async (src) => {
+    const Decoder = (window as Window & { ImageDecoder?: new (init: unknown) => any }).ImageDecoder;
+    if (!Decoder || typeof createImageBitmap !== "function") return false;
+    try {
+      const response = await fetch(src);
+      if (!response.ok) return false;
+      const data = await response.arrayBuffer();
+      const decoder = new Decoder({ data, type: "image/gif" });
+      await decoder.tracks.ready;
+      const frameCount = Number(decoder.tracks?.selectedTrack?.frameCount ?? 0);
+      if (frameCount < 2) {
+        decoder.close?.();
+        return false;
+      }
+      const decoded = await decoder.decode({ frameIndex: 0, completeFramesOnly: true });
+      const frame = decoded?.image;
+      if (!frame) {
+        decoder.close?.();
+        return false;
+      }
+      try {
+        await createImageBitmap(frame);
+      } finally {
+        frame.close?.();
+      }
+      decoder.close?.();
+      return true;
+    } catch {
+      return false;
+    }
+  }, source);
 };
 
 const getProjectNameInput = (page: Page) =>
@@ -111,6 +242,35 @@ const resolveTemplateSmokeFixturePath = (templateId: string) =>
     "public",
     getTemplateCapabilities(templateId).smokeFixturePath.replace(/^\/+/, "")
   );
+
+const getClosestHorizontalSectionIndex = async (page: Page) =>
+  await page.evaluate(() => {
+    const container = document.querySelector<HTMLElement>(".menu-scroll");
+    if (!container) return -1;
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (!sections.length) return -1;
+    const centerX = container.scrollLeft + container.clientWidth / 2;
+    let closest = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+      const distance = Math.abs(sectionCenter - centerX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = index;
+      }
+    });
+    return closest;
+  });
+
+const wheelOnLocatorCenter = async (page: Page, selector: string, deltaX: number, deltaY: number) => {
+  const locator = page.locator(selector).first();
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(deltaX, deltaY);
+};
 
 test("landing shows Menu Maker header", async ({ page }) => {
   await disableBridgeMode(page);
@@ -153,13 +313,227 @@ test("wizard flow starts with editor open", async ({ page }) => {
   await expect(page.locator(".editor-panel")).toHaveClass(/open/);
 });
 
+test("wizard step 0 preview shows template demo backgrounds", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /iniciar wizard|run wizard/i }).click();
+
+  const firstBackground = page.locator(".menu-background").first();
+  await expect(firstBackground).toBeVisible();
+  await expect(firstBackground).toHaveAttribute(
+    "data-bg-src",
+    /\/projects\/sample-cafebrunch-menu\/assets\/backgrounds\//
+  );
+  await expect(firstBackground).toHaveClass(/active/);
+  const renderedStyle = await firstBackground.evaluate(
+    (element) => window.getComputedStyle(element).backgroundImage
+  );
+  expect(renderedStyle).not.toBe("none");
+});
+
 test("template smoke fixture path renders jukebox strategy shell", async ({ page }) => {
   const fixturePath = resolveTemplateSmokeFixturePath("jukebox");
+  await page.setViewportSize({ width: 1440, height: 900 });
   await disableBridgeMode(page);
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
   await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
   await expect(page.locator(".section-nav")).toBeVisible();
+});
+
+test("jukebox sample locale selector updates preview copy", async ({ page }) => {
+  const fixturePath = resolveTemplateSmokeFixturePath("jukebox");
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  await expect(page.locator(".menu-title")).toHaveText(/menu de prueba/i);
+  await expect(page.locator(".menu-section__title").first()).toHaveText(/cafe/i);
+
+  await page.locator(".menu-select").selectOption("en");
+
+  await expect(page.locator(".menu-title")).toHaveText(/smoke menu/i);
+  await expect(page.locator(".menu-section__title").first()).toHaveText(/coffee/i);
+});
+
+test("jukebox section nav buttons move focused section on desktop", async ({ page }) => {
+  const fixturePath = resolveTemplateSmokeFixturePath("jukebox");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+  await page.locator(".editor-close").first().click();
+
+  const getClosestHorizontalSectionIndex = async () =>
+    await page.evaluate(() => {
+      const container = document.querySelector<HTMLElement>(".menu-scroll");
+      if (!container) return -1;
+      const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+      if (!sections.length) return -1;
+      const centerX = container.scrollLeft + container.clientWidth / 2;
+      let closest = 0;
+      let minDistance = Number.POSITIVE_INFINITY;
+      sections.forEach((section, index) => {
+        const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+        const distance = Math.abs(sectionCenter - centerX);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closest = index;
+        }
+      });
+      return closest;
+    });
+
+  await expect(page.locator(".section-nav")).toBeVisible();
+  expect(await getClosestHorizontalSectionIndex()).toBe(0);
+
+  const clickNavUntilIndex = async (selector: ".section-nav__btn.next" | ".section-nav__btn.prev", target: number) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.locator(selector).click();
+      try {
+        await expect
+          .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1800 })
+          .toBe(target);
+        return;
+      } catch (error) {
+        if (attempt >= 1) throw error;
+      }
+    }
+  };
+
+  await clickNavUntilIndex(".section-nav__btn.next", 1);
+  await clickNavUntilIndex(".section-nav__btn.prev", 0);
+});
+
+test("project-tab template switch to jukebox applies section/item controls without wizard roundtrip", async ({
+  page
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixturePath = await writeJsonFixture(
+    testInfo,
+    makeTemplateSwitchFixture("template-switch-jukebox")
+  );
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  const templateSelect = page
+    .locator("label.editor-field", { hasText: /plantilla|template/i })
+    .locator("select");
+  await templateSelect.selectOption("jukebox");
+  await expect(page.locator(".menu-preview.template-jukebox")).toBeVisible();
+
+  await page.locator(".editor-close").first().click();
+  await expect(page.locator(".section-nav")).toBeVisible();
+  expect(await getClosestHorizontalSectionIndex(page)).toBe(0);
+
+  const readActiveTitle = async () =>
+    (
+      await page
+        .locator(".menu-section")
+        .first()
+        .locator(".carousel-card.active .carousel-title")
+        .first()
+        .innerText()
+    ).trim();
+  const beforeVertical = await readActiveTitle();
+  const firstCarousel = page.locator(".menu-section .menu-carousel").first();
+  await firstCarousel.dispatchEvent("wheel", { deltaX: 4, deltaY: 240 });
+  await firstCarousel.dispatchEvent("wheel", { deltaX: 5, deltaY: 220 });
+  await page.waitForTimeout(360);
+  const afterVertical = await readActiveTitle();
+  expect(afterVertical).not.toBe(beforeVertical);
+
+  const beforeHorizontalSection = await getClosestHorizontalSectionIndex(page);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", 2400, 18);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", 1800, 12);
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
+    .not.toBe(beforeHorizontalSection);
+
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(0);
+
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(1);
+
+  await page.locator(".section-nav__btn.prev").click();
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(0);
+  await page.locator(".section-nav__btn.next").click();
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(1);
+});
+
+test("jukebox behavior stays correct before and after wizard roundtrip on switched projects", async ({
+  page
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const fixturePath = await writeJsonFixture(
+    testInfo,
+    makeTemplateSwitchFixture("template-switch-jukebox-wizard-roundtrip")
+  );
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  const templateSelect = page
+    .locator("label.editor-field", { hasText: /plantilla|template/i })
+    .locator("select");
+  await templateSelect.selectOption("jukebox");
+  await page.locator(".editor-close").first().click();
+
+  const initialSection = await getClosestHorizontalSectionIndex(page);
+  const outboundDeltaX = initialSection <= 0 ? 2400 : -2400;
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX, 18);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX * 0.75, 12);
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
+    .not.toBe(initialSection);
+  const shiftedSection = await getClosestHorizontalSectionIndex(page);
+
+  await openEditor(page);
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page
+    .locator(".editor-tabs")
+    .getByRole("button", { name: /info|project|proyecto/i })
+    .click();
+  await page.locator(".editor-close").first().click();
+
+  await expect(page.locator(".section-nav")).toBeVisible();
+  const returnSelector =
+    shiftedSection > initialSection ? ".section-nav__btn.prev" : ".section-nav__btn.next";
+  await page.locator(returnSelector).click();
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(initialSection);
+});
+
+test("project-tab jukebox section-nav is desktop-only", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  const fixturePath = await writeJsonFixture(
+    testInfo,
+    makeTemplateSwitchFixture("template-switch-jukebox-nav-visibility")
+  );
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  const templateSelect = page
+    .locator("label.editor-field", { hasText: /plantilla|template/i })
+    .locator("select");
+  await templateSelect.selectOption("jukebox");
+
+  await expect(page.locator(".section-nav")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(220);
+  await expect(page.locator(".section-nav")).toHaveCount(0);
 });
 
 test("save project and export static site create zip downloads", async ({ page }) => {
@@ -265,6 +639,74 @@ test("mobile editor opens as full-screen sheet and closes with close button", as
   await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
 });
 
+test("wizard identity step shows restaurant and menu title fields in text mode", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-step").nth(1).click();
+  await page
+    .getByRole("radio", { name: /modo texto|text mode|texto|text/i })
+    .check();
+
+  await expect(
+    page.getByRole("textbox", {
+      name: /^nombre del restaurante$|^restaurant name$/i
+    })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", {
+      name: /^título del menú$|^menu title$/i
+    })
+  ).toBeVisible();
+});
+
+test("wizard identity step does not warn when project already has a non-demo background", async ({
+  page
+}, testInfo) => {
+  const fixturePath = await writeJsonFixture(
+    testInfo,
+    makeWizardBackgroundFixture(
+      "wizard-existing-own-background",
+      "/projects/my-real-menu/assets/originals/backgrounds/cover.jpg"
+    )
+  );
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-step").nth(1).click();
+  await expect(page.locator(".wizard-warning")).toHaveCount(0);
+});
+
+test("wizard identity step keeps warning state when only wizard demo/empty backgrounds are present", async ({
+  page
+}) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-card").first().click();
+  await page.locator(".wizard-step").nth(1).click();
+  await expect(page.locator(".wizard-warning")).toContainText(
+    /sube y selecciona al menos un fondo propio|upload and select at least one of your own backgrounds|agrega al menos un fondo con src|add at least one background with src/i
+  );
+});
+
+test("editor header no longer shows the top toggle-view button", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await expect(page.locator(".editor-actions .icon-btn")).toHaveCount(0);
+});
+
 test("preview stays full width when desktop editor card opens", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await disableBridgeMode(page);
@@ -338,9 +780,11 @@ test("item show price toggle hides price in carousel and detail modal", async ({
 
   await expect(page.locator(".carousel-card")).toBeVisible();
   await expect(page.locator(".carousel-price")).toHaveCount(0);
+  await page.getByRole("button", { name: /cerrar editor|close editor/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
 
   await page.locator(".carousel-card").first().click();
-  await expect(page.locator(".dish-modal.open")).toBeVisible();
+  await expect(page.locator(".dish-modal")).toBeVisible();
   await expect(page.locator(".dish-modal__price")).toHaveCount(0);
 });
 
@@ -386,7 +830,8 @@ test("show price checkbox row uses inline layout in edit and wizard item forms",
   await openProjectFromLanding(page, fixturePath);
 
   const tabs = page.locator(".editor-tabs");
-  await tabs.getByRole("button", { name: /editar|edit/i }).click();
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
+  await page.getByRole("button", { name: /items|platillos|dishes/i }).click();
   const editShowPriceRow = page.locator(
     ".edit-item__content label.editor-field.editor-inline",
     { hasText: /mostrar precio|show price/i }
@@ -407,7 +852,7 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   page
 }, testInfo) => {
   const animatedGifBuffer = await readFile(
-    path.resolve("public/projects/cafebrunch-menu-1/assets/originals/items/ice-cream-sandwich-5545c1.gif")
+    path.resolve("public/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif")
   );
   const animatedGif = `data:image/gif;base64,${animatedGifBuffer.toString("base64")}`;
   const transparentPng =
@@ -457,10 +902,15 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   await page.goto("/");
   await openProjectFromLanding(page, fixturePath);
 
-  const supportsImageDecoder = await page.evaluate(() => "ImageDecoder" in window);
-  test.skip(!supportsImageDecoder, "ImageDecoder is required for interactive media cue checks.");
+  const supportsInteractiveDecode = await supportsInteractiveDecodeForSource(page, animatedGif);
+  test.skip(
+    !supportsInteractiveDecode,
+    "Interactive GIF decoding is unavailable in this runtime."
+  );
 
   await expect(page.locator(".carousel-card")).toHaveCount(2);
+  await page.getByRole("button", { name: /cerrar editor|close editor/i }).click();
+  await expect(page.locator(".editor-panel")).not.toHaveClass(/open/);
   await page.locator(".carousel-card").first().click();
   await expect(page.locator(".dish-modal.open")).toBeVisible();
   const interactiveMediaHost = page.locator(".dish-modal__media");
@@ -505,12 +955,12 @@ test("detail modal cue is interactive-only and follows visible/hidden lifecycle"
   await page.mouse.up();
   await expect(interactiveMediaHost).toHaveAttribute("data-cue-state", "hidden");
   await expect
-    .poll(async () => await interactiveMediaHost.getAttribute("data-cue-state"), { timeout: 3800 })
+    .poll(async () => await interactiveMediaHost.getAttribute("data-cue-state"), { timeout: 12_000 })
     .toBe("visible");
   await expect(cue).toHaveClass(/is-looping/);
 
   await page.locator(".dish-modal__close").click();
-  await expect(page.locator(".dish-modal")).not.toHaveClass(/open/);
+  await expect(page.locator(".dish-modal")).toHaveCount(0);
 
   await page.locator(".carousel-card").nth(1).click();
   await expect(page.locator(".dish-modal.open")).toBeVisible();

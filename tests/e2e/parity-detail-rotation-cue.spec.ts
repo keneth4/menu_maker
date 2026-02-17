@@ -47,11 +47,8 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
 const closeEditorIfOpen = async (page: Page) => {
@@ -267,7 +264,7 @@ test("detail rotation cue stays in parity between preview and export", async ({ 
   await openFirstItemModal(page);
   await assertRotationCueLifecycle(page);
   await page.locator(".dish-modal__close").click();
-  await expect(page.locator(".dish-modal")).not.toHaveClass(/open/);
+  await expect(page.locator(".dish-modal")).toHaveCount(0);
 
   await openEditorIfClosed(page);
   const downloadPromise = page.waitForEvent("download");

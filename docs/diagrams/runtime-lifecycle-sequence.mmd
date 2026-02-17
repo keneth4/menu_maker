@@ -1,0 +1,28 @@
+sequenceDiagram
+  participant User
+  participant App as App.svelte
+  participant Runtime as AppRuntimeScreenContent
+  participant Bootstrap as runtimeBootstrapController
+  participant Bindings as runtimeBindingsController
+  participant Preview as preview startup + controllers
+  participant Modal as modal + interactive media
+
+  User->>App: Open app
+  App->>Runtime: mount controller + render runtime shell
+  Runtime->>Bootstrap: mount()
+  Bootstrap->>Bindings: create bound workflows/controllers
+  Bindings->>Preview: init template, carousel, preload plan
+  Preview-->>Runtime: startup progress + first interactive frame ready
+
+  User->>Runtime: scroll / key navigation
+  Runtime->>Preview: handleMenuScroll / shiftSection / shiftCarousel
+  Preview-->>Runtime: focused section/item + background sync
+
+  User->>Runtime: open dish modal
+  Runtime->>Modal: openDish + prefetch detail media
+  Modal-->>Runtime: modal interactive state
+
+  User->>App: close / unload
+  App->>Runtime: destroy()
+  Runtime->>Bootstrap: destroy()
+  Bootstrap->>Bindings: dispose timers/listeners/controllers

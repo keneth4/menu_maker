@@ -1,0 +1,20 @@
+stateDiagram-v2
+  [*] --> TemplateSelected
+  TemplateSelected --> FocusRows: template == focus-rows
+  TemplateSelected --> Jukebox: template == jukebox
+
+  state FocusRows {
+    [*] --> SectionVertical
+    SectionVertical --> ItemHorizontal: wheel horizontal or card nav
+    ItemHorizontal --> SectionVertical: settle / section shift
+    SectionVertical --> ModalOpen: dish click
+    ModalOpen --> SectionVertical: modal close
+  }
+
+  state Jukebox {
+    [*] --> SectionHorizontal
+    SectionHorizontal --> ItemVertical: vertical-intent wheel / item nav
+    ItemVertical --> SectionHorizontal: horizontal-intent wheel / section nav
+    SectionHorizontal --> ModalOpenJ: dish click
+    ModalOpenJ --> SectionHorizontal: modal close
+  }

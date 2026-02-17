@@ -1,5 +1,6 @@
 import type { MenuProject } from "../../lib/types";
 import { normalizeAllergenEntries } from "./allergens";
+import { resolveTemplateId } from "../templates/registry";
 
 const LEGACY_TEMPLATE_MAP: Record<string, string> = {
   "bar-pub": "focus-rows",
@@ -86,11 +87,15 @@ const normalizeFontRoles = (value: unknown) => {
   if (!value || typeof value !== "object") return undefined;
   const source = value as Record<string, unknown>;
   const identity = normalizeFontConfig(source.identity);
+  const restaurant = normalizeFontConfig(source.restaurant);
+  const title = normalizeFontConfig(source.title);
   const section = normalizeFontConfig(source.section);
   const item = normalizeFontConfig(source.item);
-  if (!identity && !section && !item) return undefined;
+  if (!identity && !restaurant && !title && !section && !item) return undefined;
   return {
     ...(identity ? { identity } : {}),
+    ...(restaurant ? { restaurant } : {}),
+    ...(title ? { title } : {}),
     ...(section ? { section } : {}),
     ...(item ? { item } : {})
   };
@@ -98,6 +103,20 @@ const normalizeFontRoles = (value: unknown) => {
 
 const normalizeScrollAnimationMode = (value: unknown): "hero360" | "alternate" =>
   value === "alternate" ? "alternate" : "hero360";
+
+const normalizeSensitivityLevel = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 5;
+  return Math.min(10, Math.max(1, Math.round(parsed)));
+};
+
+const normalizeProjectScrollSensitivity = (value: unknown) => {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return {
+    item: normalizeSensitivityLevel(source.item),
+    section: normalizeSensitivityLevel(source.section)
+  };
+};
 
 export const normalizeProject = (value: MenuProject): MenuProject => {
   const locales = value.meta.locales?.length ? value.meta.locales : ["es", "en"];
@@ -129,6 +148,7 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
   value.meta.backgroundDisplayMode = normalizeBackgroundDisplayMode(
     value.meta.backgroundDisplayMode
   );
+  value.meta.scrollSensitivity = normalizeProjectScrollSensitivity(value.meta.scrollSensitivity);
   value.meta.fontRoles = normalizeFontRoles(value.meta.fontRoles);
 
   const defaultLocale = value.meta.defaultLocale ?? "en";
@@ -226,9 +246,8 @@ export const normalizeProject = (value: MenuProject): MenuProject => {
     };
   });
 
-  value.meta.template = LEGACY_TEMPLATE_MAP[value.meta.template] ?? value.meta.template;
-  if (!value.meta.template) {
-    value.meta.template = "focus-rows";
-  }
+  value.meta.template = resolveTemplateId(
+    LEGACY_TEMPLATE_MAP[value.meta.template] ?? value.meta.template
+  );
   return value;
 };

@@ -1,0 +1,23 @@
+sequenceDiagram
+  participant UI as Runtime UI
+  participant Bridge as Vite Bridge (/api/assets)
+  participant FS as public/projects storage
+
+  UI->>Bridge: GET /ping?project=<slug>
+  Bridge-->>UI: { ok: true, mode }
+
+  UI->>Bridge: GET /list?project=<slug>
+  Bridge->>FS: read tree
+  Bridge-->>UI: entries[]
+
+  UI->>Bridge: POST /upload
+  Bridge->>FS: write asset file
+  Bridge-->>UI: { ok: true, path }
+
+  UI->>Bridge: POST /prepare-derived
+  Bridge->>FS: read originals + write derived
+  Bridge-->>UI: rewritten project payload
+
+  UI->>Bridge: POST /save-project
+  Bridge->>FS: write menu + update index.json
+  Bridge-->>UI: { ok: true }

@@ -64,6 +64,7 @@ describe("normalizeProject", () => {
     expect(normalized.meta.currencyPosition).toBe("left");
     expect(normalized.meta.backgroundCarouselSeconds).toBe(9);
     expect(normalized.meta.backgroundDisplayMode).toBe("carousel");
+    expect(normalized.meta.scrollSensitivity).toEqual({ item: 5, section: 5 });
     expect(normalized.meta.template).toBe("focus-rows");
     expect(normalized.categories[0].backgroundId).toBe("bg-1");
     expect(normalized.categories[0].items[0].media.originalHero360).toBe(
@@ -90,6 +91,13 @@ describe("normalizeProject", () => {
     project.meta.template = "";
     const normalized = normalizeProject(project);
     expect(normalized.meta.template).toBe("focus-rows");
+  });
+
+  it("canonicalizes template ids from non-canonical variants", () => {
+    const project = buildProjectFixture();
+    project.meta.template = " Juke_Box ";
+    const normalized = normalizeProject(project);
+    expect(normalized.meta.template).toBe("jukebox");
   });
 
   it("normalizes identity and rotation settings from invalid values", () => {
@@ -178,6 +186,19 @@ describe("normalizeProject", () => {
     (project.meta as { backgroundCarouselSeconds?: unknown }).backgroundCarouselSeconds = 0;
     const normalizedLow = normalizeProject(project);
     expect(normalizedLow.meta.backgroundCarouselSeconds).toBe(2);
+  });
+
+  it("normalizes scroll sensitivity levels into a safe range", () => {
+    const project = buildProjectFixture();
+    (project.meta as { scrollSensitivity?: unknown }).scrollSensitivity = {
+      item: 14,
+      section: 0
+    };
+    const normalized = normalizeProject(project);
+    expect(normalized.meta.scrollSensitivity).toEqual({
+      item: 10,
+      section: 1
+    });
   });
 });
 

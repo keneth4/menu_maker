@@ -1,7 +1,7 @@
 import type { MenuItem } from "../../../lib/types";
 import { getCircularOffset } from "./shared";
 
-export const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
+export const JUKEBOX_WHEEL_STEP_THRESHOLD = 260;
 export const JUKEBOX_WHEEL_SETTLE_MS = 240;
 export const JUKEBOX_WHEEL_DELTA_CAP = 140;
 export const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;

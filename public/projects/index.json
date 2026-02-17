@@ -1,118 +1,184 @@
 {
   "projects": [
     {
-      "slug": "sample-cafebrunch-menu",
-      "name": "SampleCafeBrunchMenu",
-      "template": "focus-rows",
-      "cover": "/projects/sample-cafebrunch-menu/assets/backgrounds/backery-outside.gif"
-    },
-    {
-      "slug": "cafebrunch-menu-1",
-      "name": "CafeBrunchMenu",
-      "template": "jukebox",
-      "cover": "/projects/cafebrunch-menu-1/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
-    },
-    {
-      "slug": "ffmpeg-save-1770651939562-save",
+      "slug": "ffmpeg-save-1771042165734-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770651939562-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771042165734-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770652053261-save",
+      "slug": "ffmpeg-save-1771042315147-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770652053261-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771042315147-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770652403499-save",
+      "slug": "ffmpeg-save-1771042783224-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770652403499-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771042783224-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770652618805-save",
+      "slug": "ffmpeg-save-1771043093960-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770652618805-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771043093960-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770655228315-save",
+      "slug": "ffmpeg-save-1771063947038-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770655228315-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771063947038-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770655522337-save",
+      "slug": "ffmpeg-save-1771065810186-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770655522337-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771065810186-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770655649114-save",
+      "slug": "ffmpeg-save-1771078930286-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770655649114-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771078930286-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770655717202-save",
+      "slug": "ffmpeg-save-1771180821945-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770655717202-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771180821945-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770656920221-save",
+      "slug": "ffmpeg-save-1771180911901-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770656920221-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771180911901-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770657072842-save",
+      "slug": "ffmpeg-save-1771181292910-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770657072842-save/assets/derived/backgrounds/backery-outside-2014d5-lg.gif"
+      "cover": "/projects/ffmpeg-save-1771181292910-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770660057420-save",
+      "slug": "ffmpeg-save-1771181376256-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770660057420-save/assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
+      "cover": "/projects/ffmpeg-save-1771181376256-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770660267649-save",
+      "slug": "ffmpeg-save-1771181496129-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770660267649-save/assets/derived/backgrounds/backery-outside-2014d5-lg.webp"
+      "cover": "/projects/ffmpeg-save-1771181496129-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770685405044-save",
+      "slug": "ffmpeg-save-1771181574825-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770685405044-save/assets/derived/backgrounds/backery-outside-md.webp"
+      "cover": "/projects/ffmpeg-save-1771181574825-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770687646536-save",
+      "slug": "ffmpeg-save-1771181938115-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770687646536-save/assets/derived/backgrounds/backery-outside-md.gif"
+      "cover": "/projects/ffmpeg-save-1771181938115-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770687807521-save",
+      "slug": "ffmpeg-save-1771208035519-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770687807521-save/assets/derived/backgrounds/backery-outside-md.gif"
+      "cover": "/projects/ffmpeg-save-1771208035519-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "ffmpeg-save-1770687996930-save",
+      "slug": "ffmpeg-save-1771208126343-save",
       "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/ffmpeg-save-1770687996930-save/assets/derived/backgrounds/backery-outside-md.webp"
+      "cover": "/projects/ffmpeg-save-1771208126343-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
-      "slug": "kenethsplatscollection",
-      "name": "SplatsCollection",
+      "slug": "ffmpeg-save-1771208632107-save",
+      "name": "FFmpeg Fixture",
       "template": "focus-rows",
-      "cover": "/projects/kenethsplatscollection/assets/derived/backgrounds/backgroundMannheim-md.gif"
+      "cover": "/projects/ffmpeg-save-1771208632107-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771208878532-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771208878532-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771208950039-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771208950039-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771212261784-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771212261784-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771212884678-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771212884678-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771212962659-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771212962659-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771273063101-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771273063101-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771275636511-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771275636511-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771275709959-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771275709959-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771276100366-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771276100366-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771279688956-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771279688956-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771280814936-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771280814936-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771301092261-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771301092261-save/assets/derived/backgrounds/backery-outside-md.png"
+    },
+    {
+      "slug": "ffmpeg-save-1771301222632-save",
+      "name": "FFmpeg Fixture",
+      "template": "focus-rows",
+      "cover": "/projects/ffmpeg-save-1771301222632-save/assets/derived/backgrounds/backery-outside-md.png"
     },
     {
       "slug": "keneth-s-gaussian-splattings-collection",

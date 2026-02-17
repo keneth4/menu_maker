@@ -1,0 +1,16 @@
+flowchart LR
+  InputJSON["Input: menu.json"] --> Normalize["normalizeProject + template resolver"]
+  InputZIP["Input: project.zip"] --> ParseZip["readZip + find menu.json"] --> Normalize
+
+  Normalize --> PathMap["applyImportedPaths + asset mapping"]
+  PathMap --> RuntimeState["project/draft active runtime state"]
+
+  RuntimeState --> SaveFlow["Save Project Workflow"]
+  SaveFlow --> SaveRewrite["rewrite menu to originals"]
+  SaveRewrite --> SaveZip["<slug>-save.zip"]
+
+  RuntimeState --> ExportFlow["Export Site Workflow"]
+  ExportFlow --> Derive["prepare-derived (bridge mode)"]
+  Derive --> ExportRewrite["rewrite menu/runtime asset paths"]
+  ExportRewrite --> ExportZip["<slug>-export.zip"]
+  ExportZip --> Diagnostics["asset-manifest + export-report"]

@@ -43,11 +43,8 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  const [chooser] = await Promise.all([
-    page.waitForEvent("filechooser"),
-    page.getByRole("button", { name: /abrir proyecto|open project/i }).click()
-  ]);
-  await chooser.setFiles(fixturePath);
+  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
 const openEditorIfClosed = async (page: Page) => {
@@ -129,7 +126,8 @@ test("source pickers show filename labels while preserving full path values", as
   await openProjectFromLanding(page, fixturePath);
   await openEditorIfClosed(page);
 
-  await page.getByRole("button", { name: /edición|edit/i }).click();
+  const tabs = page.locator(".editor-tabs");
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
   await page.getByRole("button", { name: /items|platillos|dishes/i }).click();
 
   const sourceOptions = await page
