@@ -24,6 +24,9 @@ This documentation set describes the current codebase architecture, runtime beha
 - [07 - Coding Practices and Extension Playbook](./07-coding-practices-and-extension-playbook.md)
 - [08 - Current-State Snapshot and Delta](./08-current-state-snapshot-and-delta.md)
 
+## Historical archive
+- [Documentation Archive](../archive/README.md)
+
 ## Shared diagrams
 All architecture and flow diagrams are source-controlled under:
 - [`../diagrams/`](../diagrams/)

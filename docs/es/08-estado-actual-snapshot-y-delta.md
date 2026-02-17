@@ -40,9 +40,12 @@ Areas e2e actualmente fallando:
 ## Delta: superficie in-flight del working tree
 El delta in-flight de esta pasada es solo alineacion documental:
 - `README.md`
-- `docs/en/*` y `docs/es/*` (runtime/testing/current-state)
-- `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
-- `PHASE_STATUS_TRACKER.md`
+- `docs/en/03-architecture-runtime-deep-dive.md`
+- `docs/en/07-coding-practices-and-extension-playbook.md`
+- `docs/en/08-current-state-snapshot-and-delta.md`
+- `docs/es/03-arquitectura-runtime-detalle.md`
+- `docs/es/07-practicas-de-codigo-y-playbook.md`
+- `docs/es/08-estado-actual-snapshot-y-delta.md`
 
 ### Riesgos residuales conocidos
 - Sigue abierto el cierre de paridad e2e en rutas de interaccion Jukebox tras los cambios de sensibilidad/recoil.
@@ -51,8 +54,8 @@ El delta in-flight de esta pasada es solo alineacion documental:
 
 ## Referencias operativas
 - Guardrails de arquitectura: `src/App.architecture.test.ts`
-- Mapping para reviewers: `APP_REDISTRIBUTION_REVIEWER_GUIDE.md`
-- Historial de fases y gates: `PHASE_STATUS_TRACKER.md`
+- Mapa de ownership runtime: `docs/es/03-arquitectura-runtime-detalle.md`
+- Historial historico de fases y gates: `docs/archive/2026-02-refactor-program/PHASE_STATUS_TRACKER.md`
 
 ## Diagramas
 - Contexto de sistema: [`../diagrams/system-context.mmd`](../diagrams/system-context.mmd)

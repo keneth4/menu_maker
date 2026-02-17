@@ -14,7 +14,41 @@ Before merging:
 2. No template behavior drift.
 3. No save/export packaging drift.
 4. Unit + e2e + perf gates green in expected environment.
-5. New ownership mapping documented in reviewer/tracker docs.
+5. Ownership mapping and architecture notes updated in `docs/en/03-architecture-runtime-deep-dive.md` and current-state docs.
+
+## Baseline template behavior summary
+
+### `focus-rows` (baseline default)
+- Vertical movement between sections.
+- Horizontal movement inside each section carousel.
+- Center-focused item emphasis (scale/opacity/sharpness).
+- Settle/snap behavior to reduce ambiguous state after input.
+
+### `jukebox` (expressive visual mode)
+- Section navigation intent is horizontal.
+- Active item rotation intent is vertical.
+- Circular disc-like presentation with stronger motion profile.
+- Section/item parity must remain aligned across wheel, touch, keyboard, and export runtime.
+
+### Shared behavior requirements
+- Modal open/close semantics must match preview and export.
+- Image source selection policy must stay parity-safe.
+- Section boundary behavior (settle/recoil at first/last section) must remain consistent.
+
+## Template design checklist
+Use this checklist for every new template or major behavior change:
+1. Interaction grammar:
+   - define vertical intent, horizontal intent, and fallback keyboard behavior.
+2. Visual hierarchy:
+   - define active item emphasis and inactive-state treatment.
+3. Motion policy:
+   - define thresholds, debounce/cooldown, settle timing, and transitions.
+4. Contract surface:
+   - define required assets/text fields and empty-state behavior.
+5. Accessibility/operability:
+   - ensure keyboard parity, reduced-motion handling, and clear focus cues.
+6. Validation pass:
+   - run desktop/mobile checks, wheel/touch stress checks, and startup perception checks.
 
 ## Pattern: adding a new template behavior safely
 1. Add capabilities/strategy in `core/templates`.
@@ -40,6 +74,25 @@ Goal: add `Home` key behavior for one template without drift.
    - unit: `src/ui/controllers/previewNavigationController.test.ts`
    - e2e parity: `tests/e2e/jukebox-scroll-parity.spec.ts` (or template-specific parity spec)
 6. Run gates: `npm run build`, `npm test`, `npm run test:e2e`, `npm run test:perf`.
+
+## Exploratory template directions (non-committed)
+These are exploration notes, not committed roadmap items.
+
+### Watch Orbit
+- Single-section-first interaction model inspired by wearable interactions.
+- Strong storytelling and premium focus; higher discoverability risk.
+
+### Gallery Lens
+- One large hero plus secondary rail for rapid preview.
+- Strong media showcase; weaker fit for very long catalogs.
+
+### Story Chapters
+- Narrative chapter progression across full-screen states.
+- Strong emotional flow; slower for quick comparison use cases.
+
+### Grid Pulse
+- Dense grid with focus expansion.
+- Strong scanning throughput; less cinematic brand feel.
 
 ## Anti-patterns to avoid
 - Reintroducing monolithic orchestration in `App.svelte` or thin runtime shells.

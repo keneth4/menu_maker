@@ -24,6 +24,9 @@ Este conjunto documenta la arquitectura actual, el comportamiento runtime, la es
 - [07 - Practicas de Codigo y Playbook de Extension](./07-practicas-de-codigo-y-playbook.md)
 - [08 - Estado Actual: Snapshot y Delta](./08-estado-actual-snapshot-y-delta.md)
 
+## Archivo historico
+- [Archivo de Documentacion](../archive/README.md)
+
 ## Diagramas compartidos
 Todos los diagramas viven en:
 - [`../diagrams/`](../diagrams/)

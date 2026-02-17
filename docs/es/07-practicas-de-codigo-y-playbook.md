@@ -14,7 +14,41 @@ Antes de merge:
 2. Sin drift de comportamiento de templates.
 3. Sin drift de packaging save/export.
 4. Gates unit + e2e + perf en verde en entorno esperado.
-5. Mapping de ownership actualizado en docs de reviewer/tracker.
+5. Mapping de ownership y notas de arquitectura actualizados en `docs/es/03-arquitectura-runtime-detalle.md` y docs de estado actual.
+
+## Resumen base de comportamiento de templates
+
+### `focus-rows` (default base)
+- Movimiento vertical entre secciones.
+- Movimiento horizontal dentro del carrusel de cada seccion.
+- Enfasis del item centrado (scale/opacity/sharpness).
+- Comportamiento settle/snap para reducir estados ambiguos tras la entrada.
+
+### `jukebox` (modo visual expresivo)
+- Navegacion de secciones con intencion horizontal.
+- Rotacion del item activo con intencion vertical.
+- Presentacion tipo disco circular con perfil de movimiento mas fuerte.
+- La paridad seccion/item debe mantenerse entre wheel, touch, keyboard y runtime exportado.
+
+### Requisitos compartidos
+- Semantica modal open/close consistente entre preview y export.
+- Politica de seleccion de fuentes de imagen con paridad estricta.
+- Comportamiento de bordes de seccion (settle/recoil en primera/ultima seccion) consistente.
+
+## Checklist de diseno de template
+Usar este checklist para cada nuevo template o cambio grande de comportamiento:
+1. Gramatica de interaccion:
+   - definir intencion vertical, horizontal y fallback de teclado.
+2. Jerarquia visual:
+   - definir enfasis del item activo y estado de items inactivos.
+3. Politica de movimiento:
+   - definir thresholds, debounce/cooldown, tiempos de settle y transiciones.
+4. Superficie de contrato:
+   - definir assets/campos de texto requeridos y comportamiento en estado vacio.
+5. Accesibilidad/operabilidad:
+   - asegurar paridad por teclado, reduced-motion y cues de foco claros.
+6. Pasada de validacion:
+   - ejecutar checks desktop/mobile, stress wheel/touch y percepcion de carga inicial.
 
 ## Patron: agregar comportamiento de template de forma segura
 1. Agregar capabilities/strategy en `core/templates`.
@@ -40,6 +74,25 @@ Objetivo: agregar comportamiento de tecla `Home` para un template sin introducir
    - unitaria: `src/ui/controllers/previewNavigationController.test.ts`
    - e2e de paridad: `tests/e2e/jukebox-scroll-parity.spec.ts` (u otra spec de paridad del template)
 6. Ejecutar gates: `npm run build`, `npm test`, `npm run test:e2e`, `npm run test:perf`.
+
+## Direcciones exploratorias de templates (no comprometidas)
+Estas notas son exploratorias y no representan un roadmap comprometido.
+
+### Watch Orbit
+- Modelo de interaccion centrado en una sola seccion.
+- Fuerte storytelling y look premium; riesgo mayor de discoverability.
+
+### Gallery Lens
+- Hero principal grande + rail secundario para previsualizacion.
+- Excelente para media visual; menos eficiente en catalogos muy largos.
+
+### Story Chapters
+- Progresion narrativa en capitulos de pantalla completa.
+- Alto impacto emocional; mas lento para comparacion rapida.
+
+### Grid Pulse
+- Grid denso con expansion de foco.
+- Alta velocidad de escaneo; menos sensacion cinematica de marca.
 
 ## Anti-patrones a evitar
 - Reintroducir orquestacion monolitica en `App.svelte` o shells delgados.
