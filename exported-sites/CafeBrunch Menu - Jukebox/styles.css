@@ -1158,6 +1158,32 @@ body {
   animation: dish-media-spin 780ms linear infinite;
 }
 
+.dish-modal__media.is-loading-interactive::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin-left: -14px;
+  margin-top: -14px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #2dd4bf;
+  animation: dish-media-spin 780ms linear infinite;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.dish-modal__media.is-loading-interactive img {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dish-modal__media.is-loading-interactive .dish-modal__media-loading {
+  opacity: 0;
+}
+
 @keyframes dish-media-spin {
   to {
     transform: rotate(360deg);

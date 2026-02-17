@@ -380,7 +380,9 @@ export const createInteractiveMediaController = (
   };
 
   const supportsInteractiveMedia = () =>
-    typeof window !== "undefined" && "ImageDecoder" in window;
+    typeof window !== "undefined" &&
+    typeof (window as Window & { ImageDecoder?: unknown }).ImageDecoder === "function" &&
+    typeof createImageBitmap === "function";
 
   const prefetchInteractiveBytes = async (source: string) => {
     const cached = interactiveBytesCache.get(source);
@@ -486,16 +488,17 @@ export const createInteractiveMediaController = (
 
     host.classList.add("is-loading-interactive");
     setCueState("visible");
-    if (debugEnabled) {
-      debugEl = document.createElement("div");
-      debugEl.className = "dish-modal__media-debug";
-      host.appendChild(debugEl);
-    }
     const hideImage = () => {
       if (imageHidden) return;
       imageHidden = true;
       image.classList.add("is-hidden");
     };
+    hideImage();
+    if (debugEnabled) {
+      debugEl = document.createElement("div");
+      debugEl.className = "dish-modal__media-debug";
+      host.appendChild(debugEl);
+    }
     const updateDebugOverlay = () => {
       if (!debugEnabled || !debugEl) return;
       const frameLabel = canvas ? `${canvas.width}x${canvas.height}` : "-";
@@ -794,7 +797,6 @@ export const createInteractiveMediaController = (
           });
           resizeObserver.observe(host);
         }
-        hideImage();
         host.classList.remove("is-loading-interactive");
       };
 

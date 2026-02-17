@@ -498,7 +498,8 @@ const getInteractiveDetailAsset = (item) => {
   }
   return null;
 };
-const supportsInteractiveMedia = () => "ImageDecoder" in window;
+const supportsInteractiveMedia = () =>
+  typeof window.ImageDecoder === "function" && typeof createImageBitmap === "function";
 const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "cw" ? -1 : 1);
 const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
   const readForegroundCenterFromBitmap = (bitmap) => {
@@ -873,16 +874,17 @@ const setupInteractiveModalMedia = async (asset) => {
   };
   host.classList.add("is-loading-interactive");
   setCueState("visible");
-  if (debugEnabled) {
-    debugEl = document.createElement("div");
-    debugEl.className = "dish-modal__media-debug";
-    host.appendChild(debugEl);
-  }
   const hideImage = () => {
     if (imageHidden) return;
     imageHidden = true;
     image.classList.add("is-hidden");
   };
+  hideImage();
+  if (debugEnabled) {
+    debugEl = document.createElement("div");
+    debugEl.className = "dish-modal__media-debug";
+    host.appendChild(debugEl);
+  }
   const updateDebugOverlay = () => {
     if (!debugEnabled || !debugEl) return;
     const frameLabel = canvas ? canvas.width + "x" + canvas.height : "-";
@@ -1171,7 +1173,6 @@ const setupInteractiveModalMedia = async (asset) => {
         });
         resizeObserver.observe(host);
       }
-      hideImage();
       host.classList.remove("is-loading-interactive");
     };
     const normalizeDecodedFrame = async (frame) => {

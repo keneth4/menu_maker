@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "slug": "cafebrunch-menu",
-  "generatedAt": "2026-02-17T07:04:46.753Z",
+  "generatedAt": "2026-02-17T23:07:39.632Z",
   "assets": [
     {
       "outputPath": "app.js",
       "sourcePath": null,
       "role": "shell",
       "mime": "application/javascript",
-      "bytes": 123218,
+      "bytes": 123272,
       "responsiveVariant": null,
       "firstView": false
     },
@@ -323,7 +323,7 @@
       "sourcePath": null,
       "role": "shell",
       "mime": "text/css",
-      "bytes": 43112,
+      "bytes": 43669,
       "responsiveVariant": null,
       "firstView": false
     }
