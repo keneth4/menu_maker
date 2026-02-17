@@ -3,7 +3,7 @@ name: Publish Exported Sites Showcase
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "exported-sites/**"
       - ".github/workflows/deploy-exported-site.yml"
