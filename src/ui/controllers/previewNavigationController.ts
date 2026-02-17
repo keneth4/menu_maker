@@ -112,7 +112,8 @@ export const createPreviewNavigationController = (
         ? resolveHorizontalSectionIndex(container)
         : getClosestSectionIndexWorkflow(container);
     if (current < 0) return;
-    const next = (current + direction + sections.length) % sections.length;
+    const next = Math.min(sections.length - 1, Math.max(0, current + direction));
+    if (next === current) return;
     if (capabilities.sectionSnapAxis === "horizontal") {
       centerSectionHorizontallyWorkflow(container, next, "smooth");
       syncSectionBackgroundByIndex(next);

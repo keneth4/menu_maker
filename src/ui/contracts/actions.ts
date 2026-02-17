@@ -33,6 +33,7 @@ export type AssetActions = {
 export type PreviewActions = {
   shiftSection: (direction: number) => void;
   shiftCarousel: (categoryId: string, direction: number) => void;
+  handleMenuWheel: (event: WheelEvent) => void;
   handleMenuScroll: (event: Event) => void;
   handleCarouselWheel: (categoryId: string, event: WheelEvent) => void;
   handleCarouselTouchStart: (categoryId: string, event: TouchEvent) => void;

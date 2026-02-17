@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TemplateOption } from "../../core/templates/templateOptions";
-  import type { MenuCategory, MenuItem, MenuProject } from "../../lib/types";
+  import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 
   type WizardStatus = {
     structure: boolean;
@@ -66,7 +66,7 @@
   ) => void = () => {};
   export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
   export let setFontRoleSource: (
-    role: "identity" | "section" | "item",
+    role: ProjectFontRole,
     source: string
   ) => void = () => {};
   export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
@@ -114,11 +114,30 @@
     touchDraft();
   };
 
-  const handleBackgroundSourceInput = (bg: { src: string }, event: Event) => {
+  const handleBackgroundSourceInput = (bg: { src: string; originalSrc?: string }, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
-    bg.src = target.value;
+    const nextValue = target.value;
+    bg.src = nextValue;
+    if (nextValue && !nextValue.startsWith("data:")) {
+      bg.originalSrc = nextValue;
+    }
     touchDraft();
+  };
+
+  const hasOptionValue = (options: Array<{ value: string; label: string }>, value: string) =>
+    options.some((option) => option.value === value);
+
+  const resolveBackgroundSourceSelection = (bg: { src: string; originalSrc?: string }) => {
+    const direct = bg.src?.trim() ?? "";
+    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+      return direct;
+    }
+    const canonical = bg.originalSrc?.trim() ?? "";
+    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+      return canonical;
+    }
+    return direct;
   };
 
   const handleWizardItemPriceInput = (item: MenuItem, event: Event) => {
@@ -323,6 +342,68 @@
               </select>
             </label>
             <label class="editor-field">
+              <span>{t("fontRoleRestaurant")}</span>
+              {#if fontAssetOptions.length}
+                <select
+                  class="editor-select"
+                  value={draft.meta.fontRoles?.restaurant?.source ?? ""}
+                  on:change={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLSelectElement)) return;
+                    setFontRoleSource("restaurant", target.value);
+                  }}
+                >
+                  <option value=""></option>
+                  {#each fontAssetOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={draft.meta.fontRoles?.restaurant?.source ?? ""}
+                  list="font-asset-files"
+                  on:input={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLInputElement)) return;
+                    setFontRoleSource("restaurant", target.value);
+                  }}
+                />
+              {/if}
+            </label>
+            <label class="editor-field">
+              <span>{t("fontRoleTitle")}</span>
+              {#if fontAssetOptions.length}
+                <select
+                  class="editor-select"
+                  value={draft.meta.fontRoles?.title?.source ?? ""}
+                  on:change={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLSelectElement)) return;
+                    setFontRoleSource("title", target.value);
+                  }}
+                >
+                  <option value=""></option>
+                  {#each fontAssetOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  type="text"
+                  class="editor-input"
+                  value={draft.meta.fontRoles?.title?.source ?? ""}
+                  list="font-asset-files"
+                  on:input={(event) => {
+                    const target = event.currentTarget;
+                    if (!(target instanceof HTMLInputElement)) return;
+                    setFontRoleSource("title", target.value);
+                  }}
+                />
+              {/if}
+            </label>
+            <label class="editor-field">
               <span>{t("fontRoleIdentitySrc")}</span>
               {#if fontAssetOptions.length}
                 <select
@@ -376,10 +457,16 @@
                   {#if mediaAssetOptions.length}
                     <select
                       class="editor-select"
-                      value={bg.src}
+                      value={resolveBackgroundSourceSelection(bg)}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
                       <option value=""></option>
+                      {#if resolveBackgroundSourceSelection(bg) &&
+                      !hasOptionValue(mediaAssetOptions, resolveBackgroundSourceSelection(bg))}
+                        <option value={resolveBackgroundSourceSelection(bg)}>
+                          {bg.label?.trim() || t("backgroundLabel")}
+                        </option>
+                      {/if}
                       {#each mediaAssetOptions as option}
                         <option value={option.value}>{option.label}</option>
                       {/each}

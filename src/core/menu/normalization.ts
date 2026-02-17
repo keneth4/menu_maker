@@ -87,11 +87,15 @@ const normalizeFontRoles = (value: unknown) => {
   if (!value || typeof value !== "object") return undefined;
   const source = value as Record<string, unknown>;
   const identity = normalizeFontConfig(source.identity);
+  const restaurant = normalizeFontConfig(source.restaurant);
+  const title = normalizeFontConfig(source.title);
   const section = normalizeFontConfig(source.section);
   const item = normalizeFontConfig(source.item);
-  if (!identity && !section && !item) return undefined;
+  if (!identity && !restaurant && !title && !section && !item) return undefined;
   return {
     ...(identity ? { identity } : {}),
+    ...(restaurant ? { restaurant } : {}),
+    ...(title ? { title } : {}),
     ...(section ? { section } : {}),
     ...(item ? { item } : {})
   };

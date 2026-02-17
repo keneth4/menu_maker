@@ -1,4 +1,10 @@
-import type { AllergenEntry, MenuCategory, MenuItem, MenuProject } from "../../lib/types";
+import type {
+  AllergenEntry,
+  MenuCategory,
+  MenuItem,
+  MenuProject,
+  ProjectFontRole
+} from "../../lib/types";
 
 type CommonAllergen = {
   id: string;
@@ -90,7 +96,7 @@ export type EditorDraftController = {
   handleCustomFontSourceInput: (event: Event) => void;
   setIdentityMode: (mode: "text" | "logo") => void;
   setLogoSrc: (src: string) => void;
-  setFontRoleSource: (role: "identity" | "section" | "item", source: string) => void;
+  setFontRoleSource: (role: ProjectFontRole, source: string) => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, source: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
@@ -641,7 +647,7 @@ export const createEditorDraftController = (
     deps.touchDraft();
   };
 
-  const setFontRoleSource = (role: "identity" | "section" | "item", source: string) => {
+  const setFontRoleSource = (role: ProjectFontRole, source: string) => {
     const state = deps.getState();
     if (!state.draft) return;
     if (!state.draft.meta.fontRoles) {

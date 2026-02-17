@@ -45,6 +45,16 @@ export const buildProjectAssetEntries = (
       src: draft.meta.fontRoles?.identity?.source ?? ""
     },
     {
+      id: "font-restaurant",
+      label: "Restaurant",
+      src: draft.meta.fontRoles?.restaurant?.source ?? ""
+    },
+    {
+      id: "font-title",
+      label: "Menu title",
+      src: draft.meta.fontRoles?.title?.source ?? ""
+    },
+    {
       id: "font-section",
       label: "Section",
       src: draft.meta.fontRoles?.section?.source ?? ""

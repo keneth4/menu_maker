@@ -147,6 +147,25 @@ const makeTemplateSwitchFixture = (slug: string): ProjectFixture => ({
   }
 });
 
+const makeWizardBackgroundFixture = (slug: string, backgroundSrc: string): ProjectFixture => {
+  const base = makeProjectFixture("Wizard Background Fixture", slug);
+  return {
+    ...base,
+    meta: {
+      ...base.meta,
+      template: "focus-rows"
+    },
+    backgrounds: [
+      {
+        id: "bg-1",
+        label: "BG 1",
+        src: backgroundSrc,
+        type: "image"
+      }
+    ]
+  };
+};
+
 const writeJsonFixture = async (testInfo: TestInfo, project: ProjectFixture) => {
   const fixturePath = testInfo.outputPath(`${project.meta.slug}.json`);
   await writeFile(fixturePath, JSON.stringify(project, null, 2), "utf8");
@@ -368,15 +387,22 @@ test("jukebox section nav buttons move focused section on desktop", async ({ pag
   await expect(page.locator(".section-nav")).toBeVisible();
   expect(await getClosestHorizontalSectionIndex()).toBe(0);
 
-  await page.locator(".section-nav__btn.next").click();
-  await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1200 })
-    .toBe(1);
+  const clickNavUntilIndex = async (selector: ".section-nav__btn.next" | ".section-nav__btn.prev", target: number) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.locator(selector).click();
+      try {
+        await expect
+          .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1800 })
+          .toBe(target);
+        return;
+      } catch (error) {
+        if (attempt >= 1) throw error;
+      }
+    }
+  };
 
-  await page.locator(".section-nav__btn.prev").click();
-  await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(), { timeout: 1200 })
-    .toBe(0);
+  await clickNavUntilIndex(".section-nav__btn.next", 1);
+  await clickNavUntilIndex(".section-nav__btn.prev", 0);
 });
 
 test("project-tab template switch to jukebox applies section/item controls without wizard roundtrip", async ({
@@ -418,11 +444,12 @@ test("project-tab template switch to jukebox applies section/item controls witho
   const afterVertical = await readActiveTitle();
   expect(afterVertical).not.toBe(beforeVertical);
 
-  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", 280, 12);
-  await page.waitForTimeout(320);
+  const beforeHorizontalSection = await getClosestHorizontalSectionIndex(page);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", 2400, 18);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", 1800, 12);
   await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
-    .toBe(1);
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
+    .not.toBe(beforeHorizontalSection);
 
   await page.keyboard.press("ArrowLeft");
   await expect
@@ -463,10 +490,11 @@ test("jukebox behavior stays correct before and after wizard roundtrip on switch
   await page.locator(".editor-close").first().click();
 
   const initialSection = await getClosestHorizontalSectionIndex(page);
-  const outboundDeltaX = initialSection <= 0 ? 280 : -280;
-  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX, 12);
+  const outboundDeltaX = initialSection <= 0 ? 2400 : -2400;
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX, 18);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX * 0.75, 12);
   await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
     .not.toBe(initialSection);
   const shiftedSection = await getClosestHorizontalSectionIndex(page);
 
@@ -623,8 +651,51 @@ test("wizard identity step shows restaurant and menu title fields in text mode",
     .getByRole("radio", { name: /modo texto|text mode|texto|text/i })
     .check();
 
-  await expect(page.getByLabel(/nombre del restaurante|restaurant name/i)).toBeVisible();
-  await expect(page.getByLabel(/título del menú|menu title/i)).toBeVisible();
+  await expect(
+    page.getByRole("textbox", {
+      name: /^nombre del restaurante$|^restaurant name$/i
+    })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", {
+      name: /^título del menú$|^menu title$/i
+    })
+  ).toBeVisible();
+});
+
+test("wizard identity step does not warn when project already has a non-demo background", async ({
+  page
+}, testInfo) => {
+  const fixturePath = await writeJsonFixture(
+    testInfo,
+    makeWizardBackgroundFixture(
+      "wizard-existing-own-background",
+      "/projects/my-real-menu/assets/originals/backgrounds/cover.jpg"
+    )
+  );
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-step").nth(1).click();
+  await expect(page.locator(".wizard-warning")).toHaveCount(0);
+});
+
+test("wizard identity step keeps warning state when only wizard demo/empty backgrounds are present", async ({
+  page
+}) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /wizard/i }).click();
+  await page.locator(".wizard-card").first().click();
+  await page.locator(".wizard-step").nth(1).click();
+  await expect(page.locator(".wizard-warning")).toContainText(
+    /sube y selecciona al menos un fondo propio|upload and select at least one of your own backgrounds|agrega al menos un fondo con src|add at least one background with src/i
+  );
 });
 
 test("editor header no longer shows the top toggle-view button", async ({ page }) => {

@@ -277,6 +277,7 @@ export const createAppController = (deps: ControllerDeps = {}): AppController =>
           };
         });
       },
+      handleMenuWheel: () => undefined,
       handleMenuScroll: () => undefined,
       handleCarouselWheel: () => undefined,
       handleCarouselTouchStart: () => undefined,

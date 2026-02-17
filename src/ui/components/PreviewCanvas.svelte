@@ -53,6 +53,7 @@
   getDishTapHint={model.getDishTapHint}
   getAssetOwnershipDisclaimer={model.getAssetOwnershipDisclaimer}
   shiftSection={actions.shiftSection}
+  handleMenuWheel={actions.handleMenuWheel}
   handleMenuScroll={actions.handleMenuScroll}
   shiftCarousel={actions.shiftCarousel}
   handleCarouselWheel={actions.handleCarouselWheel}

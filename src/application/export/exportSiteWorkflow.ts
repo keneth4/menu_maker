@@ -96,6 +96,8 @@ export const buildExportSiteWorkflow = async (
   };
   collectFontSource(exportProject.meta.fontSource);
   collectFontSource(exportProject.meta.fontRoles?.identity?.source);
+  collectFontSource(exportProject.meta.fontRoles?.restaurant?.source);
+  collectFontSource(exportProject.meta.fontRoles?.title?.source);
   collectFontSource(exportProject.meta.fontRoles?.section?.source);
   collectFontSource(exportProject.meta.fontRoles?.item?.source);
   exportProject.categories.forEach((category) => {
@@ -300,6 +302,12 @@ export const buildExportSiteWorkflow = async (
       ...exportProject.meta.fontRoles,
       ...(exportProject.meta.fontRoles.identity
         ? { identity: rewriteFontConfig(exportProject.meta.fontRoles.identity) }
+        : {}),
+      ...(exportProject.meta.fontRoles.restaurant
+        ? { restaurant: rewriteFontConfig(exportProject.meta.fontRoles.restaurant) }
+        : {}),
+      ...(exportProject.meta.fontRoles.title
+        ? { title: rewriteFontConfig(exportProject.meta.fontRoles.title) }
         : {}),
       ...(exportProject.meta.fontRoles.section
         ? { section: rewriteFontConfig(exportProject.meta.fontRoles.section) }

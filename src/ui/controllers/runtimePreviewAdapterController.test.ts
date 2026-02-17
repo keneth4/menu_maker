@@ -94,8 +94,6 @@ describe("createRuntimePreviewAdapterController", () => {
   it("routes horizontal wheel intent to section shifts in desktop jukebox mode", () => {
     const shiftSection = vi.fn();
     const handleWheel = vi.fn();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-14T00:00:00.000Z"));
     const controller = createRuntimePreviewAdapterController({
       tick: async () => undefined,
       queryMenuScroll: () => null,
@@ -141,23 +139,221 @@ describe("createRuntimePreviewAdapterController", () => {
         preventDefault
       } as unknown as WheelEvent);
 
-    const horizontalEvent = createWheelEvent(240, 8);
-    const repeatedHorizontalEvent = createWheelEvent(190, 6);
-    const postCooldownHorizontalEvent = createWheelEvent(220, 4);
-    controller.handleCarouselWheel("c1", horizontalEvent);
-    controller.handleCarouselWheel("c1", repeatedHorizontalEvent);
-    vi.advanceTimersByTime(260);
-    controller.handleCarouselWheel("c1", postCooldownHorizontalEvent);
+    const horizontalEventA = createWheelEvent(170, 8);
+    const horizontalEventB = createWheelEvent(160, 8);
+    controller.handleCarouselWheel("c1", horizontalEventA);
+    controller.handleCarouselWheel("c1", horizontalEventB);
 
-    controller.clearCarouselWheelState();
-    expect(horizontalEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(repeatedHorizontalEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(postCooldownHorizontalEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(shiftSection).toHaveBeenNthCalledWith(1, 1);
-    expect(shiftSection).toHaveBeenNthCalledWith(2, 1);
-    expect(shiftSection).toHaveBeenCalledTimes(2);
+    expect(horizontalEventA.preventDefault).toHaveBeenCalledTimes(1);
+    expect(horizontalEventB.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenLastCalledWith(1);
     expect(handleWheel).not.toHaveBeenCalled();
-    vi.useRealTimers();
+  });
+
+  it("routes mixed near-threshold deltas to horizontal section scrolling", () => {
+    const shiftSection = vi.fn();
+    const handleWheel = vi.fn();
+    const controller = createRuntimePreviewAdapterController({
+      tick: async () => undefined,
+      queryMenuScroll: () => null,
+      getActiveTemplateCapabilities: () => ({
+        sectionSnapAxis: "horizontal",
+        sectionSnapDelayMs: 120,
+        carousel: { primaryAxis: "vertical" }
+      }),
+      getDeviceMode: () => "desktop",
+      getActiveProject: () => buildProject(),
+      getCarouselActive: () => ({}),
+      setCarouselActive: () => undefined,
+      wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      carouselController: {
+        clear: vi.fn(),
+        shift: vi.fn(),
+        handleWheel,
+        handleTouchStart: vi.fn(),
+        handleTouchMove: vi.fn(),
+        handleTouchEnd: vi.fn()
+      },
+      previewController: {
+        syncFocus: vi.fn(),
+        snapVertical: vi.fn(),
+        snapHorizontal: vi.fn(),
+        handleMenuScroll: vi.fn(),
+        destroy: vi.fn()
+      },
+      previewNavigationController: {
+        applySectionFocus: vi.fn(),
+        syncSectionBackgroundByIndex: vi.fn(),
+        resolveHorizontalSectionIndex: vi.fn(() => 0),
+        shiftSection,
+        getActiveSectionCategoryId: vi.fn(() => "c1"),
+        handleDesktopPreviewKeydown: vi.fn()
+      }
+    });
+
+    const ambiguousEventA = {
+      deltaX: 154,
+      deltaY: 148,
+      preventDefault: vi.fn()
+    } as unknown as WheelEvent;
+    const ambiguousEventB = {
+      deltaX: 152,
+      deltaY: 146,
+      preventDefault: vi.fn()
+    } as unknown as WheelEvent;
+    controller.handleCarouselWheel("c1", ambiguousEventA);
+    controller.handleCarouselWheel("c1", ambiguousEventB);
+
+    expect(ambiguousEventA.preventDefault).toHaveBeenCalledTimes(1);
+    expect(ambiguousEventB.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenLastCalledWith(1);
+    expect(handleWheel).not.toHaveBeenCalled();
+  });
+
+  it("treats shift+wheel as horizontal section intent in desktop jukebox mode", () => {
+    const shiftSection = vi.fn();
+    const handleWheel = vi.fn();
+    const controller = createRuntimePreviewAdapterController({
+      tick: async () => undefined,
+      queryMenuScroll: () => null,
+      getActiveTemplateCapabilities: () => ({
+        sectionSnapAxis: "horizontal",
+        sectionSnapDelayMs: 120,
+        carousel: { primaryAxis: "vertical" }
+      }),
+      getDeviceMode: () => "desktop",
+      getActiveProject: () => buildProject(),
+      getCarouselActive: () => ({}),
+      setCarouselActive: () => undefined,
+      wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      carouselController: {
+        clear: vi.fn(),
+        shift: vi.fn(),
+        handleWheel,
+        handleTouchStart: vi.fn(),
+        handleTouchMove: vi.fn(),
+        handleTouchEnd: vi.fn()
+      },
+      previewController: {
+        syncFocus: vi.fn(),
+        snapVertical: vi.fn(),
+        snapHorizontal: vi.fn(),
+        handleMenuScroll: vi.fn(),
+        destroy: vi.fn()
+      },
+      previewNavigationController: {
+        applySectionFocus: vi.fn(),
+        syncSectionBackgroundByIndex: vi.fn(),
+        resolveHorizontalSectionIndex: vi.fn(() => 0),
+        shiftSection,
+        getActiveSectionCategoryId: vi.fn(() => "c1"),
+        handleDesktopPreviewKeydown: vi.fn()
+      }
+    });
+
+    const shiftWheelEventA = {
+      deltaX: 0,
+      deltaY: 170,
+      shiftKey: true,
+      preventDefault: vi.fn()
+    } as unknown as WheelEvent;
+    const shiftWheelEventB = {
+      deltaX: 0,
+      deltaY: 160,
+      shiftKey: true,
+      preventDefault: vi.fn()
+    } as unknown as WheelEvent;
+    controller.handleCarouselWheel("c1", shiftWheelEventA);
+    controller.handleCarouselWheel("c1", shiftWheelEventB);
+
+    expect(shiftWheelEventA.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shiftWheelEventB.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenLastCalledWith(1);
+    expect(handleWheel).not.toHaveBeenCalled();
+  });
+
+  it("routes desktop jukebox menu wheel outside cards to active section carousel", () => {
+    const shiftSection = vi.fn();
+    const handleWheel = vi.fn();
+    const menuScroll = document.createElement("div");
+    const outsideTarget = document.createElement("div");
+    menuScroll.appendChild(outsideTarget);
+
+    const controller = createRuntimePreviewAdapterController({
+      tick: async () => undefined,
+      queryMenuScroll: () => menuScroll,
+      getActiveTemplateCapabilities: () => ({
+        sectionSnapAxis: "horizontal",
+        sectionSnapDelayMs: 120,
+        carousel: { primaryAxis: "vertical" }
+      }),
+      getDeviceMode: () => "desktop",
+      getActiveProject: () => buildProject(),
+      getCarouselActive: () => ({}),
+      setCarouselActive: () => undefined,
+      wrapCarouselIndex: (index, count) => ((index % count) + count) % count,
+      carouselController: {
+        clear: vi.fn(),
+        shift: vi.fn(),
+        handleWheel,
+        handleTouchStart: vi.fn(),
+        handleTouchMove: vi.fn(),
+        handleTouchEnd: vi.fn()
+      },
+      previewController: {
+        syncFocus: vi.fn(),
+        snapVertical: vi.fn(),
+        snapHorizontal: vi.fn(),
+        handleMenuScroll: vi.fn(),
+        destroy: vi.fn()
+      },
+      previewNavigationController: {
+        applySectionFocus: vi.fn(),
+        syncSectionBackgroundByIndex: vi.fn(),
+        resolveHorizontalSectionIndex: vi.fn(() => 0),
+        shiftSection,
+        getActiveSectionCategoryId: vi.fn(() => "c1"),
+        handleDesktopPreviewKeydown: vi.fn()
+      }
+    });
+
+    const horizontalEventA = {
+      target: outsideTarget,
+      deltaX: 170,
+      deltaY: 30,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as WheelEvent;
+    const horizontalEventB = {
+      target: outsideTarget,
+      deltaX: 160,
+      deltaY: 28,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as WheelEvent;
+    controller.handleMenuWheel(horizontalEventA);
+    controller.handleMenuWheel(horizontalEventB);
+    expect(horizontalEventA.preventDefault).toHaveBeenCalledTimes(1);
+    expect(horizontalEventA.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(horizontalEventB.preventDefault).toHaveBeenCalledTimes(1);
+    expect(horizontalEventB.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenCalledTimes(1);
+    expect(shiftSection).toHaveBeenLastCalledWith(1);
+    expect(handleWheel).not.toHaveBeenCalled();
+
+    const verticalEvent = {
+      target: outsideTarget,
+      deltaX: 4,
+      deltaY: 220,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    } as unknown as WheelEvent;
+    controller.handleMenuWheel(verticalEvent);
+    expect(handleWheel).toHaveBeenCalledTimes(1);
+    expect(handleWheel).toHaveBeenCalledWith("c1", verticalEvent);
   });
 
   it("delegates vertical wheel intent to carousel controller in desktop jukebox mode", () => {
@@ -208,7 +404,7 @@ describe("createRuntimePreviewAdapterController", () => {
     } as unknown as WheelEvent;
     controller.handleCarouselWheel("c1", verticalEvent);
 
-    expect(verticalEvent.preventDefault).toHaveBeenCalledTimes(1);
+    expect(verticalEvent.preventDefault).not.toHaveBeenCalled();
     expect(shiftSection).not.toHaveBeenCalled();
     expect(handleWheel).toHaveBeenCalledTimes(1);
     expect(handleWheel).toHaveBeenCalledWith("c1", verticalEvent);

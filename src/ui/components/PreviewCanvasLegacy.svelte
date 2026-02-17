@@ -45,6 +45,7 @@
   export let getAssetOwnershipDisclaimer: (locale: string) => string = () => "";
 
   export let shiftSection: (direction: number) => void = () => {};
+  export let handleMenuWheel: (event: WheelEvent) => void = () => {};
   export let handleMenuScroll: (event: Event) => void = () => {};
   export let shiftCarousel: (categoryId: string, direction: number) => void = () => {};
   export let handleCarouselWheel: (categoryId: string, event: WheelEvent) => void = () => {};
@@ -248,7 +249,11 @@
           </div>
         {/if}
 
-        <div class="menu-scroll" on:scroll={(event) => handleMenuScroll(event)}>
+        <div
+          class="menu-scroll"
+          on:wheel|capture|nonpassive={(event) => handleMenuWheel(event)}
+          on:scroll={(event) => handleMenuScroll(event)}
+        >
           {#each activeProject.categories as category}
             {@const renderItems = activeTemplateStrategy.getRenderItems(category.items)}
             {@const activeIndex = carouselActive[category.id] ?? 0}

@@ -37,6 +37,8 @@ export const collectProjectAssetPaths = (
     assets.add(project.meta.fontSource);
   }
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) {
@@ -92,6 +94,8 @@ export const collectExportProjectAssetPaths = (
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
@@ -139,6 +143,8 @@ export const collectSaveProjectAssetPaths = (
   const assets = new Set<string>();
   if (project.meta.fontSource) assets.add(project.meta.fontSource);
   collectFontConfigSource(assets, project.meta.fontRoles?.identity);
+  collectFontConfigSource(assets, project.meta.fontRoles?.restaurant);
+  collectFontConfigSource(assets, project.meta.fontRoles?.title);
   collectFontConfigSource(assets, project.meta.fontRoles?.section);
   collectFontConfigSource(assets, project.meta.fontRoles?.item);
   if (project.meta.logoSrc) assets.add(project.meta.logoSrc);
@@ -223,6 +229,12 @@ export const rewriteProjectForSaveZip = (
     exportProject.meta.fontRoles = {
       ...(exportProject.meta.fontRoles.identity
         ? { identity: rewriteFontConfig(exportProject.meta.fontRoles.identity) }
+        : {}),
+      ...(exportProject.meta.fontRoles.restaurant
+        ? { restaurant: rewriteFontConfig(exportProject.meta.fontRoles.restaurant) }
+        : {}),
+      ...(exportProject.meta.fontRoles.title
+        ? { title: rewriteFontConfig(exportProject.meta.fontRoles.title) }
         : {}),
       ...(exportProject.meta.fontRoles.section
         ? { section: rewriteFontConfig(exportProject.meta.fontRoles.section) }

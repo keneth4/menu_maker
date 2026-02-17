@@ -1,5 +1,5 @@
 import type { TemplateOption } from "../../core/templates/templateOptions";
-import type { MenuCategory, MenuItem, MenuProject } from "../../lib/types";
+import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 import type { DeviceMode, PreviewMode } from "./state";
 
 export type AssetEntryModel = {
@@ -116,7 +116,7 @@ export type EditPanelActions = {
   setItemRotationDirection: (item: MenuItem, direction: "cw" | "ccw") => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, src: string) => void;
-  setFontRoleSource: (role: "identity" | "section" | "item", source: string) => void;
+  setFontRoleSource: (role: ProjectFontRole, source: string) => void;
   setItemFontSource: (item: MenuItem, source: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
   touchDraft: () => void;
@@ -172,7 +172,7 @@ export type WizardPanelActions = {
   setItemRotationDirection: (item: MenuItem, direction: "cw" | "ccw") => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, src: string) => void;
-  setFontRoleSource: (role: "identity" | "section" | "item", source: string) => void;
+  setFontRoleSource: (role: ProjectFontRole, source: string) => void;
   setItemFontSource: (item: MenuItem, source: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
   handleLocalizedInput: (
@@ -258,6 +258,7 @@ export type PreviewCanvasModel = {
 
 export type PreviewCanvasActions = {
   shiftSection: (direction: number) => void;
+  handleMenuWheel: (event: WheelEvent) => void;
   handleMenuScroll: (event: Event) => void;
   shiftCarousel: (categoryId: string, direction: number) => void;
   handleCarouselWheel: (categoryId: string, event: WheelEvent) => void;

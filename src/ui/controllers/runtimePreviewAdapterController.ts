@@ -29,6 +29,7 @@ export type RuntimePreviewAdapterController = {
   clearCarouselWheelState: () => void;
   syncCarousels: () => Promise<void>;
   initCarouselIndices: (project: MenuProject) => void;
+  handleMenuWheel: (event: WheelEvent) => void;
   handleMenuScroll: (event: Event) => void;
   shiftSection: (direction: number) => void;
   shiftCarousel: (categoryId: string, direction: number) => void;
@@ -41,12 +42,22 @@ export type RuntimePreviewAdapterController = {
 export const createRuntimePreviewAdapterController = (
   deps: RuntimePreviewAdapterDeps
 ): RuntimePreviewAdapterController => {
-  const JUKEBOX_HORIZONTAL_WHEEL_HYSTERESIS_PX = 4;
+  const JUKEBOX_HORIZONTAL_WHEEL_MIN_PX = 0.1;
+  const JUKEBOX_VERTICAL_DOMINANCE_RATIO = 2.2;
+  const JUKEBOX_VERTICAL_WHEEL_MIN_PX = 10;
+  const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 300;
   const JUKEBOX_SECTION_WHEEL_COOLDOWN_MS = 240;
-  let sectionWheelLockUntilByCategory: Record<string, number> = {};
+  const JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS = 240;
+  let sectionWheelCarryByCategory: Record<string, number> = {};
+  let sectionWheelCooldownUntilByCategory: Record<string, number> = {};
+  let sectionWheelGestureUntilByCategory: Record<string, number> = {};
+  let sectionWheelGestureConsumedByCategory: Record<string, boolean> = {};
 
   const clearCarouselWheelState = () => {
-    sectionWheelLockUntilByCategory = {};
+    sectionWheelCarryByCategory = {};
+    sectionWheelCooldownUntilByCategory = {};
+    sectionWheelGestureUntilByCategory = {};
+    sectionWheelGestureConsumedByCategory = {};
     deps.carouselController.clear();
   };
 
@@ -97,6 +108,104 @@ export const createRuntimePreviewAdapterController = (
     });
   };
 
+  const routeDesktopJukeboxWheel = (categoryId: string, event: WheelEvent) => {
+    const absX = Math.abs(event.deltaX);
+    const absY = Math.abs(event.deltaY);
+    if (absX <= 0.1 && absY <= 0.1) return false;
+    const horizontalDelta =
+      absX >= JUKEBOX_HORIZONTAL_WHEEL_MIN_PX ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+    const verticalIntent =
+      !event.shiftKey &&
+      absY >= JUKEBOX_VERTICAL_WHEEL_MIN_PX &&
+      (absX < JUKEBOX_HORIZONTAL_WHEEL_MIN_PX ||
+        absY >= absX * JUKEBOX_VERTICAL_DOMINANCE_RATIO);
+    const horizontalIntent =
+      Math.abs(horizontalDelta) >= JUKEBOX_HORIZONTAL_WHEEL_MIN_PX && !verticalIntent;
+    if (horizontalIntent) {
+      event.preventDefault();
+      const now = Date.now();
+      const gestureUntil = sectionWheelGestureUntilByCategory[categoryId] ?? 0;
+      const inGesture = now <= gestureUntil;
+      sectionWheelGestureUntilByCategory = {
+        ...sectionWheelGestureUntilByCategory,
+        [categoryId]: now + JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS
+      };
+      if (!inGesture) {
+        sectionWheelCarryByCategory = {
+          ...sectionWheelCarryByCategory,
+          [categoryId]: 0
+        };
+        sectionWheelGestureConsumedByCategory = {
+          ...sectionWheelGestureConsumedByCategory,
+          [categoryId]: false
+        };
+      }
+      if (sectionWheelGestureConsumedByCategory[categoryId]) return true;
+      const lockedUntil = sectionWheelCooldownUntilByCategory[categoryId] ?? 0;
+      if (now < lockedUntil) return true;
+      const nextCarry = (sectionWheelCarryByCategory[categoryId] ?? 0) + horizontalDelta;
+      sectionWheelCarryByCategory = {
+        ...sectionWheelCarryByCategory,
+        [categoryId]: nextCarry
+      };
+      if (Math.abs(nextCarry) < JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX) return true;
+      const direction = nextCarry > 0 ? 1 : -1;
+      const menuScroll = deps.queryMenuScroll();
+      if (menuScroll) {
+        const sections = Array.from(menuScroll.querySelectorAll<HTMLElement>(".menu-section"));
+        const currentIndex = deps.previewNavigationController.resolveHorizontalSectionIndex(menuScroll);
+        if (
+          sections.length > 0 &&
+          currentIndex >= 0 &&
+          ((direction < 0 && currentIndex <= 0) ||
+            (direction > 0 && currentIndex >= sections.length - 1))
+        ) {
+          sectionWheelCarryByCategory = {
+            ...sectionWheelCarryByCategory,
+            [categoryId]: 0
+          };
+          return true;
+        }
+      }
+      sectionWheelCarryByCategory = {
+        ...sectionWheelCarryByCategory,
+        [categoryId]: 0
+      };
+      sectionWheelGestureConsumedByCategory = {
+        ...sectionWheelGestureConsumedByCategory,
+        [categoryId]: true
+      };
+      sectionWheelCooldownUntilByCategory = {
+        ...sectionWheelCooldownUntilByCategory,
+        [categoryId]: now + JUKEBOX_SECTION_WHEEL_COOLDOWN_MS
+      };
+      deps.previewNavigationController.shiftSection(direction);
+      return true;
+    }
+    if (!verticalIntent) return false;
+    sectionWheelCarryByCategory = {
+      ...sectionWheelCarryByCategory,
+      [categoryId]: 0
+    };
+    sectionWheelGestureConsumedByCategory = {
+      ...sectionWheelGestureConsumedByCategory,
+      [categoryId]: false
+    };
+    sectionWheelGestureUntilByCategory = {
+      ...sectionWheelGestureUntilByCategory,
+      [categoryId]: 0
+    };
+    deps.carouselController.handleWheel(categoryId, event);
+    return true;
+  };
+
+  const resolveWheelCategoryId = (event: WheelEvent) => {
+    const target = event.target as Element | null;
+    const targetCategory = target?.closest<HTMLElement>(".menu-carousel")?.dataset.categoryId;
+    if (targetCategory) return targetCategory;
+    return deps.previewNavigationController.getActiveSectionCategoryId();
+  };
+
   const shiftSection = (direction: number) => {
     deps.previewNavigationController.shiftSection(direction);
   };
@@ -105,24 +214,25 @@ export const createRuntimePreviewAdapterController = (
     deps.carouselController.shift(categoryId, direction);
   };
 
+  const handleMenuWheel = (event: WheelEvent) => {
+    const capabilities = deps.getActiveTemplateCapabilities();
+    const isDesktop = deps.getDeviceMode() === "desktop";
+    const horizontalSectionMode = capabilities.sectionSnapAxis === "horizontal";
+    if (!isDesktop || !horizontalSectionMode) return;
+    const categoryId = resolveWheelCategoryId(event);
+    if (!categoryId) return;
+    if (routeDesktopJukeboxWheel(categoryId, event)) {
+      event.stopPropagation();
+    }
+  };
+
   const handleCarouselWheel = (categoryId: string, event: WheelEvent) => {
     const capabilities = deps.getActiveTemplateCapabilities();
     const isDesktop = deps.getDeviceMode() === "desktop";
     const horizontalSectionMode = capabilities.sectionSnapAxis === "horizontal";
     if (isDesktop && horizontalSectionMode) {
-      const absX = Math.abs(event.deltaX);
-      const absY = Math.abs(event.deltaY);
-      if (absX <= 1 && absY <= 1) return;
-      const horizontalIntent = absX >= absY + JUKEBOX_HORIZONTAL_WHEEL_HYSTERESIS_PX;
-      event.preventDefault();
-      if (horizontalIntent) {
-        const now = Date.now();
-        const lockUntil = sectionWheelLockUntilByCategory[categoryId] ?? 0;
-        if (now < lockUntil) return;
-        deps.previewNavigationController.shiftSection(event.deltaX > 0 ? 1 : -1);
-        sectionWheelLockUntilByCategory[categoryId] = now + JUKEBOX_SECTION_WHEEL_COOLDOWN_MS;
-        return;
-      }
+      if (event.defaultPrevented) return;
+      if (routeDesktopJukeboxWheel(categoryId, event)) return;
     }
     deps.carouselController.handleWheel(categoryId, event);
   };
@@ -143,6 +253,7 @@ export const createRuntimePreviewAdapterController = (
     clearCarouselWheelState,
     syncCarousels,
     initCarouselIndices,
+    handleMenuWheel,
     handleMenuScroll,
     shiftSection,
     shiftCarousel,

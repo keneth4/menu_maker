@@ -843,6 +843,7 @@
   const buildPreviewFontVarStyle = buildPreviewFontVarStyleWorkflow;
   const getItemFontStyle = (item: MenuItem) => getItemFontStyleWorkflow(activeProject, item);
 
+  const handleMenuWheel = runtimePreviewAdapterController.handleMenuWheel;
   const handleMenuScroll = runtimePreviewAdapterController.handleMenuScroll;
   const shiftSection = runtimePreviewAdapterController.shiftSection;
   const shiftCarousel = runtimePreviewAdapterController.shiftCarousel;
@@ -881,7 +882,7 @@
     setEditorTab, toggleEditor, setUploadTargetPath: (path: string) => (uploadTargetPath = path), setAssetUploadInput: (input: HTMLInputElement | null) => (assetUploadInput = input),
     setEditPanel: (panel: "identity" | "background" | "section" | "dish") => (editPanel = panel), setSelectedCategoryId: (categoryId: string) => (selectedCategoryId = categoryId), setSelectedItemId: (itemId: string) => (selectedItemId = itemId),
     setWizardLang: (lang: string) => (wizardLang = lang), setWizardCategoryId: (categoryId: string) => (wizardCategoryId = categoryId), setWizardItemId: (itemId: string) => (wizardItemId = itemId),
-    isWizardStepValid, goToStep, goPrevStep, goNextStep, shiftSection, handleMenuScroll, shiftCarousel, handleCarouselWheel, handleCarouselTouchStart, handleCarouselTouchMove, handleCarouselTouchEnd, openDish, prefetchDishDetail
+    isWizardStepValid, goToStep, goPrevStep, goNextStep, shiftSection, handleMenuWheel, handleMenuScroll, shiftCarousel, handleCarouselWheel, handleCarouselTouchStart, handleCarouselTouchMove, handleCarouselTouchEnd, openDish, prefetchDishDetail
   };
   $: runtimeSurfaceModel = { activeItem, dish: activeDish, interactiveEnabled: modalInteractiveEnabled, itemFontStyle: activeDish ? getItemFontStyle(activeDish) : "", modalMediaHost, modalMediaImage, textOf, getDetailImageSource, getAllergenValues, getMenuTerm, formatPrice, assetOptions, fontAssetOptions };
   $: runtimeSurfaceActions = { closeDish, setModalMediaHost: (host: HTMLDivElement | null) => (modalMediaHost = host), setModalMediaImage: (image: HTMLImageElement | null) => (modalMediaImage = image) };

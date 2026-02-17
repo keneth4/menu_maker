@@ -585,6 +585,10 @@ body {
 }
 
 .menu-eyebrow {
+  font-family: var(
+    --menu-font-restaurant,
+    var(--menu-font-identity, var(--menu-font-ui, "Fraunces", "Georgia", serif))
+  );
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.4em;
@@ -601,6 +605,10 @@ body {
 }
 
 .menu-title {
+  font-family: var(
+    --menu-font-title,
+    var(--menu-font-identity, var(--menu-font-ui, "Fraunces", "Georgia", serif))
+  );
   margin-top: 6px;
   font-size: clamp(1.2rem, 1.6vw, 1.8rem);
   color: #f8fafc;

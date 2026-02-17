@@ -8,7 +8,10 @@ const disableBridgeMode = async (page: Page) => {
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
   await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
-  await page.locator('input[type="file"]').setInputFiles(fixturePath);
+  await page
+    .locator('input[type="file"][accept*=".json"], input[type="file"][accept*=".zip"]')
+    .first()
+    .setInputFiles(fixturePath);
 };
 
 const writeJsonFixture = async (testInfo: TestInfo) => {
@@ -191,6 +194,15 @@ test("zip import in non-bridge mode hydrates backgrounds and shows imported asse
     .click();
   await expect(page.locator(".asset-item", { hasText: "bg-main.svg" })).toBeVisible();
   await expect(page.locator(".asset-item", { hasText: "item-main.svg" })).toBeVisible();
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /edit|edici/i }).click();
+  await page.locator(".edit-subtab", { hasText: /backgrounds|fondos/i }).click();
+  const backgroundSrcSelect = page
+    .locator(".background-carousel-item")
+    .first()
+    .locator("select.editor-select")
+    .first();
+  await expect(backgroundSrcSelect).toHaveValue(/\/projects\/.*\/assets\/originals\/backgrounds\//);
 });
 
 test("json import in non-bridge mode renders active background image", async ({ page }, testInfo) => {

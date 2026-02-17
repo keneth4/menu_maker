@@ -1,5 +1,5 @@
 import { builtInFontSources } from "../../ui/config/staticOptions";
-import type { MenuItem, MenuProject } from "../../lib/types";
+import type { MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 
 export type FontConfigInput = { family?: string; source?: string } | null | undefined;
 export type ResolvedFontConfig = { family: string; source: string };
@@ -67,14 +67,26 @@ export const getProjectInterfaceFontConfig = (value: MenuProject) =>
 
 export const getProjectRoleFontConfig = (
   value: MenuProject,
-  role: "identity" | "section" | "item"
+  role: ProjectFontRole
 ) => normalizeFontConfigInput(value.meta.fontRoles?.[role]);
+
+const resolveIdentityBaseFontConfig = (value: MenuProject) => {
+  const interfaceFont = getProjectInterfaceFontConfig(value);
+  const identityFont = getProjectRoleFontConfig(value, "identity");
+  return withResolvedFontFamily({
+    family: identityFont.family || interfaceFont.family,
+    source: identityFont.source || interfaceFont.source
+  });
+};
 
 export const resolveProjectRoleFontConfig = (
   value: MenuProject,
-  role: "identity" | "section" | "item"
+  role: ProjectFontRole
 ) => {
-  const interfaceFont = getProjectInterfaceFontConfig(value);
+  const interfaceFont =
+    role === "restaurant" || role === "title"
+      ? resolveIdentityBaseFontConfig(value)
+      : getProjectInterfaceFontConfig(value);
   const roleFont = getProjectRoleFontConfig(value, role);
   return withResolvedFontFamily({
     family: roleFont.family || interfaceFont.family,
@@ -94,6 +106,8 @@ export const collectProjectFontConfigs = (value: MenuProject) => {
 
   pushConfig(getProjectInterfaceFontConfig(value));
   pushConfig(resolveProjectRoleFontConfig(value, "identity"));
+  pushConfig(resolveProjectRoleFontConfig(value, "restaurant"));
+  pushConfig(resolveProjectRoleFontConfig(value, "title"));
   pushConfig(resolveProjectRoleFontConfig(value, "section"));
   pushConfig(resolveProjectRoleFontConfig(value, "item"));
   value.categories.forEach((category) => {
@@ -135,12 +149,16 @@ export const buildProjectFontFaceCss = (value: MenuProject) =>
 export const buildPreviewFontVarStyle = (value: MenuProject) => {
   const interfaceFont = getProjectInterfaceFontConfig(value);
   const identityFont = resolveProjectRoleFontConfig(value, "identity");
+  const restaurantFont = resolveProjectRoleFontConfig(value, "restaurant");
+  const titleFont = resolveProjectRoleFontConfig(value, "title");
   const sectionFont = resolveProjectRoleFontConfig(value, "section");
   const itemFont = resolveProjectRoleFontConfig(value, "item");
   return [
     `--menu-font:${buildFontStack(interfaceFont.family)};`,
     `--menu-font-ui:${buildFontStack(interfaceFont.family)};`,
     `--menu-font-identity:${buildFontStack(identityFont.family)};`,
+    `--menu-font-restaurant:${buildFontStack(restaurantFont.family)};`,
+    `--menu-font-title:${buildFontStack(titleFont.family)};`,
     `--menu-font-section:${buildFontStack(sectionFont.family)};`,
     `--menu-font-item:${buildFontStack(itemFont.family)};`
   ].join("");

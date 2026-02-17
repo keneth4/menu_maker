@@ -97,13 +97,28 @@ describe("wizardProgressWorkflow", () => {
     expect(result.wizardStatus.identity).toBe(false);
   });
 
+  it("treats non-demo backgrounds as valid even when root files are not hydrated", () => {
+    const project = makeProject();
+    const result = buildWizardProgressState({
+      draft: project,
+      rootFiles: [],
+      assetMode: "filesystem",
+      editorTab: "wizard",
+      sectionBackgroundMappingValid: true,
+      templateDemoPrefixes: TEMPLATE_PREFIXES,
+      wizardStepCount: 5
+    });
+    expect(result.wizardNeedsRootBackground).toBe(false);
+    expect(result.wizardStatus.identity).toBe(true);
+  });
+
   it("computes completed wizard progress and stable template signature", () => {
     const project = makeProject();
     const result = buildWizardProgressState({
       draft: project,
-      rootFiles: ["/custom-bg.jpg"],
+      rootFiles: [],
       assetMode: "filesystem",
-      editorTab: "edit",
+      editorTab: "wizard",
       sectionBackgroundMappingValid: true,
       templateDemoPrefixes: TEMPLATE_PREFIXES,
       wizardStepCount: 5

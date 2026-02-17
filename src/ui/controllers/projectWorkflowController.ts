@@ -187,10 +187,31 @@ const hydrateImportedProjectAssetSources = (
 ) => {
   if (importedAssets.length === 0) return project;
   const sourceMap = new Map(importedAssets.map((entry) => [entry.sourcePath, entry.dataUrl]));
-  return mapProjectAssetPaths(project, (value) => {
+  const hydratePath = (value: string) => {
     const normalized = value.startsWith("/") ? value : `/${value.replace(/^\/+/, "")}`;
     return sourceMap.get(normalized) ?? value;
-  });
+  };
+  const hydrated = mapProjectAssetPaths(project, hydratePath);
+  const resolveImportedSourcePath = (value: string | undefined) => {
+    if (!value) return "";
+    const normalized = value.startsWith("/") ? value : `/${value.replace(/^\/+/, "")}`;
+    return sourceMap.has(normalized) ? normalized : "";
+  };
+  return {
+    ...hydrated,
+    backgrounds: hydrated.backgrounds.map((background, index) => {
+      const original = project.backgrounds[index];
+      const canonicalSourcePath =
+        resolveImportedSourcePath(original?.originalSrc) || resolveImportedSourcePath(original?.src);
+      if (!canonicalSourcePath) {
+        return background;
+      }
+      return {
+        ...background,
+        originalSrc: canonicalSourcePath
+      };
+    })
+  };
 };
 
 export const createProjectWorkflowController = (

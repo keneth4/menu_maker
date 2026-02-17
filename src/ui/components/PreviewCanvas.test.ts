@@ -96,6 +96,7 @@ describe("PreviewCanvas locale bridge", () => {
         model,
         actions: {
           shiftSection: vi.fn(),
+          handleMenuWheel: vi.fn(),
           handleMenuScroll: vi.fn(),
           shiftCarousel: vi.fn(),
           handleCarouselWheel: vi.fn(),

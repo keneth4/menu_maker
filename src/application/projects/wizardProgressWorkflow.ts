@@ -36,15 +36,12 @@ export const isTemplateDemoAssetPath = (value: string, assetPrefixes: readonly s
 
 export const hasWizardCustomBackground = (
   project: MenuProject,
-  availableRootFiles: string[],
-  allowManualWhenRootMissing: boolean,
   templateDemoPrefixes: readonly string[]
 ) =>
   project.backgrounds.some((background) => {
     const src = (background.src || "").trim();
     if (!src || isTemplateDemoAssetPath(src, templateDemoPrefixes)) return false;
-    if (availableRootFiles.length === 0) return allowManualWhenRootMissing;
-    return availableRootFiles.includes(src);
+    return true;
   });
 
 export const buildWizardProgressState = (params: {
@@ -58,9 +55,6 @@ export const buildWizardProgressState = (params: {
 }): WizardProgressState => {
   const {
     draft,
-    rootFiles,
-    assetMode,
-    editorTab,
     sectionBackgroundMappingValid,
     templateDemoPrefixes,
     wizardStepCount
@@ -78,17 +72,11 @@ export const buildWizardProgressState = (params: {
   const hasTemplate = Boolean(draft.meta.template);
   const sectionMode = (draft.meta.backgroundDisplayMode ?? "carousel") === "section";
   const hasBackground = draft.backgrounds.some((background) => background.src?.trim().length > 0);
-  const hasOwnBackground = hasWizardCustomBackground(
-    draft,
-    rootFiles,
-    assetMode === "none",
-    templateDemoPrefixes
-  );
+  const hasOwnBackground = hasWizardCustomBackground(draft, templateDemoPrefixes);
   const hasDemoBackground = draft.backgrounds.some((background) =>
     isTemplateDemoAssetPath(background.src || "", templateDemoPrefixes)
   );
-  const wizardNeedsRootBackground =
-    hasBackground && (hasDemoBackground || (editorTab === "wizard" && !hasOwnBackground));
+  const wizardNeedsRootBackground = hasDemoBackground && !hasOwnBackground;
   const hasIdentity = hasBackground && !wizardNeedsRootBackground;
   const hasCategories =
     draft.categories.length > 0 &&

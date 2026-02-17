@@ -9,6 +9,8 @@ export type FontConfig = {
   source?: string;
 };
 
+export type ProjectFontRole = "identity" | "restaurant" | "title" | "section" | "item";
+
 export type MediaAsset = {
   id: string;
   label: string;
@@ -97,6 +99,8 @@ export type MenuProject = {
     fontSource?: string;
     fontRoles?: {
       identity?: FontConfig;
+      restaurant?: FontConfig;
+      title?: FontConfig;
       section?: FontConfig;
       item?: FontConfig;
     };

@@ -63,6 +63,12 @@ export const mapProjectAssetPaths = (
             ...(project.meta.fontRoles.identity
               ? { identity: mapFontConfig(project.meta.fontRoles.identity, mapPath) }
               : {}),
+            ...(project.meta.fontRoles.restaurant
+              ? { restaurant: mapFontConfig(project.meta.fontRoles.restaurant, mapPath) }
+              : {}),
+            ...(project.meta.fontRoles.title
+              ? { title: mapFontConfig(project.meta.fontRoles.title, mapPath) }
+              : {}),
             ...(project.meta.fontRoles.section
               ? { section: mapFontConfig(project.meta.fontRoles.section, mapPath) }
               : {}),

@@ -8,7 +8,10 @@ const disableBridgeMode = async (page: Page) => {
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
   await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
-  await page.locator('input[type="file"]').setInputFiles(fixturePath);
+  await page
+    .locator('input[type="file"][accept*=".json"], input[type="file"][accept*=".zip"]')
+    .first()
+    .setInputFiles(fixturePath);
 };
 
 const TINY_GIF =
@@ -207,15 +210,16 @@ const assertJukeboxScrollReactivity = async (page: Page) => {
     ).trim();
 
   const beforeVertical = await readActiveTitle();
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 8, deltaY: 220 });
+  await firstCarousel.dispatchEvent("wheel", { deltaX: 8, deltaY: 240 });
   await firstCarousel.dispatchEvent("wheel", { deltaX: 6, deltaY: 220 });
-  await page.waitForTimeout(320);
-  const afterVertical = await readActiveTitle();
-  expect(afterVertical).not.toBe(beforeVertical);
+  await firstCarousel.dispatchEvent("wheel", { deltaX: 4, deltaY: 220 });
+  await expect
+    .poll(async () => await readActiveTitle(), { timeout: 1400 })
+    .not.toBe(beforeVertical);
   expect(await getClosestHorizontalSectionIndex(page)).toBe(0);
 
-  await wheelOnLocatorCenter(page, activeCard, 280, 12);
-  await wheelOnLocatorCenter(page, activeCard, 260, 10);
+  await wheelOnLocatorCenter(page, activeCard, 2400, 18);
+  await wheelOnLocatorCenter(page, activeCard, 1800, 12);
   await page.waitForTimeout(380);
   expect(await getClosestHorizontalSectionIndex(page)).toBe(1);
   await page.waitForTimeout(320);

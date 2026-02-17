@@ -131,4 +131,37 @@ describe("createPreviewNavigationController", () => {
     metrics.setScrollLeft(260);
     expect(controller.resolveHorizontalSectionIndex(container)).toBe(1);
   });
+
+  it("clamps horizontal section shifting at boundaries instead of wrapping", () => {
+    const container = document.createElement("div");
+    defineHorizontalMetrics(container, { clientWidth: 400, scrollLeft: 0 });
+    const sectionA = document.createElement("section");
+    sectionA.className = "menu-section";
+    defineOffset(sectionA, "offsetLeft", 0);
+    defineOffset(sectionA, "offsetWidth", 360);
+    const sectionB = document.createElement("section");
+    sectionB.className = "menu-section";
+    defineOffset(sectionB, "offsetLeft", 420);
+    defineOffset(sectionB, "offsetWidth", 360);
+    container.append(sectionA, sectionB);
+    const scrollTo = vi.fn();
+    (container as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo;
+
+    const controller = createPreviewNavigationController({
+      getProject: () => createProject(),
+      getTemplateCapabilities: () => ({ sectionSnapAxis: "horizontal" }),
+      getDeviceMode: () => "desktop",
+      getActiveItem: () => null,
+      getSectionBackgroundIndexByCategory: () => ({ "cat-1": 0, "cat-2": 1 }),
+      getActiveBackgroundIndex: () => 0,
+      setActiveBackgroundIndex: () => undefined,
+      isSectionBackgroundMode: () => true,
+      closeDish: () => undefined,
+      shiftCarousel: () => undefined,
+      queryMenuScrollContainer: () => container
+    });
+
+    controller.shiftSection(-1);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
 });

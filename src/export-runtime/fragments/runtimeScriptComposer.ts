@@ -91,9 +91,15 @@ let startupLoading = true;
 let startupProgress = 0;
 let startupToken = 0;
 let startupBlockingSourceSet = null;
-const JUKEBOX_WHEEL_STEP_THRESHOLD = 300;
+const JUKEBOX_WHEEL_STEP_THRESHOLD = 260;
 const JUKEBOX_WHEEL_SETTLE_MS = 240;
 const JUKEBOX_WHEEL_DELTA_CAP = 140;
+const JUKEBOX_VERTICAL_DOMINANCE_RATIO = 2.2;
+const JUKEBOX_VERTICAL_WHEEL_MIN_PX = 10;
+const JUKEBOX_HORIZONTAL_WHEEL_MIN_PX = 0.1;
+const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 300;
+const JUKEBOX_SECTION_WHEEL_COOLDOWN_MS = 240;
+const JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS = 240;
 const JUKEBOX_TOUCH_DELTA_SCALE = 2.1;
 const JUKEBOX_TOUCH_INTENT_THRESHOLD = 10;
 const INTERACTIVE_GIF_MAX_FRAMES = 72;
@@ -190,11 +196,14 @@ const withResolvedFontFamily = (config) =>
 const getInterfaceFontConfig = () =>
   withResolvedFontFamily(normalizeFontConfig({ family: fontFamily, source: fontSource }));
 const getRoleFontConfig = (role) => {
-  const interfaceFont = getInterfaceFontConfig();
+  const identityBaseFont =
+    role === "restaurant" || role === "title"
+      ? getRoleFontConfig("identity")
+      : getInterfaceFontConfig();
   const roleFont = normalizeFontConfig(fontRoles?.[role]);
   return withResolvedFontFamily({
-    family: roleFont.family || interfaceFont.family,
-    source: roleFont.source || interfaceFont.source
+    family: roleFont.family || identityBaseFont.family,
+    source: roleFont.source || identityBaseFont.source
   });
 };
 const getItemFontConfig = (item) => {
@@ -218,6 +227,8 @@ const collectRuntimeFontConfigs = () => {
   };
   pushConfig(getInterfaceFontConfig());
   pushConfig(getRoleFontConfig("identity"));
+  pushConfig(getRoleFontConfig("restaurant"));
+  pushConfig(getRoleFontConfig("title"));
   pushConfig(getRoleFontConfig("section"));
   pushConfig(getRoleFontConfig("item"));
   (DATA.categories || []).forEach((category) => {
@@ -265,6 +276,8 @@ const ensureFont = () => {
 const getPreviewFontVars = () => {
   const interfaceFont = getInterfaceFontConfig();
   const identityFont = getRoleFontConfig("identity");
+  const restaurantFont = getRoleFontConfig("restaurant");
+  const titleFont = getRoleFontConfig("title");
   const sectionFont = getRoleFontConfig("section");
   const itemFont = getRoleFontConfig("item");
   return (
@@ -274,6 +287,10 @@ const getPreviewFontVars = () => {
     getFontStack(interfaceFont.family) +
     ";--menu-font-identity:" +
     getFontStack(identityFont.family) +
+    ";--menu-font-restaurant:" +
+    getFontStack(restaurantFont.family) +
+    ";--menu-font-title:" +
+    getFontStack(titleFont.family) +
     ";--menu-font-section:" +
     getFontStack(sectionFont.family) +
     ";--menu-font-item:" +
@@ -1748,11 +1765,15 @@ const render = () => {
   if (preview) {
     const interfaceFont = getInterfaceFontConfig();
     const identityFont = getRoleFontConfig("identity");
+    const restaurantFont = getRoleFontConfig("restaurant");
+    const titleFont = getRoleFontConfig("title");
     const sectionFont = getRoleFontConfig("section");
     const itemFont = getRoleFontConfig("item");
     preview.style.setProperty("--menu-font", getFontStack(interfaceFont.family));
     preview.style.setProperty("--menu-font-ui", getFontStack(interfaceFont.family));
     preview.style.setProperty("--menu-font-identity", getFontStack(identityFont.family));
+    preview.style.setProperty("--menu-font-restaurant", getFontStack(restaurantFont.family));
+    preview.style.setProperty("--menu-font-title", getFontStack(titleFont.family));
     preview.style.setProperty("--menu-font-section", getFontStack(sectionFont.family));
     preview.style.setProperty("--menu-font-item", getFontStack(itemFont.family));
     preview.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -1970,7 +1991,8 @@ const shiftSection = (direction) => {
     ? getClosestHorizontalSectionIndex(container)
     : getClosestSectionIndex(container);
   if (current < 0) return;
-  const next = (current + direction + sections.length) % sections.length;
+  const next = Math.min(sections.length - 1, Math.max(0, current + direction));
+  if (next === current) return;
   if (isJukeboxTemplate()) {
     centerSectionHorizontally(container, next, "smooth");
     syncBackgroundForSectionIndex(next);
@@ -2092,7 +2114,14 @@ const bindCarousels = () => {
       const start = 0;
       container.dataset.activeIndex = String(start);
       applyFocusState(container, start, count);
-      const state = jukeboxWheelState.get(id) || { settle: 0, touch: null };
+      const state = jukeboxWheelState.get(id) || {
+        settle: 0,
+        touch: null,
+        sectionCarry: 0,
+        sectionLockUntil: 0,
+        sectionGestureUntil: 0,
+        sectionGestureConsumed: false
+      };
       jukeboxWheelState.set(id, state);
       const queueSnap = () => {
         if (state.settle) window.clearTimeout(state.settle);
@@ -2113,7 +2142,55 @@ const bindCarousels = () => {
         queueSnap();
       };
       const onWheel = (event) => {
-        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        const absX = Math.abs(event.deltaX);
+        const absY = Math.abs(event.deltaY);
+        if (absX <= 1 && absY <= 1) return;
+        const horizontalDelta =
+          absX >= JUKEBOX_HORIZONTAL_WHEEL_MIN_PX ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+        const verticalIntent =
+          !event.shiftKey &&
+          absY >= JUKEBOX_VERTICAL_WHEEL_MIN_PX &&
+          (absX < JUKEBOX_HORIZONTAL_WHEEL_MIN_PX || absY >= absX * JUKEBOX_VERTICAL_DOMINANCE_RATIO);
+        const horizontalIntent =
+          Math.abs(horizontalDelta) >= JUKEBOX_HORIZONTAL_WHEEL_MIN_PX && !verticalIntent;
+        if (horizontalIntent) {
+          event.preventDefault();
+          const now = Date.now();
+          const inGesture = now <= (state.sectionGestureUntil || 0);
+          state.sectionGestureUntil = now + JUKEBOX_HORIZONTAL_GESTURE_IDLE_MS;
+          if (!inGesture) {
+            state.sectionCarry = 0;
+            state.sectionGestureConsumed = false;
+          }
+          if (state.sectionGestureConsumed) return;
+          if (now < (state.sectionLockUntil || 0)) return;
+          state.sectionCarry = (state.sectionCarry || 0) + horizontalDelta;
+          if (Math.abs(state.sectionCarry) < JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX) return;
+          const direction = state.sectionCarry > 0 ? 1 : -1;
+          const menuScroll = app.querySelector(".menu-scroll");
+          const sections = menuScroll
+            ? Array.from(menuScroll.querySelectorAll(".menu-section"))
+            : [];
+          const currentIndex = menuScroll ? getClosestHorizontalSectionIndex(menuScroll) : -1;
+          if (
+            sections.length > 0 &&
+            currentIndex >= 0 &&
+            ((direction < 0 && currentIndex <= 0) ||
+              (direction > 0 && currentIndex >= sections.length - 1))
+          ) {
+            state.sectionCarry = 0;
+            return;
+          }
+          state.sectionCarry = 0;
+          state.sectionGestureConsumed = true;
+          state.sectionLockUntil = now + JUKEBOX_SECTION_WHEEL_COOLDOWN_MS;
+          shiftSection(direction);
+          return;
+        }
+        if (!verticalIntent) return;
+        state.sectionCarry = 0;
+        state.sectionGestureConsumed = false;
+        state.sectionGestureUntil = 0;
         event.preventDefault();
         const delta = normalizeJukeboxWheelDelta(event);
         if (!delta) return;
