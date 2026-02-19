@@ -22,6 +22,7 @@
   import { getAllergenValues as getLocalizedAllergenValues } from "../../core/menu/allergens";
   import { commonAllergenCatalog, menuTerms } from "../../core/menu/catalogs";
   import { getLocalizedValue } from "../../core/menu/localization";
+  import { builtInFontSources } from "../config/staticOptions";
   import { normalizeProject } from "../../core/menu/normalization";
   import { applyWizardDemoRotationDirections } from "../../core/menu/wizardDemoRotation";
   import { INTERACTIVE_GIF_MAX_FRAMES, INTERACTIVE_KEEP_ORIGINAL_PLACEMENT, wrapCarouselIndex } from "../../core/templates/previewInteraction";
@@ -171,7 +172,7 @@
   let sectionBackgroundMappingValid = true;
   let normalizeBackgroundCarouselSeconds = (value: unknown) => {
     const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return 9;
+    if (!Number.isFinite(parsed)) return 10;
     return Math.min(60, Math.max(2, Math.round(parsed)));
   };
   let isSectionBackgroundMode = (value: MenuProject | null) =>
@@ -255,7 +256,8 @@
   ] as const;
   const READ_ONLY_ASSET_PROJECTS = new Set<string>([TEMPLATE_DEMO_PROJECT_SLUG, "demo"]);
   const USER_MANAGED_ASSET_ROOTS = USER_MANAGED_ASSET_ROOTS_WORKFLOW;
-  const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 9;
+  const ALL_BUILT_IN_FONT_HREFS = Array.from(new Set(Object.values(builtInFontSources)));
+  const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 10;
   const MIN_BACKGROUND_CAROUSEL_SECONDS = 2;
   const MAX_BACKGROUND_CAROUSEL_SECONDS = 60;
   const bridgeClient = createBridgeAssetClient(fetch);
@@ -459,7 +461,12 @@
     : "";
   $: previewFontVars = activeProject ? buildPreviewFontVarStyle(activeProject) : "";
   $: fontFaceCss = activeProject ? buildProjectFontFaceCss(activeProject) : "";
-  $: builtInFontHrefs = activeProject ? collectProjectBuiltinFontHrefs(activeProject) : [];
+  $: builtInFontHrefs = Array.from(
+    new Set([
+      ...(activeProject ? collectProjectBuiltinFontHrefs(activeProject) : []),
+      ...ALL_BUILT_IN_FONT_HREFS
+    ])
+  );
   $: previewBackgrounds =
     activeProject?.backgrounds
       ?.filter((item) => item.src && item.src.trim().length > 0)
@@ -774,7 +781,7 @@
       },
       setupInteractiveMedia: setupInteractiveDetailMedia,
       teardownInteractiveMedia: teardownInteractiveDetailMedia,
-      getDishRotateDirection: (item) => (item?.media.rotationDirection === "cw" ? -1 : 1),
+      getDishRotateDirection: (item) => (item?.media.rotationDirection === "ccw" ? 1 : -1),
       schedulePostOpen: (task) => void tick().then(() => task())
     },
     bootstrap: {
@@ -863,9 +870,40 @@
 
   const formatPrice = runtimePresentationController.formatPrice;
 
+  const normalizeUiLocale = (value: string): "es" | "en" => (value === "en" ? "en" : "es");
+  const setUiLangWithDraftSync = (lang: "es" | "en") => {
+    const nextUiLang = normalizeUiLocale(lang);
+    uiLang = nextUiLang;
+    if (!draft) return;
+    const selectedLocales = (draft.meta.locales ?? [])
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (selectedLocales.length > 0) return;
+    let changed = false;
+    if (draft.meta.defaultLocale !== nextUiLang) {
+      draft.meta.defaultLocale = nextUiLang;
+      changed = true;
+    }
+    if (locale !== nextUiLang) {
+      locale = nextUiLang;
+      changed = true;
+    }
+    if (editLang !== nextUiLang) {
+      editLang = nextUiLang;
+      changed = true;
+    }
+    if (wizardLang !== nextUiLang) {
+      wizardLang = nextUiLang;
+      changed = true;
+    }
+    if (changed) {
+      touchDraft();
+    }
+  };
+
   $: runtimeWorkspaceShell = { t, uiLang, locale, showLanding, loadError, project, activeProject, showEditorToggle, editorVisible, editorPresentation, editorTab, deviceMode, previewMode };
   $: runtimeWorkspaceEditor = {
-    draft, templateOptions, workflowMode, openError, exportStatus, exportError, workflowStep, workflowProgress, fontChoice, fontAssetOptions, rootLabel, assetProjectReadOnly, assetUploadInput, uploadTargetPath, uploadFolderOptions,
+    uiLang, draft, templateOptions, workflowMode, openError, exportStatus, exportError, workflowStep, workflowProgress, fontChoice, fontAssetOptions, rootLabel, assetProjectReadOnly, assetUploadInput, uploadTargetPath, uploadFolderOptions,
     needsAssets, fsError, assetTaskVisible, assetTaskStep, assetTaskProgress, assetMode, fsEntries, treeRows, selectedAssetIds, editPanel, editLang, selectedCategoryId, selectedItemId, selectedCategory, selectedItem, assetOptions,
     sectionBackgroundOptionsByCategory, sectionBackgroundNeedsCoverage, sectionBackgroundHasDuplicates, commonAllergenCatalog, normalizeBackgroundCarouselSeconds, wizardStep, wizardSteps, wizardProgress, wizardStatus, wizardLang, wizardCategoryId, wizardItemId, wizardCategory, wizardItem,
     wizardDemoPreview, wizardNeedsRootBackground, getLocalizedValue, textOf, ensureRestaurantName, ensureMetaTitle, touchDraft
@@ -876,13 +914,13 @@
   };
   $: runtimeWorkspaceControllers = { editorDraftController, projectWorkflowController, assetWorkspaceController };
   $: runtimeWorkspaceActions = {
-    setProjectFileInput: (input: HTMLInputElement | null) => (projectFileInput = input), setUiLang: (lang: "es" | "en") => (uiLang = lang), setLocale: (value: string) => (locale = value),
+    setProjectFileInput: (input: HTMLInputElement | null) => (projectFileInput = input), setUiLang: setUiLangWithDraftSync, setLocale: (value: string) => (locale = value),
     setEditorTab, toggleEditor, setUploadTargetPath: (path: string) => (uploadTargetPath = path), setAssetUploadInput: (input: HTMLInputElement | null) => (assetUploadInput = input),
     setEditPanel: (panel: "identity" | "background" | "section" | "dish") => (editPanel = panel), setSelectedCategoryId: (categoryId: string) => (selectedCategoryId = categoryId), setSelectedItemId: (itemId: string) => (selectedItemId = itemId),
     setWizardLang: (lang: string) => (wizardLang = lang), setWizardCategoryId: (categoryId: string) => (wizardCategoryId = categoryId), setWizardItemId: (itemId: string) => (wizardItemId = itemId),
     isWizardStepValid, goToStep, goPrevStep, goNextStep, shiftSection, handleMenuWheel, handleMenuScroll, shiftCarousel, handleCarouselWheel, handleCarouselTouchStart, handleCarouselTouchMove, handleCarouselTouchEnd, openDish, prefetchDishDetail
   };
-  $: runtimeSurfaceModel = { activeItem, dish: activeDish, interactiveEnabled: modalInteractiveEnabled, itemFontStyle: activeDish ? getItemFontStyle(activeDish) : "", modalMediaHost, modalMediaImage, textOf, getDetailImageSource, getAllergenValues, getMenuTerm, formatPrice, assetOptions, fontAssetOptions };
+  $: runtimeSurfaceModel = { t, activeItem, dish: activeDish, interactiveEnabled: modalInteractiveEnabled, itemFontStyle: activeDish ? getItemFontStyle(activeDish) : "", modalMediaHost, modalMediaImage, textOf, getDetailImageSource, getAllergenValues, getMenuTerm, formatPrice, assetOptions, fontAssetOptions };
   $: runtimeSurfaceActions = { closeDish, setModalMediaHost: (host: HTMLDivElement | null) => (modalMediaHost = host), setModalMediaImage: (image: HTMLImageElement | null) => (modalMediaImage = image) };
 </script>
 <svelte:window on:pointerdown={handleDesktopOutsidePointer} />

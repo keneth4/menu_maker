@@ -5,21 +5,10 @@
   export let model: AssetsManagerModel;
   export let actions: AssetsManagerActions;
 
-  let assetUploadInput: HTMLInputElement | null = null;
-  let uploadTargetPath = "";
+  let syncedAssetUploadInput: HTMLInputElement | null = null;
 
-  $: if (model.assetUploadInput !== assetUploadInput) {
-    assetUploadInput = model.assetUploadInput;
-  }
-  $: if (model.uploadTargetPath !== uploadTargetPath) {
-    uploadTargetPath = model.uploadTargetPath;
-  }
-
-  $: if (assetUploadInput !== model.assetUploadInput) {
-    actions.setAssetUploadInput(assetUploadInput);
-  }
-  $: if (uploadTargetPath !== model.uploadTargetPath) {
-    actions.setUploadTargetPath(uploadTargetPath);
+  $: if (model.assetUploadInput !== syncedAssetUploadInput) {
+    syncedAssetUploadInput = model.assetUploadInput;
   }
 </script>
 
@@ -27,8 +16,10 @@
   t={model.t}
   rootLabel={model.rootLabel}
   assetProjectReadOnly={model.assetProjectReadOnly}
-  bind:assetUploadInput
-  bind:uploadTargetPath
+  assetUploadInput={syncedAssetUploadInput}
+  onAssetUploadInputChange={actions.setAssetUploadInput}
+  uploadTargetPath={model.uploadTargetPath}
+  onUploadTargetChange={actions.setUploadTargetPath}
   uploadFolderOptions={model.uploadFolderOptions}
   needsAssets={model.needsAssets}
   fsError={model.fsError}
@@ -40,6 +31,7 @@
   treeRows={model.treeRows}
   selectedAssetIds={model.selectedAssetIds}
   createFolder={actions.createFolder}
+  createFolderNamed={actions.createFolderNamed}
   handleAssetUpload={actions.handleAssetUpload}
   handleAssetDragOver={actions.handleAssetDragOver}
   handleAssetDrop={actions.handleAssetDrop}
@@ -50,6 +42,7 @@
   toggleAssetSelection={actions.toggleAssetSelection}
   toggleExpandPath={actions.toggleExpandPath}
   renameEntry={actions.renameEntry}
+  renameEntryNamed={actions.renameEntryNamed}
   moveEntry={actions.moveEntry}
   deleteEntry={actions.deleteEntry}
 />

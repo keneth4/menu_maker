@@ -12,35 +12,37 @@
 
 <aside class="editor-panel {editorVisible ? 'open' : ''} {editorPresentation}">
   <div class="editor-panel__header">
-    <div>
+    <div class="editor-panel__title">
       <p class="editor-eyebrow">{t("studioTitle")}</p>
       <p class="mt-1 text-xs text-slate-400">{t("studioSubtitle")}</p>
     </div>
-    <div class="editor-actions">
-      <div class="lang-toggle" aria-label={t("toggleLang")}>
+    <div class="editor-chrome">
+      <div class="editor-actions">
+        <div class="lang-toggle" aria-label={t("toggleLang")}>
+          <button
+            class="lang-btn {uiLang === 'es' ? 'active' : ''}"
+            type="button"
+            on:click={() => setUiLang("es")}
+          >
+            ES
+          </button>
+          <button
+            class="lang-btn {uiLang === 'en' ? 'active' : ''}"
+            type="button"
+            on:click={() => setUiLang("en")}
+          >
+            EN
+          </button>
+        </div>
         <button
-          class="lang-btn {uiLang === 'es' ? 'active' : ''}"
+          class="editor-close"
           type="button"
-          on:click={() => setUiLang("es")}
+          aria-label={t("closeEditor")}
+          on:click={toggleEditor}
         >
-          ES
-        </button>
-        <button
-          class="lang-btn {uiLang === 'en' ? 'active' : ''}"
-          type="button"
-          on:click={() => setUiLang("en")}
-        >
-          EN
+          ✕
         </button>
       </div>
-      <button
-        class="editor-close"
-        type="button"
-        aria-label={t("closeEditor")}
-        on:click={toggleEditor}
-      >
-        ✕
-      </button>
     </div>
   </div>
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { deriveFontFamilyFromSource } from "../../application/typography/fontWorkflow";
+  import { fontOptions } from "../config/staticOptions";
   import type { TemplateOption } from "../../core/templates/templateOptions";
   import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 
@@ -65,11 +67,11 @@
     mode: "hero360" | "alternate"
   ) => void = () => {};
   export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
-  export let setFontRoleSource: (
+  export let setFontRoleSelection: (
     role: ProjectFontRole,
-    source: string
+    selection: string
   ) => void = () => {};
-  export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
+  export let setItemFontSelection: (item: MenuItem, selection: string) => void = () => {};
   export let setItemPriceVisible: (item: MenuItem, visible: boolean) => void = () => {};
   export let handleLocalizedInput: (
     localized: Record<string, string>,
@@ -90,8 +92,14 @@
 
   let mediaAssetOptions: Array<{ value: string; label: string }> = [];
   let fontAssetOptions: Array<{ value: string; label: string }> = [];
+  let rolePreviewSelections: Partial<Record<ProjectFontRole, string>> = {};
+  let itemPreviewSelections: Record<string, string> = {};
   $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
   $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
+
+  const FONT_SELECTION_DEFAULT = "default";
+  const FONT_SELECTION_BUILTIN_PREFIX = "builtin:";
+  const FONT_SELECTION_ASSET_PREFIX = "asset:";
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -107,12 +115,27 @@
     setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
   };
 
-  const handleBackgroundLabelInput = (bg: { label?: string }, event: Event) => {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
-    bg.label = target.value;
-    touchDraft();
+  const extractFilenameFromPath = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized || normalized.startsWith("data:")) return "";
+    const [withoutHash] = normalized.split("#");
+    const [withoutQuery] = withoutHash.split("?");
+    const filename = withoutQuery.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    if (!filename) return "";
+    try {
+      return decodeURIComponent(filename);
+    } catch {
+      return filename;
+    }
   };
+
+  const getBackgroundDisplayLabel = (
+    bg: { src: string; originalSrc?: string },
+    index: number
+  ) =>
+    extractFilenameFromPath(bg.originalSrc ?? "") ||
+    extractFilenameFromPath(bg.src ?? "") ||
+    `${t("backgroundLabel")} ${index + 1}`;
 
   const handleBackgroundSourceInput = (bg: { src: string; originalSrc?: string }, event: Event) => {
     const target = event.currentTarget;
@@ -127,6 +150,73 @@
 
   const hasOptionValue = (options: Array<{ value: string; label: string }>, value: string) =>
     options.some((option) => option.value === value);
+
+  const encodeBuiltInSelection = (family: string) => `${FONT_SELECTION_BUILTIN_PREFIX}${family}`;
+  const encodeAssetSelection = (source: string) => `${FONT_SELECTION_ASSET_PREFIX}${source}`;
+
+  const resolveRoleFontSelection = (role: ProjectFontRole) => {
+    const roleConfig = draft?.meta.fontRoles?.[role];
+    const source = roleConfig?.source?.trim() ?? "";
+    if (source) return encodeAssetSelection(source);
+    const family = roleConfig?.family?.trim() ?? "";
+    if (family) return encodeBuiltInSelection(family);
+    return FONT_SELECTION_DEFAULT;
+  };
+
+  const resolveItemFontSelection = (item: MenuItem) => {
+    const itemConfig = item.typography?.item;
+    const source = itemConfig?.source?.trim() ?? "";
+    if (source) return encodeAssetSelection(source);
+    const family = itemConfig?.family?.trim() ?? "";
+    if (family) return encodeBuiltInSelection(family);
+    return FONT_SELECTION_DEFAULT;
+  };
+
+  const resolveAssetSelectionSource = (selection: string) =>
+    selection.startsWith(FONT_SELECTION_ASSET_PREFIX)
+      ? selection.slice(FONT_SELECTION_ASSET_PREFIX.length).trim()
+      : "";
+
+  const hasFontAssetSource = (source: string) => hasOptionValue(fontAssetOptions, source);
+
+  const roleFieldLabel: Record<ProjectFontRole, string> = {
+    restaurant: "fontRoleRestaurant",
+    title: "fontRoleTitle",
+    identity: "fontRoleIdentity",
+    section: "fontRoleSection",
+    item: "fontRoleItem"
+  };
+  const wizardIdentityRoleOrder: ProjectFontRole[] = ["restaurant", "title", "identity"];
+
+  const handleRoleFontSelectionInput = (role: ProjectFontRole, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    rolePreviewSelections = {
+      ...rolePreviewSelections,
+      [role]: target.value
+    };
+    setFontRoleSelection(role, target.value);
+  };
+
+  const getRoleFontSelectionForUi = (
+    role: ProjectFontRole,
+    previewSelections: Partial<Record<ProjectFontRole, string>>
+  ) => previewSelections[role] ?? resolveRoleFontSelection(role);
+
+  const handleItemFontSelectionInput = (item: MenuItem, event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    itemPreviewSelections = {
+      ...itemPreviewSelections,
+      [item.id]: target.value
+    };
+    setItemFontSelection(item, target.value);
+  };
+
+  const getItemFontSelectionForUi = (
+    item: MenuItem,
+    previewSelections: Record<string, string>
+  ) => previewSelections[item.id] ?? resolveItemFontSelection(item);
 
   const resolveBackgroundSourceSelection = (bg: { src: string; originalSrc?: string }) => {
     const direct = bg.src?.trim() ?? "";
@@ -151,7 +241,13 @@
   const handleWizardItemAssetInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
-    item.media.hero360 = target.value;
+    const nextValue = target.value;
+    item.media.hero360 = nextValue;
+    if (!nextValue || nextValue.startsWith("data:")) {
+      item.media.originalHero360 = "";
+    } else {
+      item.media.originalHero360 = nextValue;
+    }
     touchDraft();
   };
 
@@ -166,6 +262,59 @@
     if (!(target instanceof HTMLInputElement)) return;
     setItemPriceVisible(item, target.checked);
   };
+
+  const resolveWizardItemAssetSelection = (item: MenuItem) => {
+    const direct = item.media.hero360?.trim() ?? "";
+    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+      return direct;
+    }
+    const canonical = item.media.originalHero360?.trim() ?? "";
+    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+      return canonical;
+    }
+    return canonical || direct;
+  };
+
+  const resolveBuiltInFamilyFromSelection = (selection: string) =>
+    selection.startsWith(FONT_SELECTION_BUILTIN_PREFIX)
+      ? selection.slice(FONT_SELECTION_BUILTIN_PREFIX.length).trim()
+      : "";
+
+  const buildFontPreviewStyle = (selection: string) => {
+    const builtInFamily = resolveBuiltInFamilyFromSelection(selection);
+    const assetSource = resolveAssetSelectionSource(selection);
+    const family =
+      builtInFamily ||
+      (assetSource ? deriveFontFamilyFromSource(assetSource) : "") ||
+      "Fraunces";
+    const escaped = family.replace(/"/g, '\\"');
+    return `font-family:"${escaped}","Fraunces","Georgia",serif;`;
+  };
+
+  $: {
+    let changed = false;
+    const next = { ...rolePreviewSelections };
+    const allRoles: ProjectFontRole[] = ["restaurant", "title", "identity", "section", "item"];
+    for (const role of allRoles) {
+      if (next[role] !== undefined && next[role] === resolveRoleFontSelection(role)) {
+        delete next[role];
+        changed = true;
+      }
+    }
+    if (changed) {
+      rolePreviewSelections = next;
+    }
+  }
+
+  $: if (wizardItem) {
+    const optimistic = itemPreviewSelections[wizardItem.id];
+    const resolved = resolveItemFontSelection(wizardItem);
+    if (optimistic !== undefined && optimistic === resolved) {
+      const next = { ...itemPreviewSelections };
+      delete next[wizardItem.id];
+      itemPreviewSelections = next;
+    }
+  }
 
   const ensureDraftMetaLocalizedField = (key: "restaurantName" | "title") => {
     if (!draft) return null;
@@ -341,99 +490,39 @@
                 <option value="section">{t("backgroundDisplaySection")}</option>
               </select>
             </label>
-            <label class="editor-field">
-              <span>{t("fontRoleRestaurant")}</span>
-              {#if fontAssetOptions.length}
+            {#each wizardIdentityRoleOrder as role}
+              <label class="editor-field">
+                <span>{t("textStyle")} · {t(roleFieldLabel[role])}</span>
                 <select
                   class="editor-select"
-                  value={draft.meta.fontRoles?.restaurant?.source ?? ""}
-                  on:change={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLSelectElement)) return;
-                    setFontRoleSource("restaurant", target.value);
-                  }}
+                  value={getRoleFontSelectionForUi(role, rolePreviewSelections)}
+                  on:change={(event) => handleRoleFontSelectionInput(role, event)}
                 >
-                  <option value=""></option>
+                  <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+                  {#each fontOptions as font}
+                    <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+                  {/each}
+                  {#if resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)) &&
+                  !hasFontAssetSource(resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)))}
+                    <option value={encodeAssetSelection(resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)))}>
+                      {resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections))}
+                    </option>
+                  {/if}
                   {#each fontAssetOptions as option}
-                    <option value={option.value}>{option.label}</option>
+                    <option value={encodeAssetSelection(option.value)}>{option.label}</option>
                   {/each}
                 </select>
-              {:else}
-                <input
-                  type="text"
-                  class="editor-input"
-                  value={draft.meta.fontRoles?.restaurant?.source ?? ""}
-                  list="font-asset-files"
-                  on:input={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLInputElement)) return;
-                    setFontRoleSource("restaurant", target.value);
-                  }}
-                />
-              {/if}
-            </label>
-            <label class="editor-field">
-              <span>{t("fontRoleTitle")}</span>
-              {#if fontAssetOptions.length}
-                <select
-                  class="editor-select"
-                  value={draft.meta.fontRoles?.title?.source ?? ""}
-                  on:change={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLSelectElement)) return;
-                    setFontRoleSource("title", target.value);
-                  }}
+                {#if role === "identity"}
+                  <small class="editor-hint">{t("fontRoleIdentityHint")}</small>
+                {/if}
+                <p
+                  class="editor-font-preview"
+                  style={buildFontPreviewStyle(getRoleFontSelectionForUi(role, rolePreviewSelections))}
                 >
-                  <option value=""></option>
-                  {#each fontAssetOptions as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              {:else}
-                <input
-                  type="text"
-                  class="editor-input"
-                  value={draft.meta.fontRoles?.title?.source ?? ""}
-                  list="font-asset-files"
-                  on:input={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLInputElement)) return;
-                    setFontRoleSource("title", target.value);
-                  }}
-                />
-              {/if}
-            </label>
-            <label class="editor-field">
-              <span>{t("fontRoleIdentitySrc")}</span>
-              {#if fontAssetOptions.length}
-                <select
-                  class="editor-select"
-                  value={draft.meta.fontRoles?.identity?.source ?? ""}
-                  on:change={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLSelectElement)) return;
-                    setFontRoleSource("identity", target.value);
-                  }}
-                >
-                  <option value=""></option>
-                  {#each fontAssetOptions as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              {:else}
-                <input
-                  type="text"
-                  class="editor-input"
-                  value={draft.meta.fontRoles?.identity?.source ?? ""}
-                  list="font-asset-files"
-                  on:input={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLInputElement)) return;
-                    setFontRoleSource("identity", target.value);
-                  }}
-                />
-              {/if}
-            </label>
+                  {t("fontPreviewSample")}
+                </p>
+              </label>
+            {/each}
           </div>
         {/if}
         <button class="editor-outline" type="button" on:click={addBackground}>
@@ -441,17 +530,9 @@
         </button>
         {#if draft}
           <div class="wizard-list">
-            {#each draft.backgrounds as bg}
+            {#each draft.backgrounds as bg, index}
               <div class="wizard-item">
-                <label class="editor-field">
-                  <span>{t("wizardLabel")}</span>
-                  <input
-                    type="text"
-                    class="editor-input"
-                    value={bg.label ?? ""}
-                    on:input={(event) => handleBackgroundLabelInput(bg, event)}
-                  />
-                </label>
+                <p class="edit-hint">{getBackgroundDisplayLabel(bg, index)}</p>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
                   {#if mediaAssetOptions.length}
@@ -464,7 +545,7 @@
                       {#if resolveBackgroundSourceSelection(bg) &&
                       !hasOptionValue(mediaAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
-                          {bg.label?.trim() || t("backgroundLabel")}
+                          {getBackgroundDisplayLabel(bg, index)}
                         </option>
                       {/if}
                       {#each mediaAssetOptions as option}
@@ -515,7 +596,8 @@
             </select>
           </label>
           <button class="editor-outline" type="button" on:click={addWizardCategory}>
-            {t("wizardAddCategory")}
+            <span class="editor-action-icon" aria-hidden="true">＋</span>
+            <span>{t("wizardAddCategory")}</span>
           </button>
           <div class="wizard-list">
             {#each draft.categories as category}
@@ -589,42 +671,51 @@
             </select>
           </label>
           <label class="editor-field">
-            <span>{t("fontRoleItemSrc")}</span>
-            {#if fontAssetOptions.length}
-              <select
-                class="editor-select"
-                value={draft.meta.fontRoles?.item?.source ?? ""}
-                on:change={(event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLSelectElement)) return;
-                  setFontRoleSource("item", target.value);
-                }}
-              >
-                <option value=""></option>
-                {#each fontAssetOptions as option}
-                  <option value={option.value}>{option.label}</option>
-                {/each}
-              </select>
-            {:else}
-              <input
-                type="text"
-                class="editor-input"
-                value={draft.meta.fontRoles?.item?.source ?? ""}
-                list="font-asset-files"
-                on:input={(event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLInputElement)) return;
-                  setFontRoleSource("item", target.value);
-                }}
-              />
-            {/if}
+            <span>{t("textStyle")} · {t("fontRoleItem")}</span>
+            <select
+              class="editor-select"
+              value={getRoleFontSelectionForUi("item", rolePreviewSelections)}
+              on:change={(event) => handleRoleFontSelectionInput("item", event)}
+            >
+              <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+              {#each fontOptions as font}
+                <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+              {/each}
+              {#if resolveAssetSelectionSource(getRoleFontSelectionForUi("item", rolePreviewSelections)) &&
+              !hasFontAssetSource(resolveAssetSelectionSource(getRoleFontSelectionForUi("item", rolePreviewSelections)))}
+                <option value={encodeAssetSelection(resolveAssetSelectionSource(getRoleFontSelectionForUi("item", rolePreviewSelections)))}>
+                  {resolveAssetSelectionSource(getRoleFontSelectionForUi("item", rolePreviewSelections))}
+                </option>
+              {/if}
+              {#each fontAssetOptions as option}
+                <option value={encodeAssetSelection(option.value)}>{option.label}</option>
+              {/each}
+            </select>
+            <p
+              class="editor-font-preview"
+              style={buildFontPreviewStyle(getRoleFontSelectionForUi("item", rolePreviewSelections))}
+            >
+              {t("fontPreviewSample")}
+            </p>
           </label>
           <div class="edit-actions">
-            <button class="editor-outline" type="button" on:click={addWizardDish}>
-              {t("wizardAddDish")}
+            <button
+              class="editor-outline editor-icon-btn"
+              type="button"
+              aria-label={t("wizardAddDish")}
+              title={t("wizardAddDish")}
+              on:click={addWizardDish}
+            >
+              <span class="editor-action-icon" aria-hidden="true">＋</span>
             </button>
-            <button class="editor-outline danger" type="button" on:click={removeWizardDish}>
-              {t("delete")}
+            <button
+              class="editor-outline danger editor-icon-btn"
+              type="button"
+              aria-label={t("delete")}
+              title={t("delete")}
+              on:click={removeWizardDish}
+            >
+              <span class="editor-action-icon" aria-hidden="true">✕</span>
             </button>
           </div>
           {#if wizardCategory}
@@ -659,7 +750,7 @@
                 on:input={(event) => handleDescriptionInput(wizardItem, wizardLang, event)}
               ></textarea>
             </label>
-            <label class="editor-field editor-inline">
+            <label class="editor-field editor-inline editor-inline--spaced">
               <span>{t("showPrice")}</span>
               <input
                 type="checkbox"
@@ -683,10 +774,16 @@
               {#if mediaAssetOptions.length}
                 <select
                   class="editor-select"
-                  value={wizardItem.media.hero360}
+                  value={resolveWizardItemAssetSelection(wizardItem)}
                   on:change={(event) => handleWizardItemAssetInput(wizardItem, event)}
                 >
                   <option value=""></option>
+                  {#if resolveWizardItemAssetSelection(wizardItem) &&
+                  !hasOptionValue(mediaAssetOptions, resolveWizardItemAssetSelection(wizardItem))}
+                    <option value={resolveWizardItemAssetSelection(wizardItem)}>
+                      {extractFilenameFromPath(resolveWizardItemAssetSelection(wizardItem))}
+                    </option>
+                  {/if}
                   {#each mediaAssetOptions as option}
                     <option value={option.value}>{option.label}</option>
                   {/each}
@@ -745,35 +842,34 @@
               </label>
             {/if}
             <label class="editor-field">
-              <span>{t("itemFontOverrideSrc")}</span>
-              {#if fontAssetOptions.length}
-                <select
-                  class="editor-select"
-                  value={wizardItem.typography?.item?.source ?? ""}
-                  on:change={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLSelectElement)) return;
-                    setItemFontSource(wizardItem, target.value);
-                  }}
-                >
-                  <option value=""></option>
-                  {#each fontAssetOptions as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              {:else}
-                <input
-                  type="text"
-                  class="editor-input"
-                  value={wizardItem.typography?.item?.source ?? ""}
-                  list="font-asset-files"
-                  on:input={(event) => {
-                    const target = event.currentTarget;
-                    if (!(target instanceof HTMLInputElement)) return;
-                    setItemFontSource(wizardItem, target.value);
-                  }}
-                />
-              {/if}
+              <span>{t("textStyle")}</span>
+              <select
+                class="editor-select"
+                value={getItemFontSelectionForUi(wizardItem, itemPreviewSelections)}
+                on:change={(event) => handleItemFontSelectionInput(wizardItem, event)}
+              >
+                <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+                {#each fontOptions as font}
+                  <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+                {/each}
+                {#if resolveAssetSelectionSource(getItemFontSelectionForUi(wizardItem, itemPreviewSelections)) &&
+                !hasFontAssetSource(resolveAssetSelectionSource(getItemFontSelectionForUi(wizardItem, itemPreviewSelections)))}
+                  <option
+                    value={encodeAssetSelection(resolveAssetSelectionSource(getItemFontSelectionForUi(wizardItem, itemPreviewSelections)))}
+                  >
+                    {resolveAssetSelectionSource(getItemFontSelectionForUi(wizardItem, itemPreviewSelections))}
+                  </option>
+                {/if}
+                {#each fontAssetOptions as option}
+                  <option value={encodeAssetSelection(option.value)}>{option.label}</option>
+                {/each}
+              </select>
+              <p
+                class="editor-font-preview"
+                style={buildFontPreviewStyle(getItemFontSelectionForUi(wizardItem, itemPreviewSelections))}
+              >
+                {t("fontPreviewSample")}
+              </p>
             </label>
             <div class="editor-field">
               <div class="edit-item__rotation">
@@ -811,7 +907,8 @@
       on:click={goPrevStep}
       disabled={wizardStep === 0}
     >
-      {t("wizardBack")}
+      <span class="editor-action-icon" aria-hidden="true">◀</span>
+      <span>{t("wizardBack")}</span>
     </button>
     {#if wizardStep < wizardSteps.length - 1}
       <button
@@ -820,7 +917,8 @@
         on:click={goNextStep}
         disabled={!isWizardStepValid(wizardStep)}
       >
-        {t("wizardNext")}
+        <span>{t("wizardNext")}</span>
+        <span class="editor-action-icon" aria-hidden="true">▶</span>
       </button>
     {:else}
       <button

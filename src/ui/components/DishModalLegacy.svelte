@@ -7,6 +7,7 @@
   export let itemFontStyle = "";
   export let modalMediaHost: HTMLDivElement | null = null;
   export let modalMediaImage: HTMLImageElement | null = null;
+  export let t: (key: string) => string = (key) => key;
 
   export let textOf: (value: Record<string, string> | undefined, fallback?: string) => string =
     () => "";
@@ -38,13 +39,21 @@
   <button
     class="dish-modal__backdrop"
     type="button"
-    aria-label="Close"
+    aria-label={t("close")}
     on:click={() => dispatch("close")}
   ></button>
   <div class="dish-modal__card" style={itemFontStyle}>
     <div class="dish-modal__header">
       <p class="dish-modal__title">{textOf(dish.name)}</p>
-      <button class="dish-modal__close" type="button" on:click={() => dispatch("close")}>✕</button>
+      <button
+        class="dish-modal__close"
+        type="button"
+        aria-label={t("close")}
+        title={t("close")}
+        on:click={() => dispatch("close")}
+      >
+        ✕
+      </button>
     </div>
     <div class="dish-modal__media" bind:this={modalMediaHost}>
       {#if interactiveEnabled}

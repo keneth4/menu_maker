@@ -136,4 +136,21 @@ describe("mapProjectAssetPaths", () => {
       }
     });
   });
+
+  it("supports prefix rewrites for moved asset folders", () => {
+    const project = fixture();
+    const mapped = mapProjectAssetPaths(project, (value) =>
+      value
+        .replace(
+          "/projects/old/assets/originals/backgrounds/",
+          "/projects/old/assets/originals/items/"
+        )
+        .replace("/projects/old/assets/backgrounds/", "/projects/old/assets/originals/items/")
+        .replace(/^assets\/originals\/backgrounds\//, "assets/originals/items/")
+    );
+
+    expect(mapped.backgrounds[0].src).toBe("/projects/old/assets/originals/items/bg.gif");
+    expect(mapped.backgrounds[0].originalSrc).toBe("assets/originals/items/bg.gif");
+    expect(mapped.categories[0].items[0].media.originalHero360).toBe("assets/originals/dishes/dish.gif");
+  });
 });

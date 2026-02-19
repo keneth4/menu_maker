@@ -79,7 +79,7 @@
           editorTab={shell.editorTab}
           t={shell.t}
           draft={editor.draft}
-          uiLang={shell.uiLang}
+          uiLang={editor.uiLang}
           templateOptions={editor.templateOptions}
           workflowMode={editor.workflowMode}
           openError={editor.openError}
@@ -87,8 +87,6 @@
           exportError={editor.exportError}
           workflowStep={editor.workflowStep}
           workflowProgress={editor.workflowProgress}
-          fontChoice={editor.fontChoice}
-          fontAssetOptions={editor.fontAssetOptions}
           rootLabel={editor.rootLabel}
           assetProjectReadOnly={editor.assetProjectReadOnly}
           assetUploadInput={editor.assetUploadInput}

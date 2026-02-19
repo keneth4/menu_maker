@@ -66,6 +66,17 @@ const makeProject = (slug = "demo"): MenuProject => ({
   }
 });
 
+const makeEmptyProject = (slug = "nuevo-proyecto"): MenuProject => {
+  const base = makeProject(slug);
+  return {
+    ...base,
+    meta: {
+      ...base.meta,
+      locales: []
+    }
+  };
+};
+
 const cloneProject = (value: MenuProject): MenuProject => JSON.parse(JSON.stringify(value));
 
 const createState = (): ProjectWorkflowState => ({
@@ -125,7 +136,7 @@ const createHarness = (
     refreshBridgeEntries,
     initCarouselIndices,
     cloneProject,
-    createEmptyProject: () => makeProject("nuevo-proyecto"),
+    createEmptyProject: () => makeEmptyProject("nuevo-proyecto"),
     applyTemplate,
     syncWizardShowcaseVisibility,
     normalizePath: (value: string) => value,
@@ -234,9 +245,44 @@ describe("projectWorkflowController", () => {
     const state = getState();
     expect(state.project?.meta.name).toBe("New project");
     expect(state.project?.meta.slug).toBe("new-project");
+    expect(state.project?.meta.locales).toEqual([]);
     expect(state.wizardStep).toBe(0);
     expect(state.draft?.backgrounds.length).toBe(1);
     expect(applyTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes loaded locales and default locale casing", async () => {
+    const loaded = makeProject("importado");
+    loaded.meta.locales = [" EN ", "fr", "FR", ""];
+    loaded.meta.defaultLocale = " EN ";
+    const { controller, getState } = createHarness();
+
+    await controller.applyLoadedProject(loaded, "importado.zip");
+
+    expect(getState().draft?.meta.locales).toEqual(["en", "fr"]);
+    expect(getState().draft?.meta.defaultLocale).toBe("en");
+    expect(getState().locale).toBe("en");
+  });
+
+  it("auto-selects uiLang for save/export when no languages are selected", async () => {
+    const noLocalesProject = makeProject("no-locales");
+    noLocalesProject.meta.locales = [];
+    const { controller, getState, deps } = createHarness({
+      draft: cloneProject(noLocalesProject),
+      project: cloneProject(noLocalesProject),
+      uiLang: "en"
+    });
+
+    await controller.saveProject();
+    expect(getState().draft?.meta.locales).toEqual(["en"]);
+    expect(getState().draft?.meta.defaultLocale).toBe("en");
+    expect(getState().openError).toBe("");
+    expect(deps.startWorkflow).not.toHaveBeenCalled();
+
+    await controller.exportStaticSite();
+    expect(getState().draft?.meta.locales).toEqual(["en"]);
+    expect(getState().exportError).not.toBe("errSelectLanguage");
+    expect(deps.startWorkflow).toHaveBeenCalledWith("export", "progressExportStart", 4);
   });
 
   it("starts wizard with showcase visibility sync after tab switch", async () => {

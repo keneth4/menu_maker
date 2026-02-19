@@ -24,6 +24,7 @@ describe("RuntimeSurfaceHost", () => {
     const { container } = render(RuntimeSurfaceHost, {
       props: {
         model: {
+          t: (key: string) => key,
           activeItem: { category: "soups", itemId: "dish-1" },
           dish,
           interactiveEnabled: false,
@@ -47,7 +48,7 @@ describe("RuntimeSurfaceHost", () => {
     expect(container.querySelector("#asset-files option[value='a.png']")).not.toBeNull();
     expect(container.querySelector("#font-asset-files option[value='font.woff2']")).not.toBeNull();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "close" })[0]);
     expect(actions.closeDish).toHaveBeenCalledTimes(1);
   });
 });

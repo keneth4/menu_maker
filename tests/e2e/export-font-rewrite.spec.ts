@@ -59,7 +59,7 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.getByRole("button", { name: /abrir|open/i }).click();
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 

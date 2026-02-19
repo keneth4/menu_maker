@@ -9,6 +9,7 @@
 {#if model.activeItem && model.dish}
   <DishModal
     model={{
+      t: model.t,
       dish: model.dish,
       interactiveEnabled: model.interactiveEnabled,
       itemFontStyle: model.itemFontStyle,

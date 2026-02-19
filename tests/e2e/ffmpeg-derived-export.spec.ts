@@ -84,7 +84,7 @@ const openEditorIfClosed = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.getByRole("button", { name: /abrir|open/i }).click();
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
@@ -216,7 +216,7 @@ test("bridge save zip keeps originals and strips derived metadata", async ({ pag
 
   const saveDownloadPromise = page.waitForEvent("download", { timeout: 180000 });
   page.once("dialog", (dialog) => dialog.accept(`${slug}-save.zip`));
-  await page.getByRole("button", { name: /guardar proyecto|save project/i }).click();
+  await page.getByRole("button", { name: /guardar|save/i }).click();
   const saveDownload = await saveDownloadPromise;
   expect(saveDownload.suggestedFilename()).toMatch(/-save\.zip$/i);
 

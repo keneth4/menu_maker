@@ -4,9 +4,11 @@ set -euo pipefail
 cleanup_stale_playwright_artifacts() {
   rm -rf test-results playwright-report
   find . -maxdepth 1 -type d \( -name "ffmpeg*" -o -name "ffmpg*" \) -exec rm -rf {} + 2>/dev/null || true
+  node ./scripts/cleanup-test-generated-projects.mjs >/dev/null 2>&1 || true
 }
 
 cleanup_stale_playwright_artifacts
+trap cleanup_stale_playwright_artifacts EXIT
 
 if command -v docker >/dev/null 2>&1; then
   echo "Running containerized e2e gate (container-first)..."
@@ -22,4 +24,4 @@ if command -v docker >/dev/null 2>&1; then
   echo "Containerized e2e gate failed (exit ${CONTAINER_EXIT}). Falling back to local Playwright..."
 fi
 
-exec npm run test:e2e:local -- ${E2E_ARGS:-}
+npm run test:e2e:local -- ${E2E_ARGS:-}

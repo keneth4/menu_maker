@@ -16,15 +16,41 @@ export type SectionBackgroundState = {
 
 export const normalizeSectionBackgroundId = (value?: string) => (value ?? "").trim();
 
+const extractFilenameFromPath = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized || normalized.startsWith("data:")) return "";
+  const [withoutHash] = normalized.split("#");
+  const [withoutQuery] = withoutHash.split("?");
+  const filename = withoutQuery.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  if (!filename) return "";
+  try {
+    return decodeURIComponent(filename);
+  } catch {
+    return filename;
+  }
+};
+
+const resolveBackgroundReference = (background: { src?: string; originalSrc?: string }) =>
+  (background.src ?? "").trim() || (background.originalSrc ?? "").trim();
+
+export const getBackgroundDisplayLabel = (
+  background: { src?: string; originalSrc?: string },
+  index: number,
+  backgroundLabel: string
+) =>
+  extractFilenameFromPath(background.originalSrc ?? "") ||
+  extractFilenameFromPath(background.src ?? "") ||
+  `${backgroundLabel} ${index + 1}`;
+
 export const getSectionModeBackgroundEntries = (
   project: MenuProject,
   backgroundLabel: string
 ): SectionBackgroundEntry[] =>
   project.backgrounds
-    .filter((background) => background.id && background.src.trim().length > 0)
+    .filter((background) => background.id && resolveBackgroundReference(background).length > 0)
     .map((background, index) => ({
       id: background.id,
-      label: background.label?.trim() || `${backgroundLabel} ${index + 1}`
+      label: getBackgroundDisplayLabel(background, index, backgroundLabel)
     }));
 
 export const buildSectionBackgroundUsage = (categories: MenuCategory[]) =>

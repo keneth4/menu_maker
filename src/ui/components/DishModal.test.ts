@@ -19,6 +19,7 @@ describe("DishModal", () => {
     const { component } = render(DishModal, {
       props: {
         model: {
+          t: (key: string) => key,
           dish,
           interactiveEnabled: true,
           itemFontStyle: "",
@@ -41,7 +42,7 @@ describe("DishModal", () => {
     const close = vi.fn();
     component.$on("close", close);
 
-    await fireEvent.click(screen.getByRole("button", { name: "✕" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "close" })[1]);
 
     expect(close).toHaveBeenCalledTimes(1);
     expect(closeAction).toHaveBeenCalledTimes(1);

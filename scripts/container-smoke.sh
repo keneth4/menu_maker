@@ -18,10 +18,16 @@ fi
 PLAYWRIGHT_DOCKER_TAG="${PLAYWRIGHT_DOCKER_TAG:-v${PLAYWRIGHT_VERSION}-jammy}"
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:${PLAYWRIGHT_DOCKER_TAG}"
 
+cleanup_generated_test_projects() {
+  node ./scripts/cleanup-test-generated-projects.mjs >/dev/null 2>&1 || true
+}
+
 cleanup() {
   ${COMPOSE_BIN} down --remove-orphans --volumes --rmi local >/dev/null 2>&1 || true
+  cleanup_generated_test_projects
 }
 trap cleanup EXIT
+cleanup_generated_test_projects
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required for containerized smoke checks."

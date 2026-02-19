@@ -8,9 +8,11 @@ TEST_GREP="${TEST_GREP:-performance smoke keeps startup and modal interaction re
 cleanup_stale_playwright_artifacts() {
   rm -rf test-results playwright-report
   find . -maxdepth 1 -type d \( -name "ffmpeg*" -o -name "ffmpg*" \) -exec rm -rf {} + 2>/dev/null || true
+  node ./scripts/cleanup-test-generated-projects.mjs >/dev/null 2>&1 || true
 }
 
 cleanup_stale_playwright_artifacts
+trap cleanup_stale_playwright_artifacts EXIT
 
 supports_local_playwright() {
   local version

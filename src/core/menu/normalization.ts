@@ -58,11 +58,11 @@ const normalizeDerivedMap = (value: unknown) => {
 };
 
 const normalizeRotationDirection = (value: unknown): "cw" | "ccw" =>
-  value === "cw" ? "cw" : "ccw";
+  value === "ccw" ? "ccw" : "cw";
 
 const normalizeBackgroundCarouselSeconds = (value: unknown) => {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 9;
+  if (!Number.isFinite(parsed)) return 10;
   return Math.min(60, Math.max(2, Math.round(parsed)));
 };
 

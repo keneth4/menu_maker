@@ -7,7 +7,7 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.getByRole("button", { name: /abrir|open/i }).click();
   await page
     .locator('input[type="file"][accept*=".json"], input[type="file"][accept*=".zip"]')
     .first()
@@ -197,7 +197,11 @@ const assertJukeboxScrollReactivity = async (page: Page) => {
   await page.locator(".editor-close").first().click();
   const firstCarousel = page.locator(".menu-section .menu-carousel").first();
   await expect(firstCarousel).toBeVisible();
-  const activeCard = page.locator(".menu-section").first().locator(".carousel-card.active").first();
+  const activeCardImage = page
+    .locator(".menu-section")
+    .first()
+    .locator(".carousel-card.active .carousel-media img")
+    .first();
 
   const readActiveTitle = async () =>
     (
@@ -210,16 +214,15 @@ const assertJukeboxScrollReactivity = async (page: Page) => {
     ).trim();
 
   const beforeVertical = await readActiveTitle();
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 8, deltaY: 240 });
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 6, deltaY: 220 });
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 4, deltaY: 220 });
+  await wheelOnLocatorCenter(page, activeCardImage, 6, 260);
+  await wheelOnLocatorCenter(page, activeCardImage, 5, 240);
   await expect
     .poll(async () => await readActiveTitle(), { timeout: 1400 })
     .not.toBe(beforeVertical);
   expect(await getClosestHorizontalSectionIndex(page)).toBe(0);
 
-  await wheelOnLocatorCenter(page, activeCard, 2400, 18);
-  await wheelOnLocatorCenter(page, activeCard, 1800, 12);
+  await wheelOnLocatorCenter(page, activeCardImage, 2400, 18);
+  await wheelOnLocatorCenter(page, activeCardImage, 1800, 12);
   await page.waitForTimeout(380);
   expect(await getClosestHorizontalSectionIndex(page)).toBe(1);
   await page.waitForTimeout(320);
@@ -229,6 +232,7 @@ const assertJukeboxScrollReactivity = async (page: Page) => {
 test("json imported jukebox keeps section and item scroll responsiveness", async ({
   page
 }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const fixturePath = await writeJsonFixture(testInfo);
   await disableBridgeMode(page);
   await page.goto("/");
@@ -240,6 +244,7 @@ test("json imported jukebox keeps section and item scroll responsiveness", async
 test("zip imported jukebox keeps section and item scroll responsiveness", async ({
   page
 }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const fixturePath = await writeZipFixture(testInfo);
   await disableBridgeMode(page);
   await page.goto("/");

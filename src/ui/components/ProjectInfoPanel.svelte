@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currencyOptions, fontOptions, languageOptions } from "../config/staticOptions";
+  import { currencyOptions, languageOptions } from "../config/staticOptions";
   import type { ProjectInfoPanelActions, ProjectInfoPanelModel } from "../contracts/components";
 
   export let model: ProjectInfoPanelModel;
@@ -8,8 +8,32 @@
   let languageMenuOpen = false;
   let templateValue = "";
 
-  const selectedLabel = (count: number) =>
-    model.uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
+  const selectedLabel = (count: number) => {
+    if (count === 0) return model.t("languagesNoneSelected");
+    return model.uiLang === "es" ? `${count} seleccionados` : `${count} selected`;
+  };
+
+  const normalizeLocaleCode = (value: string) => value.trim().toLowerCase();
+  const normalizeUiLocale = (value: "es" | "en") => (value === "en" ? "en" : "es");
+  const hasLocale = (list: string[], value: string) =>
+    list.some((entry) => normalizeLocaleCode(entry) === normalizeLocaleCode(value));
+  const uniqueLocales = (list: string[]) => Array.from(new Set(list.map(normalizeLocaleCode).filter(Boolean)));
+  let defaultLocaleOptionList: string[] = [];
+  let resolvedDefaultLocale = "es";
+
+  $: {
+    const selectedLocales = uniqueLocales(model.draft?.meta.locales ?? []);
+    defaultLocaleOptionList =
+      selectedLocales.length > 0 ? selectedLocales : [normalizeUiLocale(model.uiLang)];
+  }
+
+  $: {
+    const draftDefault = normalizeLocaleCode(model.draft?.meta.defaultLocale ?? "");
+    resolvedDefaultLocale =
+      draftDefault && hasLocale(defaultLocaleOptionList, draftDefault)
+        ? draftDefault
+        : (defaultLocaleOptionList[0] ?? normalizeUiLocale(model.uiLang));
+  }
 
   $: {
     const nextTemplate = model.draft?.meta.template ?? "";
@@ -36,6 +60,12 @@
     if (!(target instanceof HTMLInputElement)) return;
     actions.setSectionScrollSensitivity(Number(target.value));
   };
+
+  const handleDefaultLocaleChange = (event: Event) => {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    actions.setDefaultLocale(target.value);
+  };
 </script>
 
 <div class="editor-toolbar">
@@ -51,6 +81,7 @@
       <path d="M12 5v14"></path>
       <path d="M5 12h14"></path>
     </svg>
+    <span>{model.t("newProject")}</span>
   </button>
   <button
     class="icon-btn"
@@ -64,6 +95,7 @@
       <path d="M3 7h6l2 2h10v8a2 2 0 0 1-2 2H3z"></path>
       <path d="M3 7v-2a2 2 0 0 1 2-2h4l2 2"></path>
     </svg>
+    <span>{model.t("open")}</span>
   </button>
   <button
     class="icon-btn"
@@ -78,6 +110,7 @@
       <path d="M7 4v6h10V4"></path>
       <rect x="8" y="14" width="8" height="5" rx="1"></rect>
     </svg>
+    <span>{model.t("save")}</span>
   </button>
   <button
     class="icon-btn"
@@ -92,6 +125,7 @@
       <path d="M8 7l4-4 4 4"></path>
       <rect x="4" y="13" width="16" height="8" rx="2"></rect>
     </svg>
+    <span>{model.t("export")}</span>
   </button>
 </div>
 
@@ -152,7 +186,7 @@
         type="button"
         on:click={() => (languageMenuOpen = !languageMenuOpen)}
       >
-        {selectedLabel(model.draft.meta.locales.length)}
+        {selectedLabel(uniqueLocales(model.draft.meta.locales).length)}
       </button>
       {#if languageMenuOpen}
         <div class="dropdown-panel">
@@ -160,7 +194,7 @@
             <label class="dropdown-item">
               <input
                 type="checkbox"
-                checked={model.draft.meta.locales.includes(lang.code)}
+                checked={hasLocale(model.draft.meta.locales, lang.code)}
                 on:change={() => actions.toggleLanguage(lang.code)}
               />
               <span>{lang.label}</span>
@@ -171,70 +205,38 @@
     </div>
     <label class="editor-field">
       <span>{model.t("defaultLang")}</span>
-      <select bind:value={model.draft.meta.defaultLocale} class="editor-select">
-        {#each model.draft.meta.locales as lang}
+      <select
+        value={resolvedDefaultLocale}
+        class="editor-select"
+        on:change={handleDefaultLocaleChange}
+      >
+        {#each defaultLocaleOptionList as lang}
           <option value={lang}>{lang.toUpperCase()}</option>
         {/each}
       </select>
     </label>
-    <label class="editor-field">
-      <span>{model.t("currency")}</span>
-      <select
-        class="editor-select"
-        bind:value={model.draft.meta.currency}
-        on:change={actions.handleCurrencyChange}
-      >
-        {#each currencyOptions as currency}
-          <option value={currency.code}>{currency.label}</option>
-        {/each}
-      </select>
-    </label>
-    <div class="editor-field">
-      <span>{model.t("currencyPos")}</span>
-      <button class="editor-outline" type="button" on:click={actions.toggleCurrencyPosition}>
-        {model.draft.meta.currencyPosition === "right"
-          ? model.t("currencyRight")
-          : model.t("currencyLeft")}
-      </button>
-    </div>
-    <label class="editor-field">
-      <span>{model.t("font")}</span>
-      <select
-        class="editor-select"
-        value={model.fontChoice}
-        on:change={actions.handleFontSelect}
-      >
-        {#each fontOptions as font}
-          <option value={font.value}>{font.label}</option>
-        {/each}
-        <option value="custom">{model.t("fontCustom")}</option>
-      </select>
-    </label>
-    {#if model.fontChoice === "custom"}
+    <div class="project-money-row">
       <label class="editor-field">
-        <span>{model.t("fontCustomSrc")}</span>
-        {#if model.fontAssetOptions.length}
-          <select
-            class="editor-select"
-            value={model.draft.meta.fontSource ?? ""}
-            on:change={actions.handleCustomFontSourceInput}
-          >
-            <option value=""></option>
-            {#each model.fontAssetOptions as option}
-              <option value={option.value}>{option.label}</option>
-            {/each}
-          </select>
-        {:else}
-          <input
-            type="text"
-            class="editor-input"
-            value={model.draft.meta.fontSource ?? ""}
-            list="font-asset-files"
-            on:input={actions.handleCustomFontSourceInput}
-          />
-        {/if}
+        <span>{model.t("currency")}</span>
+        <select
+          class="editor-select"
+          bind:value={model.draft.meta.currency}
+          on:change={actions.handleCurrencyChange}
+        >
+          {#each currencyOptions as currency}
+            <option value={currency.code}>{currency.label}</option>
+          {/each}
+        </select>
       </label>
-    {/if}
+      <div class="editor-field project-money-position">
+        <span>{model.t("currencyPos")}</span>
+        <button class="editor-chip" type="button" on:click={actions.toggleCurrencyPosition}>
+          {model.draft.meta.currencyPosition === "right"
+            ? model.t("currencyRight")
+            : model.t("currencyLeft")}
+        </button>
+      </div>
+    </div>
     <div class="editor-field">
       <span>{model.t("scrollSensitivityItem")}: {model.scrollSensitivity.item}</span>
       <input

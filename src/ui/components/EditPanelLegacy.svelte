@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { deriveFontFamilyFromSource } from "../../application/typography/fontWorkflow";
+  import { fontOptions } from "../config/staticOptions";
   import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 
   type CommonAllergen = {
@@ -40,6 +42,8 @@
   ) => string = () => "";
   export let addSection: () => void = () => {};
   export let deleteSection: () => void = () => {};
+  export let deleteSectionById: (sectionId: string) => void = () => {};
+  export let setSectionNameById: (sectionId: string, lang: string, value: string) => void = () => {};
   export let addBackground: () => void = () => {};
   export let moveBackground: (id: string, direction: -1 | 1) => void = () => {};
   export let removeBackground: (id: string) => void = () => {};
@@ -81,18 +85,40 @@
     mode: "hero360" | "alternate"
   ) => void = () => {};
   export let setItemScrollAnimationSrc: (item: MenuItem, src: string) => void = () => {};
-  export let setFontRoleSource: (
+  export let setFontRoleSelection: (
     role: ProjectFontRole,
-    source: string
+    selection: string
   ) => void = () => {};
-  export let setItemFontSource: (item: MenuItem, source: string) => void = () => {};
+  export let setItemFontSelection: (item: MenuItem, selection: string) => void = () => {};
   export let setItemPriceVisible: (item: MenuItem, visible: boolean) => void = () => {};
   export let touchDraft: () => void = () => {};
+  let itemsTabDisabled = false;
+  let editingSectionId = "";
+  let editingSectionValue = "";
+  let sectionNameInput: HTMLInputElement | null = null;
+  let rolePreviewSelections: Partial<Record<ProjectFontRole, string>> = {};
+  let itemPreviewSelections: Record<string, string> = {};
 
   let mediaAssetOptions: Array<{ value: string; label: string }> = [];
   let fontAssetOptions: Array<{ value: string; label: string }> = [];
   $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
   $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
+  $: itemsTabDisabled = (draft?.categories.length ?? 0) === 0;
+  $: if (itemsTabDisabled && editPanel === "dish") {
+    editPanel = "section";
+  }
+  $: if (editingSectionId && sectionNameInput) {
+    sectionNameInput.focus();
+    sectionNameInput.select();
+  }
+  $: if (editingSectionId && draft && !draft.categories.some((category) => category.id === editingSectionId)) {
+    editingSectionId = "";
+    editingSectionValue = "";
+  }
+
+  const FONT_SELECTION_DEFAULT = "default";
+  const FONT_SELECTION_BUILTIN_PREFIX = "builtin:";
+  const FONT_SELECTION_ASSET_PREFIX = "asset:";
 
   const handleLogoSrcEvent = (event: Event) => {
     const target = event.currentTarget;
@@ -108,12 +134,27 @@
     setItemRotationDirection(item, current === "cw" ? "ccw" : "cw");
   };
 
-  const handleBackgroundLabelInput = (bg: { label?: string }, event: Event) => {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLInputElement)) return;
-    bg.label = target.value;
-    touchDraft();
+  const extractFilenameFromPath = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized || normalized.startsWith("data:")) return "";
+    const [withoutHash] = normalized.split("#");
+    const [withoutQuery] = withoutHash.split("?");
+    const filename = withoutQuery.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    if (!filename) return "";
+    try {
+      return decodeURIComponent(filename);
+    } catch {
+      return filename;
+    }
   };
+
+  const getBackgroundDisplayLabel = (
+    bg: { src: string; originalSrc?: string },
+    index: number
+  ) =>
+    extractFilenameFromPath(bg.originalSrc ?? "") ||
+    extractFilenameFromPath(bg.src ?? "") ||
+    `${t("backgroundLabel")} ${index + 1}`;
 
   const handleBackgroundSourceInput = (bg: { src: string; originalSrc?: string }, event: Event) => {
     const target = event.currentTarget;
@@ -129,7 +170,13 @@
   const handleDishAssetInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
-    item.media.hero360 = target.value;
+    const nextValue = target.value;
+    item.media.hero360 = nextValue;
+    if (!nextValue || nextValue.startsWith("data:")) {
+      item.media.originalHero360 = "";
+    } else {
+      item.media.originalHero360 = nextValue;
+    }
     touchDraft();
   };
 
@@ -139,11 +186,64 @@
     setItemScrollAnimationSrc(item, target.value);
   };
 
-  const handleRoleFontSourceInput = (role: ProjectFontRole, event: Event) => {
+  const encodeBuiltInSelection = (family: string) => `${FONT_SELECTION_BUILTIN_PREFIX}${family}`;
+  const encodeAssetSelection = (source: string) => `${FONT_SELECTION_ASSET_PREFIX}${source}`;
+
+  const resolveRoleFontSelection = (role: ProjectFontRole) => {
+    const roleConfig = draft?.meta.fontRoles?.[role];
+    const source = roleConfig?.source?.trim() ?? "";
+    if (source) return encodeAssetSelection(source);
+    const family = roleConfig?.family?.trim() ?? "";
+    if (family) return encodeBuiltInSelection(family);
+    return FONT_SELECTION_DEFAULT;
+  };
+
+  const resolveItemFontSelection = (item: MenuItem) => {
+    const itemConfig = item.typography?.item;
+    const source = itemConfig?.source?.trim() ?? "";
+    if (source) return encodeAssetSelection(source);
+    const family = itemConfig?.family?.trim() ?? "";
+    if (family) return encodeBuiltInSelection(family);
+    return FONT_SELECTION_DEFAULT;
+  };
+
+  const resolveAssetSelectionSource = (selection: string) =>
+    selection.startsWith(FONT_SELECTION_ASSET_PREFIX)
+      ? selection.slice(FONT_SELECTION_ASSET_PREFIX.length).trim()
+      : "";
+
+  const hasFontAssetSource = (source: string) => hasOptionValue(fontAssetOptions, source);
+
+  const roleFieldLabel: Record<ProjectFontRole, string> = {
+    restaurant: "fontRoleRestaurant",
+    title: "fontRoleTitle",
+    identity: "fontRoleIdentity",
+    section: "fontRoleSection",
+    item: "fontRoleItem"
+  };
+
+  const roleFieldOrder: ProjectFontRole[] = [
+    "restaurant",
+    "title",
+    "identity",
+    "section",
+    "item"
+  ];
+
+  const handleRoleFontSelectionInput = (role: ProjectFontRole, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
-    setFontRoleSource(role, target.value);
+    rolePreviewSelections = {
+      ...rolePreviewSelections,
+      [role]: target.value
+    };
+    setFontRoleSelection(role, target.value);
   };
+
+  const getRoleFontSelectionForUi = (
+    role: ProjectFontRole,
+    previewSelections: Partial<Record<ProjectFontRole, string>>
+  ) => previewSelections[role] ?? resolveRoleFontSelection(role);
 
   const hasOptionValue = (options: Array<{ value: string; label: string }>, value: string) =>
     options.some((option) => option.value === value);
@@ -160,11 +260,32 @@
     return direct;
   };
 
-  const handleItemFontSourceInput = (item: MenuItem, event: Event) => {
+  const resolveDishAssetSelection = (item: MenuItem) => {
+    const direct = item.media.hero360?.trim() ?? "";
+    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+      return direct;
+    }
+    const canonical = item.media.originalHero360?.trim() ?? "";
+    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+      return canonical;
+    }
+    return canonical || direct;
+  };
+
+  const handleItemFontSelectionInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
-    setItemFontSource(item, target.value);
+    itemPreviewSelections = {
+      ...itemPreviewSelections,
+      [item.id]: target.value
+    };
+    setItemFontSelection(item, target.value);
   };
+
+  const getItemFontSelectionForUi = (
+    item: MenuItem,
+    previewSelections: Record<string, string>
+  ) => previewSelections[item.id] ?? resolveItemFontSelection(item);
 
   const handleDishPriceInput = (item: MenuItem, event: Event) => {
     const target = event.currentTarget;
@@ -185,6 +306,83 @@
     if (!(target instanceof HTMLInputElement)) return;
     setBackgroundCarouselSeconds(Number(target.value));
   };
+
+  const resolveBuiltInFamilyFromSelection = (selection: string) =>
+    selection.startsWith(FONT_SELECTION_BUILTIN_PREFIX)
+      ? selection.slice(FONT_SELECTION_BUILTIN_PREFIX.length).trim()
+      : "";
+
+  const buildFontPreviewStyle = (selection: string) => {
+    const builtInFamily = resolveBuiltInFamilyFromSelection(selection);
+    const assetSource = resolveAssetSelectionSource(selection);
+    const family =
+      builtInFamily ||
+      (assetSource ? deriveFontFamilyFromSource(assetSource) : "") ||
+      "Fraunces";
+    const escaped = family.replace(/"/g, '\\"');
+    return `font-family:"${escaped}","Fraunces","Georgia",serif;`;
+  };
+
+  const startInlineSectionEdit = (category: MenuCategory) => {
+    selectedCategoryId = category.id;
+    editingSectionId = category.id;
+    editingSectionValue = category.name?.[editLang] ?? "";
+  };
+
+  const cancelInlineSectionEdit = () => {
+    editingSectionId = "";
+    editingSectionValue = "";
+  };
+
+  const commitInlineSectionEdit = (category: MenuCategory) => {
+    setSectionNameById(category.id, editLang, editingSectionValue.trim());
+    cancelInlineSectionEdit();
+  };
+
+  const handleInlineSectionKeydown = (category: MenuCategory, event: KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitInlineSectionEdit(category);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelInlineSectionEdit();
+    }
+  };
+
+  const handleAddSectionClick = () => {
+    const previousCategoryIds = new Set((draft?.categories ?? []).map((category) => category.id));
+    addSection();
+    if (!draft) return;
+    const createdCategory = draft.categories.find((category) => !previousCategoryIds.has(category.id));
+    if (!createdCategory) return;
+    startInlineSectionEdit(createdCategory);
+  };
+
+  $: {
+    let changed = false;
+    const next = { ...rolePreviewSelections };
+    for (const role of roleFieldOrder) {
+      if (next[role] !== undefined && next[role] === resolveRoleFontSelection(role)) {
+        delete next[role];
+        changed = true;
+      }
+    }
+    if (changed) {
+      rolePreviewSelections = next;
+    }
+  }
+
+  $: if (selectedItem) {
+    const optimistic = itemPreviewSelections[selectedItem.id];
+    const resolved = resolveItemFontSelection(selectedItem);
+    if (optimistic !== undefined && optimistic === resolved) {
+      const next = { ...itemPreviewSelections };
+      delete next[selectedItem.id];
+      itemPreviewSelections = next;
+    }
+  }
 </script>
 
 {#if deviceMode === "mobile" && previewMode === "full"}
@@ -218,9 +416,13 @@
         {t("editSections")}
       </button>
       <button
-        class="edit-subtab {editPanel === 'dish' ? 'active' : ''}"
+        class="edit-subtab {editPanel === 'dish' ? 'active' : ''} {itemsTabDisabled ? 'disabled' : ''}"
         type="button"
-        on:click={() => (editPanel = 'dish')}
+        disabled={itemsTabDisabled}
+        on:click={() => {
+          if (itemsTabDisabled) return;
+          editPanel = "dish";
+        }}
       >
         {t("editDishes")}
       </button>
@@ -238,6 +440,9 @@
     <p class="edit-hierarchy">
       {editPanel === "background" ? t("backgroundHint") : t("editHierarchyHint")}
     </p>
+    {#if itemsTabDisabled}
+      <p class="edit-hint">{t("editItemsNeedsSections")}</p>
+    {/if}
 
     {#if editPanel === "identity"}
       <div class="edit-block">
@@ -323,136 +528,42 @@
           />
         </label>
       </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("fontRoleRestaurant")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomSrc")}</span>
-          {#if fontAssetOptions.length}
+      {#each roleFieldOrder as role}
+        <div class="edit-block">
+          <p class="edit-block__title">{t(roleFieldLabel[role])}</p>
+          <label class="editor-field">
+            <span>{t("textStyle")}</span>
             <select
               class="editor-select"
-              value={draft.meta.fontRoles?.restaurant?.source ?? ""}
-              on:change={(event) => handleRoleFontSourceInput("restaurant", event)}
+              value={getRoleFontSelectionForUi(role, rolePreviewSelections)}
+              on:change={(event) => handleRoleFontSelectionInput(role, event)}
             >
-              <option value=""></option>
+              <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+              {#each fontOptions as font}
+                <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+              {/each}
+              {#if resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)) &&
+              !hasFontAssetSource(resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)))}
+                <option value={encodeAssetSelection(resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections)))}>
+                  {resolveAssetSelectionSource(getRoleFontSelectionForUi(role, rolePreviewSelections))}
+                </option>
+              {/if}
               {#each fontAssetOptions as option}
-                <option value={option.value}>{option.label}</option>
+                <option value={encodeAssetSelection(option.value)}>{option.label}</option>
               {/each}
             </select>
-          {:else}
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.restaurant?.source ?? ""}
-              list="font-asset-files"
-              on:input={(event) => handleRoleFontSourceInput("restaurant", event)}
-            />
-          {/if}
-        </label>
-      </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("fontRoleTitle")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomSrc")}</span>
-          {#if fontAssetOptions.length}
-            <select
-              class="editor-select"
-              value={draft.meta.fontRoles?.title?.source ?? ""}
-              on:change={(event) => handleRoleFontSourceInput("title", event)}
+            {#if role === "identity"}
+              <small class="editor-hint">{t("fontRoleIdentityHint")}</small>
+            {/if}
+            <p
+              class="editor-font-preview"
+              style={buildFontPreviewStyle(getRoleFontSelectionForUi(role, rolePreviewSelections))}
             >
-              <option value=""></option>
-              {#each fontAssetOptions as option}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          {:else}
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.title?.source ?? ""}
-              list="font-asset-files"
-              on:input={(event) => handleRoleFontSourceInput("title", event)}
-            />
-          {/if}
-        </label>
-      </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("fontRoleIdentity")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomSrc")}</span>
-          {#if fontAssetOptions.length}
-            <select
-              class="editor-select"
-              value={draft.meta.fontRoles?.identity?.source ?? ""}
-              on:change={(event) => handleRoleFontSourceInput("identity", event)}
-            >
-              <option value=""></option>
-              {#each fontAssetOptions as option}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          {:else}
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.identity?.source ?? ""}
-              list="font-asset-files"
-              on:input={(event) => handleRoleFontSourceInput("identity", event)}
-            />
-          {/if}
-        </label>
-      </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("fontRoleSection")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomSrc")}</span>
-          {#if fontAssetOptions.length}
-            <select
-              class="editor-select"
-              value={draft.meta.fontRoles?.section?.source ?? ""}
-              on:change={(event) => handleRoleFontSourceInput("section", event)}
-            >
-              <option value=""></option>
-              {#each fontAssetOptions as option}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          {:else}
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.section?.source ?? ""}
-              list="font-asset-files"
-              on:input={(event) => handleRoleFontSourceInput("section", event)}
-            />
-          {/if}
-        </label>
-      </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("fontRoleItem")}</p>
-        <label class="editor-field">
-          <span>{t("fontCustomSrc")}</span>
-          {#if fontAssetOptions.length}
-            <select
-              class="editor-select"
-              value={draft.meta.fontRoles?.item?.source ?? ""}
-              on:change={(event) => handleRoleFontSourceInput("item", event)}
-            >
-              <option value=""></option>
-              {#each fontAssetOptions as option}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          {:else}
-            <input
-              type="text"
-              class="editor-input"
-              value={draft.meta.fontRoles?.item?.source ?? ""}
-              list="font-asset-files"
-              on:input={(event) => handleRoleFontSourceInput("item", event)}
-            />
-          {/if}
-        </label>
-      </div>
+              {t("fontPreviewSample")}
+            </p>
+          </label>
+        </div>
+      {/each}
     {:else if editPanel === "background"}
       <div class="edit-block">
         <label class="editor-field">
@@ -504,28 +615,28 @@
               <div class="background-carousel-item">
                 <div class="background-carousel-item__header">
                   <p class="background-carousel-item__index">
-                    {t("backgroundLabel")} {index + 1}
+                    {getBackgroundDisplayLabel(bg, index)}
                   </p>
                   <div class="background-carousel-item__actions">
                     <button
-                      class="editor-outline"
+                      class="editor-outline editor-icon-btn"
                       type="button"
                       disabled={index === 0}
                       aria-label={t("moveBackgroundUp")}
                       title={t("moveBackgroundUp")}
                       on:click={() => moveBackground(bg.id, -1)}
                     >
-                      ↑
+                      <span class="editor-action-icon" aria-hidden="true">↑</span>
                     </button>
                     <button
-                      class="editor-outline"
+                      class="editor-outline editor-icon-btn"
                       type="button"
                       disabled={index === draft.backgrounds.length - 1}
                       aria-label={t("moveBackgroundDown")}
                       title={t("moveBackgroundDown")}
                       on:click={() => moveBackground(bg.id, 1)}
                     >
-                      ↓
+                      <span class="editor-action-icon" aria-hidden="true">↓</span>
                     </button>
                     <button
                       class="editor-outline danger"
@@ -536,15 +647,6 @@
                     </button>
                   </div>
                 </div>
-                <label class="editor-field">
-                  <span>{t("wizardLabel")}</span>
-                  <input
-                    type="text"
-                    class="editor-input"
-                    value={bg.label ?? ""}
-                    on:input={(event) => handleBackgroundLabelInput(bg, event)}
-                  />
-                </label>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
                   {#if mediaAssetOptions.length}
@@ -557,7 +659,7 @@
                       {#if resolveBackgroundSourceSelection(bg) &&
                       !hasOptionValue(mediaAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
-                          {bg.label?.trim() || `${t("backgroundLabel")} ${index + 1}`}
+                          {getBackgroundDisplayLabel(bg, index)}
                         </option>
                       {/if}
                       {#each mediaAssetOptions as option}
@@ -580,74 +682,92 @@
         {/if}
       </div>
     {:else}
-      <div class="edit-row">
-        <label class="editor-field">
-          <span>{t("section")}</span>
-          <select bind:value={selectedCategoryId} class="editor-select">
-            {#each draft.categories as category}
-              <option value={category.id}>
-                {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale)}
-              </option>
-            {/each}
-          </select>
-        </label>
-        <div class="edit-actions">
+      {#if editPanel === "section"}
+        <div class="edit-row">
           <button
-            class="editor-outline"
+            class="editor-outline editor-icon-btn"
             type="button"
             aria-label={t("addSection")}
             title={t("addSection")}
-            on:click={addSection}
+            on:click={handleAddSectionClick}
           >
-            <span class="btn-icon">＋</span>
-          </button>
-          <button class="editor-outline danger" type="button" on:click={deleteSection}>
-            {t("deleteSection")}
+            <span class="editor-action-icon" aria-hidden="true">＋</span>
           </button>
         </div>
-      </div>
+        {#if draft.categories.length > 0}
+          <div class="edit-sections">
+            {#each draft.categories as category}
+              <div class="edit-section">
+                <div class="edit-section__head">
+                  {#if editingSectionId === category.id}
+                    <input
+                      bind:this={sectionNameInput}
+                      class="editor-input edit-section__name-input"
+                      type="text"
+                      bind:value={editingSectionValue}
+                      aria-label={t("sectionName")}
+                      on:keydown={(event) => handleInlineSectionKeydown(category, event)}
+                    />
+                  {:else}
+                    <p class="edit-section__name">
+                      {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale) || category.id}
+                    </p>
+                  {/if}
+                  <div class="edit-actions">
+                    {#if editingSectionId === category.id}
+                      <button
+                        class="editor-outline editor-icon-btn"
+                        type="button"
+                        aria-label={t("save")}
+                        title={t("save")}
+                        on:click={() => commitInlineSectionEdit(category)}
+                      >
+                        <span class="editor-action-icon" aria-hidden="true">💾</span>
+                      </button>
+                    {:else}
+                      <button
+                        class="editor-outline editor-icon-btn"
+                        type="button"
+                        aria-label={t("editSection")}
+                        title={t("editSection")}
+                        on:click={() => startInlineSectionEdit(category)}
+                      >
+                        <span class="editor-action-icon" aria-hidden="true">✎</span>
+                      </button>
+                    {/if}
+                    <button
+                      class="editor-outline danger editor-icon-btn"
+                      type="button"
+                      aria-label={t("deleteSection")}
+                      title={t("deleteSection")}
+                      on:click={() => deleteSectionById(category.id)}
+                    >
+                      <span class="editor-action-icon" aria-hidden="true">✕</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
 
-      {#if editPanel === "section" && selectedCategory}
-        <p class="edit-hint">{t("sectionHint")}</p>
-        <div class="edit-block">
-          <p class="edit-block__title">{t("sectionName")}</p>
+      {#if editPanel === "dish"}
+        <div class="edit-row">
           <label class="editor-field">
-            <span>{editLang.toUpperCase()}</span>
-            <input
-              type="text"
-              class="editor-input"
-              value={selectedCategory.name?.[editLang] ?? ""}
-              on:input={(event) =>
-                handleLocalizedInput(selectedCategory.name, editLang, event)}
-            />
-          </label>
-          {#if (draft.meta.backgroundDisplayMode ?? "carousel") === "section"}
-            {#if sectionBackgroundNeedsCoverage}
-              <p class="edit-hint">{t("sectionBackgroundNeedsCoverage")}</p>
-            {/if}
-            {#if sectionBackgroundHasDuplicates}
-              <p class="edit-hint">{t("sectionBackgroundNeedsUnique")}</p>
-            {/if}
-            <label class="editor-field">
-              <span>{t("sectionBackground")}</span>
-              <select
-                class="editor-select"
-                value={selectedCategory.backgroundId ?? ""}
-                on:change={(event) => {
-                  const target = event.currentTarget;
-                  if (!(target instanceof HTMLSelectElement)) return;
-                  setCategoryBackgroundId(selectedCategory, target.value);
-                }}
-              >
-                <option value=""></option>
-                {#each sectionBackgroundOptionsByCategory[selectedCategory.id] ?? [] as background}
-                  <option value={background.value}>
-                    {background.label}
+            <span>{t("section")}</span>
+            <select bind:value={selectedCategoryId} class="editor-select" disabled={itemsTabDisabled}>
+              {#if draft.categories.length === 0}
+                <option value="">{t("editItemsNeedsSections")}</option>
+              {:else}
+                {#each draft.categories as category}
+                  <option value={category.id}>
+                    {getLocalizedValue(category.name, editLang, draft.meta.defaultLocale)}
                   </option>
                 {/each}
-              </select>
-            </label>
-          {/if}
+              {/if}
+            </select>
+          </label>
         </div>
       {/if}
 
@@ -666,34 +786,40 @@
           </label>
           <div class="edit-actions">
             <button
-              class="editor-outline"
+              class="editor-outline editor-icon-btn"
               type="button"
               aria-label={t("prevDish")}
               title={t("prevDish")}
               on:click={goPrevDish}
             >
-              <span class="btn-icon">◀</span>
+              <span class="editor-action-icon" aria-hidden="true">◀</span>
             </button>
             <button
-              class="editor-outline"
+              class="editor-outline editor-icon-btn"
               type="button"
               aria-label={t("nextDish")}
               title={t("nextDish")}
               on:click={goNextDish}
             >
-              <span class="btn-icon">▶</span>
+              <span class="editor-action-icon" aria-hidden="true">▶</span>
             </button>
             <button
-              class="editor-outline"
+              class="editor-outline editor-icon-btn"
               type="button"
               aria-label={t("addDish")}
               title={t("addDish")}
               on:click={addDish}
             >
-              <span class="btn-icon">＋</span>
+              <span class="editor-action-icon" aria-hidden="true">＋</span>
             </button>
-            <button class="editor-outline danger" type="button" on:click={deleteDish}>
-              {t("delete")}
+            <button
+              class="editor-outline danger editor-icon-btn"
+              type="button"
+              aria-label={t("delete")}
+              title={t("delete")}
+              on:click={deleteDish}
+            >
+              <span class="editor-action-icon" aria-hidden="true">✕</span>
             </button>
           </div>
         </div>
@@ -714,10 +840,16 @@
                   {#if mediaAssetOptions.length}
                     <select
                       class="editor-select"
-                      value={selectedItem.media.hero360}
+                      value={resolveDishAssetSelection(selectedItem)}
                       on:change={(event) => handleDishAssetInput(selectedItem, event)}
                     >
                       <option value=""></option>
+                      {#if resolveDishAssetSelection(selectedItem) &&
+                      !hasOptionValue(mediaAssetOptions, resolveDishAssetSelection(selectedItem))}
+                        <option value={resolveDishAssetSelection(selectedItem)}>
+                          {extractFilenameFromPath(resolveDishAssetSelection(selectedItem))}
+                        </option>
+                      {/if}
                       {#each mediaAssetOptions as option}
                         <option value={option.value}>{option.label}</option>
                       {/each}
@@ -826,7 +958,7 @@
                       handleLongDescriptionInput(selectedItem, editLang, event)}
                   ></textarea>
                 </label>
-                <label class="editor-field editor-inline">
+                <label class="editor-field editor-inline editor-inline--spaced">
                   <span>{t("showPrice")}</span>
                   <input
                     type="checkbox"
@@ -846,27 +978,34 @@
                   </label>
                 {/if}
                 <label class="editor-field">
-                  <span>{t("itemFontOverrideSrc")}</span>
-                  {#if fontAssetOptions.length}
+                  <span>{t("textStyle")}</span>
                     <select
                       class="editor-select"
-                      value={selectedItem.typography?.item?.source ?? ""}
-                      on:change={(event) => handleItemFontSourceInput(selectedItem, event)}
+                      value={getItemFontSelectionForUi(selectedItem, itemPreviewSelections)}
+                      on:change={(event) => handleItemFontSelectionInput(selectedItem, event)}
                     >
-                      <option value=""></option>
+                      <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+                      {#each fontOptions as font}
+                        <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+                      {/each}
+                      {#if resolveAssetSelectionSource(getItemFontSelectionForUi(selectedItem, itemPreviewSelections)) &&
+                      !hasFontAssetSource(resolveAssetSelectionSource(getItemFontSelectionForUi(selectedItem, itemPreviewSelections)))}
+                      <option
+                        value={encodeAssetSelection(resolveAssetSelectionSource(getItemFontSelectionForUi(selectedItem, itemPreviewSelections)))}
+                      >
+                        {resolveAssetSelectionSource(getItemFontSelectionForUi(selectedItem, itemPreviewSelections))}
+                      </option>
+                      {/if}
                       {#each fontAssetOptions as option}
-                        <option value={option.value}>{option.label}</option>
+                        <option value={encodeAssetSelection(option.value)}>{option.label}</option>
                       {/each}
                     </select>
-                  {:else}
-                    <input
-                      type="text"
-                      class="editor-input"
-                      value={selectedItem.typography?.item?.source ?? ""}
-                      list="font-asset-files"
-                      on:input={(event) => handleItemFontSourceInput(selectedItem, event)}
-                    />
-                  {/if}
+                    <p
+                      class="editor-font-preview"
+                      style={buildFontPreviewStyle(getItemFontSelectionForUi(selectedItem, itemPreviewSelections))}
+                    >
+                      {t("fontPreviewSample")}
+                    </p>
                 </label>
                 <div class="editor-field">
                   <span>{t("commonAllergens")}</span>
@@ -895,7 +1034,7 @@
                   />
                   <small class="editor-hint">{t("customAllergensHint")}</small>
                 </label>
-                <label class="editor-field editor-inline">
+                <label class="editor-field editor-inline editor-inline--spaced">
                   <span>{t("veganLabel")}</span>
                   <input
                     type="checkbox"

@@ -5,6 +5,8 @@ const externalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/global-setup.mjs",
+  globalTeardown: "./tests/e2e/global-teardown.mjs",
   webServer: externalServer
     ? undefined
     : {

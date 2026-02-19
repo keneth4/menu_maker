@@ -4,6 +4,7 @@ import {
   autoAssignSectionBackgroundsByOrder,
   buildSectionBackgroundIndexByCategory,
   buildSectionBackgroundState,
+  getSectionModeBackgroundEntries,
   getNextUnusedSectionBackgroundId
 } from "./sectionBackgroundWorkflow";
 
@@ -68,5 +69,21 @@ describe("sectionBackgroundWorkflow", () => {
     ]);
     expect(map["cat-1"]).toBe(0);
     expect(map["cat-2"]).toBe(1);
+  });
+
+  it("derives section background labels from filenames with fallback", () => {
+    const project = makeProject();
+    project.backgrounds = [
+      { id: "bg-1", label: "Manual Name", src: "/assets/backgrounds/cover-one.jpg", type: "image" },
+      { id: "bg-2", label: "", src: "", originalSrc: "/assets/backgrounds/cover-two.png", type: "image" },
+      { id: "bg-3", label: "", src: "data:image/png;base64,AAAA", type: "image" }
+    ];
+
+    const entries = getSectionModeBackgroundEntries(project, "Background");
+    expect(entries.map((entry) => entry.label)).toEqual([
+      "cover-one.jpg",
+      "cover-two.png",
+      "Background 3"
+    ]);
   });
 });

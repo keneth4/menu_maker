@@ -241,12 +241,34 @@ describe("editorDraftController", () => {
   it("updates locale list and hydrates allergen labels for common entries", () => {
     const { controller, getState, touchDraft } = createHarness();
 
-    controller.toggleLanguage("en");
+    controller.toggleLanguage("EN");
 
     const draft = getState().draft;
     const allergen = draft?.categories[0]?.items[0]?.allergens?.[0];
     expect(draft?.meta.locales).toContain("en");
     expect(allergen?.label?.en).toBe("Milk");
+    expect(touchDraft).toHaveBeenCalled();
+  });
+
+  it("sets default locale using selected locales and normalized fallback", () => {
+    const { controller, getState, touchDraft } = createHarness();
+
+    controller.toggleLanguage("EN");
+    controller.setDefaultLocale("EN");
+    expect(getState().draft?.meta.defaultLocale).toBe("en");
+
+    getState().draft!.meta.locales = [];
+    controller.setDefaultLocale("ES");
+    expect(getState().draft?.meta.defaultLocale).toBe("es");
+    expect(touchDraft).toHaveBeenCalled();
+  });
+
+  it("sets section name by id for the active language", () => {
+    const { controller, getState, touchDraft } = createHarness();
+
+    controller.setSectionNameById("cat-1", "ES", "Entradas nuevas");
+
+    expect(getState().draft?.categories[0].name.es).toBe("Entradas nuevas");
     expect(touchDraft).toHaveBeenCalled();
   });
 
@@ -277,6 +299,83 @@ describe("editorDraftController", () => {
       item: 10,
       section: 1
     });
+    expect(touchDraft).toHaveBeenCalled();
+  });
+
+  it("applies normalized role and item font selections", () => {
+    const { controller, getState, touchDraft } = createHarness();
+    const item = getState().draft!.categories[0].items[0];
+
+    controller.setFontRoleSelection("title", "builtin:Inter");
+    expect(getState().draft?.meta.fontRoles?.title).toEqual({
+      family: "Inter",
+      source: ""
+    });
+
+    controller.setFontRoleSelection("title", "asset:/projects/demo/assets/originals/fonts/title.woff2");
+    expect(getState().draft?.meta.fontRoles?.title).toEqual({
+      family: "",
+      source: "/projects/demo/assets/originals/fonts/title.woff2"
+    });
+
+    controller.setFontRoleSelection("title", "default");
+    expect(getState().draft?.meta.fontRoles?.title).toBeUndefined();
+
+    controller.setItemFontSelection(item, "builtin:Inter");
+    expect(item.typography?.item).toEqual({
+      family: "Inter",
+      source: ""
+    });
+
+    controller.setItemFontSelection(item, "asset:/projects/demo/assets/originals/fonts/item.woff2");
+    expect(item.typography?.item).toEqual({
+      family: "",
+      source: "/projects/demo/assets/originals/fonts/item.woff2"
+    });
+
+    controller.setItemFontSelection(item, "default");
+    expect(item.typography?.item).toBeUndefined();
+    expect(touchDraft).toHaveBeenCalled();
+  });
+
+  it("creates new items with clockwise rotation and cw fallback direction", () => {
+    const { controller, getState } = createHarness({
+      selectedItemId: ""
+    });
+
+    controller.addDish();
+    const category = getState().draft!.categories[0];
+    const createdItem = category.items[category.items.length - 1];
+    expect(createdItem.media.rotationDirection).toBe("cw");
+    expect(controller.getDishRotateDirection(createdItem)).toBe(-1);
+
+    const unknownDirection = {
+      ...createdItem,
+      media: { ...createdItem.media, rotationDirection: undefined as unknown as "cw" | "ccw" }
+    };
+    expect(controller.getDishRotateDirection(unknownDirection as any)).toBe(-1);
+    controller.setItemRotationDirection(createdItem, "ccw");
+    expect(controller.getDishRotateDirection(createdItem)).toBe(1);
+  });
+
+  it("deletes the requested section id and keeps a valid selection", () => {
+    const project = makeProject();
+    project.categories.push({
+      id: "cat-2",
+      name: { es: "Postres", en: "Desserts" },
+      backgroundId: "",
+      items: []
+    });
+    const { controller, getState, touchDraft } = createHarness({
+      draft: project,
+      selectedCategoryId: "cat-2",
+      selectedItemId: ""
+    });
+
+    controller.deleteSectionById("cat-1");
+
+    expect(getState().draft?.categories.map((category) => category.id)).toEqual(["cat-2"]);
+    expect(getState().selectedCategoryId).toBe("cat-2");
     expect(touchDraft).toHaveBeenCalled();
   });
 });

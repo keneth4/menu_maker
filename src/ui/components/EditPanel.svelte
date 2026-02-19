@@ -62,6 +62,8 @@
   getLocalizedValue={actions.getLocalizedValue}
   addSection={actions.addSection}
   deleteSection={actions.deleteSection}
+  deleteSectionById={actions.deleteSectionById}
+  setSectionNameById={actions.setSectionNameById}
   addBackground={actions.addBackground}
   moveBackground={actions.moveBackground}
   removeBackground={actions.removeBackground}
@@ -84,11 +86,11 @@
   handleVeganToggle={actions.handleVeganToggle}
   setIdentityMode={actions.setIdentityMode}
   setLogoSrc={actions.setLogoSrc}
+  setFontRoleSelection={actions.setFontRoleSelection}
   setItemRotationDirection={actions.setItemRotationDirection}
   setItemScrollAnimationMode={actions.setItemScrollAnimationMode}
   setItemScrollAnimationSrc={actions.setItemScrollAnimationSrc}
-  setFontRoleSource={actions.setFontRoleSource}
-  setItemFontSource={actions.setItemFontSource}
+  setItemFontSelection={actions.setItemFontSelection}
   setItemPriceVisible={actions.setItemPriceVisible}
   touchDraft={actions.touchDraft}
 />

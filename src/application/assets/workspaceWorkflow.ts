@@ -59,6 +59,7 @@ export const isManagedAssetRelativePath = (value: string) => {
 
 export const isLockedManagedAssetRoot = (value: string) => {
   const normalized = normalizeAssetFolderPath(value);
+  if (normalized === "originals") return true;
   return USER_MANAGED_ASSET_ROOTS.some((root) => normalized === root);
 };
 

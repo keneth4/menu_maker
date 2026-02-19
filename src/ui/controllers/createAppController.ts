@@ -19,7 +19,7 @@ import { createShellStore } from "../stores/shellStore";
 import { createWorkflowStore } from "../stores/workflowStore";
 import { createAppLifecycleController } from "./appLifecycleController";
 
-const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 9;
+const DEFAULT_BACKGROUND_CAROUSEL_SECONDS = 10;
 
 type ControllerDeps = {
   shellState?: Partial<ShellState>;
@@ -49,9 +49,6 @@ const createNewProject = (uiLang: "es" | "en"): MenuProject => {
   project.meta.name = uiLang === "en" ? "New project" : "Nuevo proyecto";
   project.meta.slug = "new-project";
   project.meta.defaultLocale = uiLang;
-  if (!project.meta.locales.includes(uiLang)) {
-    project.meta.locales = [uiLang, ...project.meta.locales];
-  }
   return project;
 };
 

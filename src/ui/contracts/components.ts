@@ -36,6 +36,7 @@ export type AssetsManagerModel = {
 
 export type AssetsManagerActions = {
   createFolder: () => void;
+  createFolderNamed: (name: string, parentPath?: string) => Promise<void> | void;
   handleAssetUpload: (event: Event) => void;
   handleAssetDragOver: (event: DragEvent) => void;
   handleAssetDrop: (event: DragEvent) => void;
@@ -46,6 +47,7 @@ export type AssetsManagerActions = {
   toggleAssetSelection: (entryId: string) => void;
   toggleExpandPath: (path: string) => void;
   renameEntry: (entry: AssetEntryModel) => void;
+  renameEntryNamed: (entry: AssetEntryModel, name: string) => Promise<void> | void;
   moveEntry: (entry: AssetEntryModel) => void;
   deleteEntry: (entry: AssetEntryModel) => void;
   setUploadTargetPath: (path: string) => void;
@@ -92,6 +94,8 @@ export type EditPanelActions = {
   ) => string;
   addSection: () => void;
   deleteSection: () => void;
+  deleteSectionById: (sectionId: string) => void;
+  setSectionNameById: (sectionId: string, lang: string, value: string) => void;
   addBackground: () => void;
   moveBackground: (id: string, direction: -1 | 1) => void;
   removeBackground: (id: string) => void;
@@ -113,11 +117,11 @@ export type EditPanelActions = {
   handleVeganToggle: (item: MenuItem, event: Event) => void;
   setIdentityMode: (mode: "text" | "logo") => void;
   setLogoSrc: (src: string) => void;
+  setFontRoleSelection: (role: ProjectFontRole, selection: string) => void;
   setItemRotationDirection: (item: MenuItem, direction: "cw" | "ccw") => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, src: string) => void;
-  setFontRoleSource: (role: ProjectFontRole, source: string) => void;
-  setItemFontSource: (item: MenuItem, source: string) => void;
+  setItemFontSelection: (item: MenuItem, selection: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
   touchDraft: () => void;
   setEditPanel: (panel: "identity" | "background" | "section" | "dish") => void;
@@ -169,11 +173,11 @@ export type WizardPanelActions = {
   removeWizardDish: () => void;
   setIdentityMode: (mode: "text" | "logo") => void;
   setLogoSrc: (src: string) => void;
+  setFontRoleSelection: (role: ProjectFontRole, selection: string) => void;
   setItemRotationDirection: (item: MenuItem, direction: "cw" | "ccw") => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, src: string) => void;
-  setFontRoleSource: (role: ProjectFontRole, source: string) => void;
-  setItemFontSource: (item: MenuItem, source: string) => void;
+  setItemFontSelection: (item: MenuItem, selection: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
   handleLocalizedInput: (
     localized: Record<string, string>,
@@ -206,8 +210,6 @@ export type ProjectInfoPanelModel = {
   exportError: string;
   workflowStep: string;
   workflowProgress: number;
-  fontChoice: string;
-  fontAssetOptions: Array<{ value: string; label: string }>;
   scrollSensitivity: {
     item: number;
     section: number;
@@ -221,10 +223,9 @@ export type ProjectInfoPanelActions = {
   exportStaticSite: () => Promise<void> | void;
   setTemplate: (templateId: string) => Promise<void> | void;
   toggleLanguage: (code: string) => void;
+  setDefaultLocale: (code: string) => void;
   handleCurrencyChange: (event: Event) => void;
   toggleCurrencyPosition: () => void;
-  handleFontSelect: (event: Event) => void;
-  handleCustomFontSourceInput: (event: Event) => void;
   setItemScrollSensitivity: (level: number) => void;
   setSectionScrollSensitivity: (level: number) => void;
 };
@@ -277,6 +278,7 @@ export type PreviewCanvasActions = {
 };
 
 export type DishModalModel = {
+  t: (key: string) => string;
   dish: MenuItem;
   interactiveEnabled: boolean;
   itemFontStyle: string;
@@ -296,6 +298,7 @@ export type DishModalActions = {
 };
 
 export type RuntimeSurfaceHostModel = {
+  t: (key: string) => string;
   activeItem: { category: string; itemId: string } | null;
   dish: MenuItem | null;
   interactiveEnabled: boolean;

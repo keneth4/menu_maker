@@ -3,6 +3,7 @@ import type { ProjectSummary } from "../../lib/loadProjects";
 import type { UiKey } from "../config/uiCopy";
 import type { TemplateOption } from "../../core/templates/templateOptions";
 import type { AssetEntryKind, AssetMovePlan } from "../../infrastructure/bridge/pathing";
+import { mapProjectAssetPaths } from "../../core/menu/assetPathMapping";
 import type { ProjectWorkflowController } from "./projectWorkflowController";
 import { createProjectWorkflowController } from "./projectWorkflowController";
 import type { EditorDraftController } from "./editorDraftController";
@@ -200,6 +201,55 @@ export type RuntimeBindings = {
   modalController: ModalController;
 };
 
+type AssetPathStyle = "project-abs" | "project-rel" | "assets-rel" | "relative";
+
+const splitAssetPathSuffix = (value: string) => {
+  const index = value.search(/[?#]/);
+  if (index < 0) {
+    return { base: value, suffix: "" };
+  }
+  return { base: value.slice(0, index), suffix: value.slice(index) };
+};
+
+const resolveRelativeAssetPath = (
+  base: string,
+  slug: string
+): { style: AssetPathStyle; relative: string } | null => {
+  if (!base) return null;
+  if (base.startsWith("/projects/")) {
+    const absolutePrefix = `/projects/${slug}/assets/`;
+    if (!base.startsWith(absolutePrefix)) return null;
+    return { style: "project-abs", relative: base.slice(absolutePrefix.length) };
+  }
+  if (base.startsWith("projects/")) {
+    const relativePrefix = `projects/${slug}/assets/`;
+    if (!base.startsWith(relativePrefix)) return null;
+    return { style: "project-rel", relative: base.slice(relativePrefix.length) };
+  }
+  if (base.startsWith("assets/")) {
+    return { style: "assets-rel", relative: base.slice("assets/".length) };
+  }
+  if (base.startsWith("http://") || base.startsWith("https://") || base.startsWith("data:")) {
+    return null;
+  }
+  return { style: "relative", relative: base };
+};
+
+const rewriteRelativeAssetPath = (value: string, sourcePath: string, destinationPath: string) => {
+  if (value === sourcePath) return destinationPath;
+  if (value.startsWith(`${sourcePath}/`)) {
+    return `${destinationPath}${value.slice(sourcePath.length)}`;
+  }
+  return value;
+};
+
+const restoreAssetPathStyle = (style: AssetPathStyle, slug: string, relative: string) => {
+  if (style === "project-abs") return `/projects/${slug}/assets/${relative}`;
+  if (style === "project-rel") return `projects/${slug}/assets/${relative}`;
+  if (style === "assets-rel") return `assets/${relative}`;
+  return relative;
+};
+
 export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBindings => {
   const workflowStatusController = createWorkflowStatusController({
     translate: (key) => deps.t()(key),
@@ -320,6 +370,49 @@ export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBinding
     setState: (next) => deps.setState(next)
   });
 
+  const rewriteProjectAssetPaths = (sourcePath: string, destinationPath: string) => {
+    const normalizedSourcePath = deps.mapLegacyAssetRelativeToManaged(sourcePath.trim());
+    const normalizedDestinationPath = deps.mapLegacyAssetRelativeToManaged(destinationPath.trim());
+    if (!normalizedSourcePath || !normalizedDestinationPath || normalizedSourcePath === normalizedDestinationPath) {
+      return;
+    }
+    const slug = deps.getProjectSlug();
+    const rewritePath = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return value;
+      const { base, suffix } = splitAssetPathSuffix(trimmed);
+      const resolved = resolveRelativeAssetPath(base, slug);
+      if (!resolved) return value;
+      const rewrittenRelative = rewriteRelativeAssetPath(
+        resolved.relative,
+        normalizedSourcePath,
+        normalizedDestinationPath
+      );
+      if (rewrittenRelative === resolved.relative) return value;
+      return `${restoreAssetPathStyle(resolved.style, slug, rewrittenRelative)}${suffix}`;
+    };
+
+    const state = deps.getState();
+    const patch: RuntimeBindingsPatch = {};
+    if (state.draft) {
+      patch.draft = mapProjectAssetPaths(state.draft, rewritePath);
+    }
+    if (state.project) {
+      patch.project = mapProjectAssetPaths(state.project, rewritePath);
+    }
+    if (state.activeProject) {
+      patch.activeProject = mapProjectAssetPaths(state.activeProject, rewritePath);
+    }
+    if (state.wizardShowcaseProject) {
+      patch.wizardShowcaseProject = mapProjectAssetPaths(state.wizardShowcaseProject, rewritePath);
+    }
+    if (Object.keys(patch).length === 0) return;
+    deps.setState(patch);
+    if (patch.draft) {
+      deps.touchDraft();
+    }
+  };
+
   const assetWorkspaceController = createAssetWorkspaceController({
     t: (key) => deps.t()(key as UiKey),
     userManagedRoots: deps.userManagedRoots,
@@ -343,6 +436,7 @@ export const createRuntimeBindings = (deps: RuntimeBindingsDeps): RuntimeBinding
     queueBridgeDerivedPreparation: async (slug, project, options) => {
       await projectWorkflowController.queueBridgeDerivedPreparation(slug, project, options);
     },
+    rewriteProjectAssetPaths,
     startAssetTask: workflowStatusController.startAssetTask,
     updateAssetTask: workflowStatusController.updateAssetTask,
     finishAssetTask: workflowStatusController.finishAssetTask,

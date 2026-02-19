@@ -94,6 +94,7 @@ type AssetWorkspaceControllerDeps = {
     project: MenuProject,
     options: { applyIfUnchanged: boolean }
   ) => Promise<void>;
+  rewriteProjectAssetPaths: (sourcePath: string, destinationPath: string) => void;
   startAssetTask: (step: string, progress: number) => void;
   updateAssetTask: (step: string, progress: number) => void;
   finishAssetTask: (step: string) => void;
@@ -112,7 +113,12 @@ export type AssetWorkspaceController = {
   refreshRootEntries: () => Promise<void>;
   refreshBridgeEntries: () => Promise<void>;
   pickRootFolder: () => Promise<void>;
+  createFolderNamed: (name: string, parentPath?: string) => Promise<void>;
   createFolder: () => Promise<void>;
+  renameEntryNamed: (
+    entry: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">,
+    name: string
+  ) => Promise<void>;
   renameEntry: (entry: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => Promise<void>;
   moveEntry: (entry: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => Promise<void>;
   deleteEntry: (entry: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => Promise<void>;
@@ -210,6 +216,13 @@ const toDataUrl = async (file: File) =>
 export const createAssetWorkspaceController = (
   deps: AssetWorkspaceControllerDeps
 ): AssetWorkspaceController => {
+  const normalizeManagedPath = (value: string) => deps.mapLegacyAssetRelativeToManaged(value.trim());
+  const isLockedPath = (value: string) => deps.isLockedManagedAssetRoot(normalizeManagedPath(value));
+  const rewriteProjectAssetPaths = (sourcePath: string, destinationPath: string) => {
+    if (sourcePath === destinationPath) return;
+    deps.rewriteProjectAssetPaths(sourcePath, destinationPath);
+  };
+
   const bridgeRequest = async (
     endpoint: string,
     payload?: Record<string, unknown>,
@@ -368,10 +381,12 @@ export const createAssetWorkspaceController = (
         );
         await entry.parent.removeEntry(entry.name, { recursive: true });
       }
+      rewriteProjectAssetPaths(entry.path, plan.destinationPath);
       return;
     }
     if (state.assetMode === "bridge") {
       await bridgeRequest("move", { from: entry.path, to: plan.destinationPath });
+      rewriteProjectAssetPaths(entry.path, plan.destinationPath);
     }
   };
 
@@ -498,6 +513,8 @@ export const createAssetWorkspaceController = (
 
   const toggleAssetSelection = (id: string) => {
     const state = deps.getState();
+    const entry = state.fsEntries.find((candidate) => candidate.id === id);
+    if (entry && isLockedPath(entry.path)) return;
     if (state.selectedAssetIds.includes(id)) {
       deps.setState({ selectedAssetIds: state.selectedAssetIds.filter((item) => item !== id) });
       return;
@@ -507,20 +524,24 @@ export const createAssetWorkspaceController = (
 
   const selectAllAssets = () => {
     const state = deps.getState();
-    deps.setState({ selectedAssetIds: state.fsEntries.map((entry) => entry.id) });
+    deps.setState({
+      selectedAssetIds: state.fsEntries
+        .filter((entry) => !isLockedPath(entry.path))
+        .map((entry) => entry.id)
+    });
   };
 
   const clearAssetSelection = () => {
     deps.setState({ selectedAssetIds: [] });
   };
 
-  const createFolder = async () => {
+  const createFolderNamed = async (name: string, parentPath?: string) => {
     if (!deps.ensureAssetProjectWritable()) return;
-    const name = deps.prompt(deps.t("promptNewFolder"));
-    if (!name) return;
+    const normalizedName = name.trim();
+    if (!normalizedName) return;
     const state = deps.getState();
-    const baseFolder = state.uploadTargetPath || deps.userManagedRoots[0];
-    const requestedPath = deps.mapLegacyAssetRelativeToManaged(name);
+    const baseFolder = normalizeManagedPath(parentPath || state.uploadTargetPath || deps.userManagedRoots[0]);
+    const requestedPath = normalizeManagedPath(normalizedName);
     const targetPath = deps.isManagedAssetRelativePath(requestedPath)
       ? requestedPath
       : deps.joinAssetFolderPath(baseFolder, requestedPath);
@@ -544,47 +565,64 @@ export const createAssetWorkspaceController = (
     }
   };
 
-  const renameEntry = async (entryRef: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => {
+  const createFolder = async () => {
+    const name = deps.prompt(deps.t("promptNewFolder"));
+    if (!name) return;
+    await createFolderNamed(name);
+  };
+
+  const renameEntryNamed = async (
+    entryRef: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">,
+    name: string
+  ) => {
     if (!deps.ensureAssetProjectWritable()) return;
-    if (deps.isLockedManagedAssetRoot(entryRef.path)) {
+    if (isLockedPath(entryRef.path)) {
       deps.setState({ fsError: deps.t("errAssetRootProtected") });
       return;
     }
-    const newName = deps.prompt(deps.t("promptRename"), entryRef.name);
+    const newName = name.trim();
     if (!newName || newName === entryRef.name) return;
     const entry = resolveEntry(entryRef);
     if (!entry) return;
     const state = deps.getState();
-    if (state.assetMode === "filesystem") {
-      if (!state.rootHandle || !entry.parent || !entry.handle) return;
-      if (entry.kind === "file") {
-        await deps.copyFileHandleTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
-        await entry.parent.removeEntry(entry.name);
-      } else {
-        await deps.copyDirectoryHandleTo(
-          entry.handle as FileSystemDirectoryHandle,
-          entry.parent,
-          newName
-        );
-        await entry.parent.removeEntry(entry.name, { recursive: true });
+    const newPath = deps.planEntryRename(entry.path, newName);
+    try {
+      if (state.assetMode === "filesystem") {
+        if (!state.rootHandle || !entry.parent || !entry.handle) return;
+        if (entry.kind === "file") {
+          await deps.copyFileHandleTo(entry.handle as FileSystemFileHandle, entry.parent, newName);
+          await entry.parent.removeEntry(entry.name);
+        } else {
+          await deps.copyDirectoryHandleTo(
+            entry.handle as FileSystemDirectoryHandle,
+            entry.parent,
+            newName
+          );
+          await entry.parent.removeEntry(entry.name, { recursive: true });
+        }
+        rewriteProjectAssetPaths(entry.path, newPath);
+        await refreshRootEntries();
+        return;
       }
-      await refreshRootEntries();
-      return;
-    }
-    if (state.assetMode === "bridge") {
-      const newPath = deps.planEntryRename(entry.path, newName);
-      try {
+      if (state.assetMode === "bridge") {
         await bridgeRequest("move", { from: entry.path, to: newPath });
+        rewriteProjectAssetPaths(entry.path, newPath);
         await refreshBridgeEntries();
-      } catch (error) {
-        deps.setState({ fsError: error instanceof Error ? error.message : deps.t("errOpenFolder") });
       }
+    } catch (error) {
+      deps.setState({ fsError: error instanceof Error ? error.message : deps.t("errOpenFolder") });
     }
+  };
+
+  const renameEntry = async (entryRef: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => {
+    const newName = deps.prompt(deps.t("promptRename"), entryRef.name);
+    if (!newName) return;
+    await renameEntryNamed(entryRef, newName);
   };
 
   const moveEntry = async (entryRef: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => {
     if (!deps.ensureAssetProjectWritable()) return;
-    if (deps.isLockedManagedAssetRoot(entryRef.path)) {
+    if (isLockedPath(entryRef.path)) {
       deps.setState({ fsError: deps.t("errAssetRootProtected") });
       return;
     }
@@ -607,7 +645,7 @@ export const createAssetWorkspaceController = (
 
   const deleteEntry = async (entryRef: Pick<AssetWorkspaceEntry, "id" | "path" | "name" | "kind">) => {
     if (!deps.ensureAssetProjectWritable()) return;
-    if (deps.isLockedManagedAssetRoot(entryRef.path)) {
+    if (isLockedPath(entryRef.path)) {
       deps.setState({ fsError: deps.t("errAssetRootProtected") });
       return;
     }
@@ -634,7 +672,7 @@ export const createAssetWorkspaceController = (
     if (!deps.ensureAssetProjectWritable()) return;
     const state = deps.getState();
     const targets = state.fsEntries.filter((entry) => state.selectedAssetIds.includes(entry.id));
-    if (targets.some((entry) => deps.isLockedManagedAssetRoot(entry.path))) {
+    if (targets.some((entry) => isLockedPath(entry.path))) {
       deps.setState({ fsError: deps.t("errAssetRootProtected") });
       return;
     }
@@ -660,7 +698,7 @@ export const createAssetWorkspaceController = (
     if (!target) return;
     const state = deps.getState();
     const targets = state.fsEntries.filter((entry) => state.selectedAssetIds.includes(entry.id));
-    if (targets.some((entry) => deps.isLockedManagedAssetRoot(entry.path))) {
+    if (targets.some((entry) => isLockedPath(entry.path))) {
       deps.setState({ fsError: deps.t("errAssetRootProtected") });
       return;
     }
@@ -781,7 +819,9 @@ export const createAssetWorkspaceController = (
     refreshRootEntries,
     refreshBridgeEntries,
     pickRootFolder,
+    createFolderNamed,
     createFolder,
+    renameEntryNamed,
     renameEntry,
     moveEntry,
     deleteEntry,

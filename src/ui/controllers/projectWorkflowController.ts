@@ -221,6 +221,36 @@ export const createProjectWorkflowController = (
   let bridgeDeriveTaskSlug = "";
   let bridgeDeriveTaskSignature = "";
 
+  const normalizeUiLocale = (value: string): "es" | "en" => (value === "en" ? "en" : "es");
+  const normalizeLocaleCode = (value: string) => value.trim().toLowerCase();
+
+  const ensureWorkflowLocales = (
+    project: MenuProject,
+    uiLang: "es" | "en"
+  ): "es" | "en" | null => {
+    const locales = Array.from(
+      new Set(
+        (project.meta.locales ?? [])
+          .map((locale) => normalizeLocaleCode(locale))
+          .filter((locale) => locale.length > 0)
+      )
+    );
+    if (locales.length > 0) {
+      project.meta.locales = locales;
+      const normalizedDefault = normalizeLocaleCode(project.meta.defaultLocale ?? "");
+      if (!normalizedDefault || !locales.includes(normalizedDefault)) {
+        project.meta.defaultLocale = locales[0];
+      } else {
+        project.meta.defaultLocale = normalizedDefault;
+      }
+      return null;
+    }
+    const fallback = normalizeUiLocale(uiLang);
+    project.meta.locales = [fallback];
+    project.meta.defaultLocale = fallback;
+    return fallback;
+  };
+
   const bridgeRequest = async (
     endpoint: string,
     payload?: Record<string, unknown>,
@@ -279,6 +309,15 @@ export const createProjectWorkflowController = (
   const saveProject = async () => {
     const state = deps.getState();
     if (!state.draft || state.workflowMode) return;
+    const ensuredLocale = ensureWorkflowLocales(state.draft, state.uiLang);
+    if (ensuredLocale) {
+      deps.setState({
+        draft: state.draft,
+        locale: ensuredLocale,
+        editLang: ensuredLocale,
+        wizardLang: ensuredLocale
+      });
+    }
     const suggested = deps.getSuggestedZipName();
     const response = deps.prompt(deps.t("promptSaveName"), suggested);
     if (!response) return;
@@ -409,6 +448,15 @@ export const createProjectWorkflowController = (
   const exportStaticSite = async () => {
     const state = deps.getState();
     if (!state.draft || state.workflowMode) return;
+    const ensuredLocale = ensureWorkflowLocales(state.draft, state.uiLang);
+    if (ensuredLocale) {
+      deps.setState({
+        draft: state.draft,
+        locale: ensuredLocale,
+        editLang: ensuredLocale,
+        wizardLang: ensuredLocale
+      });
+    }
     deps.setState({
       openError: "",
       exportError: "",
@@ -483,6 +531,27 @@ export const createProjectWorkflowController = (
     sourceName = "",
     options: { rootFiles?: string[] } = {}
   ) => {
+    const normalizedLocales = Array.from(
+      new Set(
+        (data.meta.locales ?? [])
+          .map((locale) => normalizeLocaleCode(locale))
+          .filter((locale) => locale.length > 0)
+      )
+    );
+    data.meta.locales = normalizedLocales;
+    const normalizedDefaultLocale = normalizeLocaleCode(data.meta.defaultLocale ?? "");
+    if (normalizedDefaultLocale) {
+      data.meta.defaultLocale = normalizedDefaultLocale;
+    } else if (normalizedLocales.length > 0) {
+      data.meta.defaultLocale = normalizedLocales[0];
+    }
+    if (
+      normalizedLocales.length > 0 &&
+      (!data.meta.defaultLocale || !normalizedLocales.includes(data.meta.defaultLocale))
+    ) {
+      data.meta.defaultLocale = normalizedLocales[0];
+    }
+
     const activeSlug = data.meta.slug || "importado";
     const summary = {
       slug: activeSlug,
@@ -519,9 +588,6 @@ export const createProjectWorkflowController = (
     const empty = deps.createEmptyProject();
     empty.meta.name = state.uiLang === "en" ? "New project" : "Nuevo proyecto";
     empty.meta.slug = "new-project";
-    if (!empty.meta.locales.includes(state.uiLang)) {
-      empty.meta.locales = [state.uiLang, ...empty.meta.locales];
-    }
     empty.meta.defaultLocale = state.uiLang;
 
     const draft = deps.cloneProject(empty);

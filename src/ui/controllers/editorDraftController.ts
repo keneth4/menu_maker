@@ -13,10 +13,12 @@ type CommonAllergen = {
 };
 
 type RoleFontConfig = {
+  family?: string;
   source?: string;
 };
 
 type ItemFontConfig = {
+  family?: string;
   source?: string;
 };
 
@@ -62,6 +64,7 @@ type EditorDraftControllerDeps = {
 
 export type EditorDraftController = {
   toggleLanguage: (code: string) => void;
+  setDefaultLocale: (code: string) => void;
   setCurrency: (code: string) => void;
   toggleCurrencyPosition: () => void;
   applyTemplate: (templateId: string, options?: { source?: "wizard" | "project" }) => Promise<void>;
@@ -73,6 +76,8 @@ export type EditorDraftController = {
   removeBackground: (id: string) => void;
   addSection: () => void;
   deleteSection: () => void;
+  deleteSectionById: (sectionId: string) => void;
+  setSectionNameById: (sectionId: string, lang: string, value: string) => void;
   addDish: () => void;
   addWizardCategory: () => void;
   removeWizardCategory: (id: string) => void;
@@ -99,10 +104,12 @@ export type EditorDraftController = {
   setSectionScrollSensitivity: (level: number) => void;
   setIdentityMode: (mode: "text" | "logo") => void;
   setLogoSrc: (src: string) => void;
+  setFontRoleSelection: (role: ProjectFontRole, selection: string) => void;
   setFontRoleSource: (role: ProjectFontRole, source: string) => void;
   setItemScrollAnimationMode: (item: MenuItem, mode: "hero360" | "alternate") => void;
   setItemScrollAnimationSrc: (item: MenuItem, source: string) => void;
   setItemPriceVisible: (item: MenuItem, visible: boolean) => void;
+  setItemFontSelection: (item: MenuItem, selection: string) => void;
   setItemFontSource: (item: MenuItem, source: string) => void;
   getDishRotateDirection: (item: MenuItem | null) => 1 | -1;
   setItemRotationDirection: (item: MenuItem, direction: "cw" | "ccw") => void;
@@ -114,6 +121,8 @@ const createLocalized = (locales: string[]) =>
     acc[lang] = "";
     return acc;
   }, {});
+
+const normalizeLocaleCode = (value: string) => value.trim().toLowerCase();
 
 const createEmptyDish = (locales: string[], currency: string, id: string): MenuItem => ({
   id,
@@ -130,7 +139,7 @@ const createEmptyDish = (locales: string[], currency: string, id: string): MenuI
   media: {
     hero360: "",
     originalHero360: "",
-    rotationDirection: "ccw",
+    rotationDirection: "cw",
     scrollAnimationMode: "hero360",
     scrollAnimationSrc: ""
   },
@@ -141,6 +150,31 @@ const ensureItemFontConfig = (item: MenuItem): ItemFontConfig => {
   if (!item.typography) item.typography = {};
   if (!item.typography.item) item.typography.item = {};
   return item.typography.item;
+};
+
+const FONT_SELECTION_DEFAULT = "default";
+const FONT_SELECTION_BUILTIN_PREFIX = "builtin:";
+const FONT_SELECTION_ASSET_PREFIX = "asset:";
+
+type ParsedFontSelection =
+  | { kind: "default" }
+  | { kind: "builtin"; family: string }
+  | { kind: "asset"; source: string };
+
+const parseFontSelection = (selection: string): ParsedFontSelection => {
+  const normalized = selection.trim();
+  if (!normalized || normalized === FONT_SELECTION_DEFAULT) {
+    return { kind: "default" };
+  }
+  if (normalized.startsWith(FONT_SELECTION_BUILTIN_PREFIX)) {
+    const family = normalized.slice(FONT_SELECTION_BUILTIN_PREFIX.length).trim();
+    return family ? { kind: "builtin", family } : { kind: "default" };
+  }
+  if (normalized.startsWith(FONT_SELECTION_ASSET_PREFIX)) {
+    const source = normalized.slice(FONT_SELECTION_ASSET_PREFIX.length).trim();
+    return source ? { kind: "asset", source } : { kind: "default" };
+  }
+  return { kind: "asset", source: normalized };
 };
 
 const resolveSelectedCategory = (
@@ -158,7 +192,9 @@ export const createEditorDraftController = (
   const setCurrency = (code: string) => {
     const state = deps.getState();
     if (!state.draft) return;
+    if (state.draft.meta.currency === code) return;
     state.draft.meta.currency = code;
+    deps.touchDraft();
   };
 
   const toggleCurrencyPosition = () => {
@@ -166,23 +202,25 @@ export const createEditorDraftController = (
     if (!state.draft) return;
     state.draft.meta.currencyPosition =
       state.draft.meta.currencyPosition === "right" ? "left" : "right";
+    deps.touchDraft();
   };
 
   const toggleLanguage = (code: string) => {
     const state = deps.getState();
     if (!state.draft) return;
     const draft = state.draft;
-    const localeSet = new Set(draft.meta.locales);
-    if (localeSet.has(code)) {
-      localeSet.delete(code);
+    const normalizedCode = normalizeLocaleCode(code);
+    if (!normalizedCode) return;
+    const localeSet = new Set(
+      (draft.meta.locales ?? []).map((entry) => normalizeLocaleCode(entry)).filter(Boolean)
+    );
+    if (localeSet.has(normalizedCode)) {
+      localeSet.delete(normalizedCode);
     } else {
-      localeSet.add(code);
-    }
-    if (localeSet.size === 0) {
-      localeSet.add(draft.meta.defaultLocale || "es");
+      localeSet.add(normalizedCode);
     }
     draft.meta.locales = Array.from(localeSet);
-    if (!draft.meta.locales.includes(draft.meta.defaultLocale)) {
+    if (draft.meta.locales.length > 0 && !draft.meta.locales.includes(draft.meta.defaultLocale)) {
       draft.meta.defaultLocale = draft.meta.locales[0];
     }
     draft.categories.forEach((category) => {
@@ -204,6 +242,26 @@ export const createEditorDraftController = (
         });
       });
     });
+    deps.touchDraft();
+  };
+
+  const setDefaultLocale = (code: string) => {
+    const state = deps.getState();
+    if (!state.draft) return;
+    const draft = state.draft;
+    const normalizedCode = normalizeLocaleCode(code);
+    if (!normalizedCode) return;
+    const selectedLocales = Array.from(
+      new Set((draft.meta.locales ?? []).map((entry) => normalizeLocaleCode(entry)).filter(Boolean))
+    );
+    const nextDefaultLocale =
+      selectedLocales.length === 0
+        ? normalizedCode
+        : selectedLocales.includes(normalizedCode)
+          ? normalizedCode
+          : selectedLocales[0];
+    if (draft.meta.defaultLocale === nextDefaultLocale) return;
+    draft.meta.defaultLocale = nextDefaultLocale;
     deps.touchDraft();
   };
 
@@ -375,12 +433,56 @@ export const createEditorDraftController = (
   const deleteSection = () => {
     const state = deps.getState();
     if (!state.draft || !state.selectedCategoryId) return;
+    deleteSectionById(state.selectedCategoryId);
+  };
+
+  const deleteSectionById = (sectionId: string) => {
+    const state = deps.getState();
+    if (!state.draft || !sectionId.trim()) return;
     const draft = state.draft;
-    draft.categories = draft.categories.filter((item) => item.id !== state.selectedCategoryId);
-    deps.setState({
-      selectedCategoryId: draft.categories[0]?.id ?? "",
-      selectedItemId: ""
-    });
+    const currentIndex = draft.categories.findIndex((item) => item.id === sectionId);
+    if (currentIndex < 0) return;
+    draft.categories = draft.categories.filter((item) => item.id !== sectionId);
+
+    const firstAvailableCategoryId = draft.categories[0]?.id ?? "";
+    const indexAlignedCategoryId = draft.categories[currentIndex]?.id ?? "";
+    const previousCategoryId = draft.categories[currentIndex - 1]?.id ?? "";
+    const fallbackCategoryId = indexAlignedCategoryId || previousCategoryId || firstAvailableCategoryId;
+
+    const patch: Partial<EditorDraftState> = {};
+    if (
+      state.selectedCategoryId === sectionId ||
+      !draft.categories.some((category) => category.id === state.selectedCategoryId)
+    ) {
+      patch.selectedCategoryId = fallbackCategoryId;
+      patch.selectedItemId =
+        draft.categories.find((category) => category.id === fallbackCategoryId)?.items[0]?.id ?? "";
+    }
+    if (
+      state.wizardCategoryId === sectionId ||
+      !draft.categories.some((category) => category.id === state.wizardCategoryId)
+    ) {
+      patch.wizardCategoryId = firstAvailableCategoryId;
+      patch.wizardItemId = "";
+    }
+    if (Object.keys(patch).length > 0) {
+      deps.setState(patch);
+    }
+    deps.touchDraft();
+  };
+
+  const setSectionNameById = (sectionId: string, lang: string, value: string) => {
+    const state = deps.getState();
+    if (!state.draft) return;
+    const normalizedSectionId = sectionId.trim();
+    const normalizedLang = normalizeLocaleCode(lang);
+    if (!normalizedSectionId || !normalizedLang) return;
+    const category = state.draft.categories.find((item) => item.id === normalizedSectionId);
+    if (!category) return;
+    if (!category.name) {
+      category.name = {};
+    }
+    category.name[normalizedLang] = value;
     deps.touchDraft();
   };
 
@@ -676,19 +778,39 @@ export const createEditorDraftController = (
     deps.touchDraft();
   };
 
-  const setFontRoleSource = (role: ProjectFontRole, source: string) => {
+  const setFontRoleSelection = (role: ProjectFontRole, selection: string) => {
     const state = deps.getState();
     if (!state.draft) return;
     if (!state.draft.meta.fontRoles) {
       state.draft.meta.fontRoles = {};
     }
     const existing = state.draft.meta.fontRoles[role] ?? {};
-    const next: RoleFontConfig = {
-      ...existing,
-      source: source.trim()
-    };
-    state.draft.meta.fontRoles[role] = next;
+    const next: RoleFontConfig = { ...existing };
+    const parsed = parseFontSelection(selection);
+    if (parsed.kind === "default") {
+      delete next.family;
+      delete next.source;
+    } else if (parsed.kind === "builtin") {
+      next.family = parsed.family;
+      next.source = "";
+    } else {
+      next.family = "";
+      next.source = parsed.source;
+    }
+    if (!next.family && !next.source) {
+      delete state.draft.meta.fontRoles[role];
+    } else {
+      state.draft.meta.fontRoles[role] = next;
+    }
     deps.touchDraft();
+  };
+
+  const setFontRoleSource = (role: ProjectFontRole, source: string) => {
+    const normalized = source.trim();
+    setFontRoleSelection(
+      role,
+      normalized ? `${FONT_SELECTION_ASSET_PREFIX}${normalized}` : FONT_SELECTION_DEFAULT
+    );
   };
 
   const setItemScrollAnimationMode = (item: MenuItem, mode: "hero360" | "alternate") => {
@@ -711,16 +833,47 @@ export const createEditorDraftController = (
     deps.touchDraft();
   };
 
-  const setItemFontSource = (item: MenuItem, source: string) => {
-    const normalized = source.trim();
-    const fontConfig = ensureItemFontConfig(item);
-    if (fontConfig.source === normalized) return;
-    fontConfig.source = normalized;
+  const setItemFontSelection = (item: MenuItem, selection: string) => {
+    const parsed = parseFontSelection(selection);
+    const existing = item.typography?.item ?? {};
+    const next: ItemFontConfig = { ...existing };
+    if (parsed.kind === "default") {
+      delete next.family;
+      delete next.source;
+    } else if (parsed.kind === "builtin") {
+      next.family = parsed.family;
+      next.source = "";
+    } else {
+      next.family = "";
+      next.source = parsed.source;
+    }
+    const isUnchanged = existing.family === next.family && existing.source === next.source;
+    if (isUnchanged) return;
+    if (!next.family && !next.source) {
+      if (item.typography?.item) {
+        delete item.typography.item;
+      }
+      if (item.typography && Object.keys(item.typography).length === 0) {
+        delete item.typography;
+      }
+    } else {
+      const fontConfig = ensureItemFontConfig(item);
+      fontConfig.family = next.family;
+      fontConfig.source = next.source;
+    }
     deps.touchDraft();
   };
 
+  const setItemFontSource = (item: MenuItem, source: string) => {
+    const normalized = source.trim();
+    setItemFontSelection(
+      item,
+      normalized ? `${FONT_SELECTION_ASSET_PREFIX}${normalized}` : FONT_SELECTION_DEFAULT
+    );
+  };
+
   const getDishRotateDirection = (item: MenuItem | null): 1 | -1 =>
-    item?.media.rotationDirection === "cw" ? -1 : 1;
+    item?.media.rotationDirection === "ccw" ? 1 : -1;
 
   const setItemRotationDirection = (item: MenuItem, direction: "cw" | "ccw") => {
     if (item.media.rotationDirection === direction) return;
@@ -736,6 +889,7 @@ export const createEditorDraftController = (
 
   return {
     toggleLanguage,
+    setDefaultLocale,
     setCurrency,
     toggleCurrencyPosition,
     applyTemplate,
@@ -747,6 +901,8 @@ export const createEditorDraftController = (
     removeBackground,
     addSection,
     deleteSection,
+    deleteSectionById,
+    setSectionNameById,
     addDish,
     addWizardCategory,
     removeWizardCategory,
@@ -773,10 +929,12 @@ export const createEditorDraftController = (
     setSectionScrollSensitivity,
     setIdentityMode,
     setLogoSrc,
+    setFontRoleSelection,
     setFontRoleSource,
     setItemScrollAnimationMode,
     setItemScrollAnimationSrc,
     setItemPriceVisible,
+    setItemFontSelection,
     setItemFontSource,
     getDishRotateDirection,
     setItemRotationDirection,

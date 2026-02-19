@@ -72,11 +72,11 @@
   removeWizardDish={actions.removeWizardDish}
   setIdentityMode={actions.setIdentityMode}
   setLogoSrc={actions.setLogoSrc}
+  setFontRoleSelection={actions.setFontRoleSelection}
   setItemRotationDirection={actions.setItemRotationDirection}
   setItemScrollAnimationMode={actions.setItemScrollAnimationMode}
   setItemScrollAnimationSrc={actions.setItemScrollAnimationSrc}
-  setFontRoleSource={actions.setFontRoleSource}
-  setItemFontSource={actions.setItemFontSource}
+  setItemFontSelection={actions.setItemFontSelection}
   setItemPriceVisible={actions.setItemPriceVisible}
   handleLocalizedInput={actions.handleLocalizedInput}
   handleDescriptionInput={actions.handleDescriptionInput}

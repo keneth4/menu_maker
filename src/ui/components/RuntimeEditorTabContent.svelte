@@ -17,8 +17,6 @@
   export let exportError = "";
   export let workflowStep = "";
   export let workflowProgress = 0;
-  export let fontChoice = "Fraunces";
-  export let fontAssetOptions: Array<{ value: string; label: string }> = [];
 
   export let rootLabel = "";
   export let assetProjectReadOnly = false;
@@ -49,7 +47,7 @@
   export let sectionBackgroundNeedsCoverage = false;
   export let sectionBackgroundHasDuplicates = false;
   export let commonAllergenCatalog: Array<{ id: string; label: Record<string, string> }> = [];
-  export let normalizeBackgroundCarouselSeconds: (value: unknown) => number = () => 9;
+  export let normalizeBackgroundCarouselSeconds: (value: unknown) => number = () => 10;
 
   export let wizardStep = 0;
   export let wizardSteps: string[] = [];
@@ -119,8 +117,6 @@
       exportError,
       workflowStep,
       workflowProgress,
-      fontChoice,
-      fontAssetOptions,
       scrollSensitivity: {
         item: draft?.meta.scrollSensitivity?.item ?? 5,
         section: draft?.meta.scrollSensitivity?.section ?? 5
@@ -134,10 +130,9 @@
       setTemplate: (templateId) =>
         editorDraftController.applyTemplate(templateId, { source: "project" }),
       toggleLanguage: editorDraftController.toggleLanguage,
+      setDefaultLocale: editorDraftController.setDefaultLocale,
       handleCurrencyChange: editorDraftController.handleCurrencyChange,
       toggleCurrencyPosition: editorDraftController.toggleCurrencyPosition,
-      handleFontSelect: editorDraftController.handleFontSelect,
-      handleCustomFontSourceInput: editorDraftController.handleCustomFontSourceInput,
       setItemScrollSensitivity: editorDraftController.setItemScrollSensitivity,
       setSectionScrollSensitivity: editorDraftController.setSectionScrollSensitivity
     }}
@@ -163,6 +158,7 @@
     }}
     actions={{
       createFolder: assetWorkspaceController.createFolder,
+      createFolderNamed: assetWorkspaceController.createFolderNamed,
       handleAssetUpload: assetWorkspaceController.handleAssetUpload,
       handleAssetDragOver: assetWorkspaceController.handleAssetDragOver,
       handleAssetDrop: assetWorkspaceController.handleAssetDrop,
@@ -173,6 +169,7 @@
       toggleAssetSelection: assetWorkspaceController.toggleAssetSelection,
       toggleExpandPath: assetWorkspaceController.toggleExpandPath,
       renameEntry: assetWorkspaceController.renameEntry,
+      renameEntryNamed: assetWorkspaceController.renameEntryNamed,
       moveEntry: assetWorkspaceController.moveEntry,
       deleteEntry: assetWorkspaceController.deleteEntry,
       setUploadTargetPath,
@@ -207,6 +204,8 @@
       getLocalizedValue,
       addSection: editorDraftController.addSection,
       deleteSection: editorDraftController.deleteSection,
+      deleteSectionById: editorDraftController.deleteSectionById,
+      setSectionNameById: editorDraftController.setSectionNameById,
       addBackground: editorDraftController.addBackground,
       moveBackground: editorDraftController.moveBackground,
       removeBackground: editorDraftController.removeBackground,
@@ -228,11 +227,11 @@
       handleVeganToggle: editorDraftController.handleVeganToggle,
       setIdentityMode: editorDraftController.setIdentityMode,
       setLogoSrc: editorDraftController.setLogoSrc,
+      setFontRoleSelection: editorDraftController.setFontRoleSelection,
       setItemRotationDirection: editorDraftController.setItemRotationDirection,
       setItemScrollAnimationMode: editorDraftController.setItemScrollAnimationMode,
       setItemScrollAnimationSrc: editorDraftController.setItemScrollAnimationSrc,
-      setFontRoleSource: editorDraftController.setFontRoleSource,
-      setItemFontSource: editorDraftController.setItemFontSource,
+      setItemFontSelection: editorDraftController.setItemFontSelection,
       setItemPriceVisible: editorDraftController.setItemPriceVisible,
       touchDraft,
       setEditPanel,
@@ -277,11 +276,11 @@
       removeWizardDish: editorDraftController.removeWizardDish,
       setIdentityMode: editorDraftController.setIdentityMode,
       setLogoSrc: editorDraftController.setLogoSrc,
+      setFontRoleSelection: editorDraftController.setFontRoleSelection,
       setItemRotationDirection: editorDraftController.setItemRotationDirection,
       setItemScrollAnimationMode: editorDraftController.setItemScrollAnimationMode,
       setItemScrollAnimationSrc: editorDraftController.setItemScrollAnimationSrc,
-      setFontRoleSource: editorDraftController.setFontRoleSource,
-      setItemFontSource: editorDraftController.setItemFontSource,
+      setItemFontSelection: editorDraftController.setItemFontSelection,
       setItemPriceVisible: editorDraftController.setItemPriceVisible,
       handleLocalizedInput: editorDraftController.handleLocalizedInput,
       handleDescriptionInput: editorDraftController.handleDescriptionInput,

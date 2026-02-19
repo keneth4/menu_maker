@@ -45,6 +45,7 @@
   itemFontStyle={model.itemFontStyle}
   bind:modalMediaHost
   bind:modalMediaImage
+  t={model.t}
   textOf={model.textOf}
   getDetailImageSource={model.getDetailImageSource}
   getAllergenValues={model.getAllergenValues}

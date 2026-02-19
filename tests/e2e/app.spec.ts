@@ -185,7 +185,7 @@ const disableBridgeMode = async (page: Page) => {
 };
 
 const openProjectFromLanding = async (page: Page, fixturePath: string) => {
-  await page.getByRole("button", { name: /abrir proyecto|open project/i }).click();
+  await page.getByRole("button", { name: /abrir|open/i }).click();
   await page.locator('input[type="file"]').setInputFiles(fixturePath);
 };
 
@@ -196,6 +196,19 @@ const openEditor = async (page: Page) => {
   if (!isOpen) {
     await page.getByRole("button", { name: /abrir editor|open editor/i }).click();
   }
+};
+
+const selectAtLeastOneLanguage = async (page: Page) => {
+  const languageField = page.locator(".editor-field", {
+    hasText: /idiomas disponibles|available languages/i
+  });
+  const toggle = languageField.getByRole("button").first();
+  await toggle.click();
+  const checked = languageField.locator('input[type="checkbox"]:checked');
+  if ((await checked.count()) === 0) {
+    await languageField.locator('input[type="checkbox"]').first().check();
+  }
+  await toggle.click();
 };
 
 const supportsInteractiveDecodeForSource = async (page: Page, source: string) => {
@@ -276,6 +289,7 @@ test("landing shows Menu Maker header", async ({ page }) => {
   await disableBridgeMode(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /menu maker/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /abrir proyecto|open project/i })).toBeVisible();
 });
 
 test("create project starts with editor open", async ({ page }) => {
@@ -284,6 +298,91 @@ test("create project starts with editor open", async ({ page }) => {
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
   await expect(page.locator(".editor-panel")).toHaveClass(/open/);
   await expect(page.getByText(/centro de control del proyecto|project control center/i)).toBeVisible();
+});
+
+test("editor chrome places close and language controls in top-right area", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const chrome = page.locator(".editor-panel__header .editor-chrome");
+  await expect(chrome.locator(".lang-toggle")).toBeVisible();
+  await expect(chrome.locator(".editor-close")).toBeVisible();
+});
+
+test("new project starts with no selected languages", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const languageField = page.locator(".editor-field", {
+    hasText: /idiomas disponibles|available languages/i
+  });
+  await expect(languageField.getByRole("button")).toContainText(
+    /ningún idioma seleccionado|no languages selected/i
+  );
+
+  await languageField.getByRole("button").click();
+  await expect(languageField.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+});
+
+test("default language follows UI language while locale list is empty", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const defaultLangSelect = page
+    .locator("label.editor-field", { hasText: /idioma default|default language/i })
+    .locator("select");
+
+  await expect(defaultLangSelect).toHaveValue("es");
+  await expect(defaultLangSelect.locator("option")).toHaveCount(1);
+  await page.getByRole("button", { name: /^EN$/ }).click();
+  await expect(defaultLangSelect).toHaveValue("en");
+  await expect(defaultLangSelect.locator("option")).toHaveCount(1);
+});
+
+test("default language options follow the selected language list", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const languageField = page.locator(".editor-field", {
+    hasText: /idiomas disponibles|available languages/i
+  });
+  const toggle = languageField.getByRole("button").first();
+  await toggle.click();
+  await languageField.getByRole("checkbox", { name: "Français" }).check();
+  await languageField.getByRole("checkbox", { name: "Português" }).check();
+  await toggle.click();
+
+  const defaultLangSelect = page
+    .locator("label.editor-field", { hasText: /idioma default|default language/i })
+    .locator("select");
+  await expect(defaultLangSelect.locator("option")).toHaveCount(2);
+  await expect(defaultLangSelect.locator("option").nth(0)).toHaveText("FR");
+  await expect(defaultLangSelect.locator("option").nth(1)).toHaveText("PT");
+  await expect(defaultLangSelect).toHaveValue("fr");
+});
+
+test("save/export auto-select uiLang when no languages are selected", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: /guardar|save/i }).click();
+
+  const languageField = page.locator(".editor-field", {
+    hasText: /idiomas disponibles|available languages/i
+  });
+  await languageField.getByRole("button").click();
+  await expect(languageField.locator('input[type="checkbox"]:checked')).toHaveCount(1);
 });
 
 test("open project from JSON file", async ({ page }, testInfo) => {
@@ -311,6 +410,23 @@ test("wizard flow starts with editor open", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /iniciar wizard|run wizard/i }).click();
   await expect(page.locator(".editor-panel")).toHaveClass(/open/);
+});
+
+test("assets upload target selector supports backgrounds, items, and fonts", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /assets/i }).click();
+  const uploadTarget = page.locator(".asset-drop select.editor-select").first();
+  await expect(uploadTarget).toBeEnabled();
+  await expect(uploadTarget).toHaveValue("originals/backgrounds");
+
+  await uploadTarget.selectOption("originals/items");
+  await expect(uploadTarget).toHaveValue("originals/items");
+
+  await uploadTarget.selectOption("originals/fonts");
+  await expect(uploadTarget).toHaveValue("originals/fonts");
 });
 
 test("wizard step 0 preview shows template demo backgrounds", async ({ page }) => {
@@ -437,9 +553,8 @@ test("project-tab template switch to jukebox applies section/item controls witho
         .innerText()
     ).trim();
   const beforeVertical = await readActiveTitle();
-  const firstCarousel = page.locator(".menu-section .menu-carousel").first();
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 4, deltaY: 240 });
-  await firstCarousel.dispatchEvent("wheel", { deltaX: 5, deltaY: 220 });
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active .carousel-media img", 6, 260);
+  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active .carousel-media img", 5, 240);
   await page.waitForTimeout(360);
   const afterVertical = await readActiveTitle();
   expect(afterVertical).not.toBe(beforeVertical);
@@ -488,14 +603,26 @@ test("jukebox behavior stays correct before and after wizard roundtrip on switch
     .locator("select");
   await templateSelect.selectOption("jukebox");
   await page.locator(".editor-close").first().click();
+  await expect(page.locator(".section-nav")).toBeVisible();
 
   const initialSection = await getClosestHorizontalSectionIndex(page);
   const outboundDeltaX = initialSection <= 0 ? 2400 : -2400;
-  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX, 18);
-  await wheelOnLocatorCenter(page, ".menu-section .carousel-card.active", outboundDeltaX * 0.75, 12);
-  await expect
-    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2600 })
-    .not.toBe(initialSection);
+  const activeCardImageSelector = ".menu-section .carousel-card.active .carousel-media img";
+  const driveSectionWheel = async () => {
+    await wheelOnLocatorCenter(page, activeCardImageSelector, outboundDeltaX, 18);
+    await wheelOnLocatorCenter(page, activeCardImageSelector, outboundDeltaX * 0.75, 12);
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await driveSectionWheel();
+    try {
+      await expect
+        .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 2200 })
+        .not.toBe(initialSection);
+      break;
+    } catch (error) {
+      if (attempt >= 1) throw error;
+    }
+  }
   const shiftedSection = await getClosestHorizontalSectionIndex(page);
 
   await openEditor(page);
@@ -541,10 +668,11 @@ test("save project and export static site create zip downloads", async ({ page }
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
   await openEditor(page);
+  await selectAtLeastOneLanguage(page);
 
   const saveDownloadPromise = page.waitForEvent("download");
   page.once("dialog", (dialog) => dialog.accept("phase0-save.zip"));
-  await page.getByRole("button", { name: /guardar proyecto|save project/i }).click();
+  await page.getByRole("button", { name: /guardar|save/i }).click();
   const saveDownload = await saveDownloadPromise;
   expect(saveDownload.suggestedFilename()).toBe("phase0-save.zip");
 
@@ -846,6 +974,57 @@ test("show price checkbox row uses inline layout in edit and wizard item forms",
   });
   await expect(wizardShowPriceRow).toHaveCount(1);
   await expect(wizardShowPriceRow.locator('input[type="checkbox"]')).toHaveCount(1);
+});
+
+test("edit backgrounds no longer shows a manual label field", async ({ page }) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const tabs = page.locator(".editor-tabs");
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
+  await page.getByRole("button", { name: /fondos|backgrounds/i }).click();
+  await page.getByRole("button", { name: /agregar fondo|add background/i }).click();
+
+  const backgroundCard = page.locator(".background-carousel-item").first();
+  await expect(backgroundCard).toBeVisible();
+  await expect(backgroundCard.locator("label.editor-field")).toHaveCount(1);
+  await expect(backgroundCard.getByText(/^label$/i)).toHaveCount(0);
+});
+
+test("edit items tab requires at least one section and hides section create/delete controls", async ({
+  page
+}) => {
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
+  await openEditor(page);
+
+  const tabs = page.locator(".editor-tabs");
+  await tabs.getByRole("button", { name: /edición|editar|edit/i }).click();
+
+  const itemsSubtab = page.getByRole("button", { name: /items|dishes/i });
+  await expect(itemsSubtab).toBeDisabled();
+  await expect(
+    page.getByText(/crea al menos una sección para habilitar items|create at least one section to enable items/i)
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: /secciones|sections/i }).click();
+  await expect(
+    page.getByText(/renombra y organiza las secciones del menú|rename and organize menu sections/i)
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: /agregar sección|add section/i }).click();
+  await expect(page.locator(".edit-sections .edit-section")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /editar sección|edit section/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /guardar|save/i })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /limpiar|clear/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /eliminar sección|delete section/i })).toHaveCount(1);
+
+  await expect(itemsSubtab).toBeEnabled();
+  await itemsSubtab.click();
+  await expect(page.getByRole("button", { name: /agregar sección|add section/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /eliminar sección|delete section/i })).toHaveCount(0);
 });
 
 test("detail modal cue is interactive-only and follows visible/hidden lifecycle", async ({

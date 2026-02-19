@@ -500,7 +500,7 @@ const getInteractiveDetailAsset = (item) => {
 };
 const supportsInteractiveMedia = () =>
   typeof window.ImageDecoder === "function" && typeof createImageBitmap === "function";
-const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "cw" ? -1 : 1);
+const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "ccw" ? 1 : -1);
 const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
   const readForegroundCenterFromBitmap = (bitmap) => {
     const maxSize = 140;

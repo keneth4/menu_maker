@@ -62,7 +62,7 @@ describe("normalizeProject", () => {
     expect(normalized.meta.fontFamily).toBe("Fraunces");
     expect(normalized.meta.fontSource).toBe("");
     expect(normalized.meta.currencyPosition).toBe("left");
-    expect(normalized.meta.backgroundCarouselSeconds).toBe(9);
+    expect(normalized.meta.backgroundCarouselSeconds).toBe(10);
     expect(normalized.meta.backgroundDisplayMode).toBe("carousel");
     expect(normalized.meta.scrollSensitivity).toEqual({ item: 5, section: 5 });
     expect(normalized.meta.template).toBe("focus-rows");
@@ -70,7 +70,7 @@ describe("normalizeProject", () => {
     expect(normalized.categories[0].items[0].media.originalHero360).toBe(
       "/projects/sample-cafebrunch-menu/assets/dishes/sample360food.gif"
     );
-    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
+    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("cw");
     expect(normalized.categories[0].items[0].media.scrollAnimationMode).toBe("hero360");
     expect(normalized.categories[0].items[0].media.scrollAnimationSrc).toBe("");
     expect(normalized.categories[0].items[0].priceVisible).toBe(true);
@@ -109,7 +109,7 @@ describe("normalizeProject", () => {
     const normalized = normalizeProject(project);
     expect(normalized.meta.identityMode).toBe("text");
     expect(normalized.meta.logoSrc).toBe("/projects/demo/assets/logo.webp");
-    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("ccw");
+    expect(normalized.categories[0].items[0].media.rotationDirection).toBe("cw");
   });
 
   it("normalizes section background mode, animation mode, and font configs", () => {
@@ -179,6 +179,10 @@ describe("normalizeProject", () => {
 
   it("normalizes background carousel timing into a safe seconds range", () => {
     const project = buildProjectFixture();
+    (project.meta as { backgroundCarouselSeconds?: unknown }).backgroundCarouselSeconds = undefined;
+    const normalizedDefault = normalizeProject(project);
+    expect(normalizedDefault.meta.backgroundCarouselSeconds).toBe(10);
+
     (project.meta as { backgroundCarouselSeconds?: unknown }).backgroundCarouselSeconds = 90.7;
     const normalizedHigh = normalizeProject(project);
     expect(normalizedHigh.meta.backgroundCarouselSeconds).toBe(60);

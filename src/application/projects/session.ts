@@ -21,7 +21,7 @@ export const createEmptyProject = (
     fontSource: "",
     fontRoles: {},
     template: "focus-rows",
-    locales: ["es", "en"],
+    locales: [],
     defaultLocale: "es",
     currency: "MXN",
     currencyPosition: "left",
