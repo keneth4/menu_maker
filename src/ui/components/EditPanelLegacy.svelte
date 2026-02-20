@@ -94,6 +94,7 @@
   export let setItemPriceVisible: (item: MenuItem, visible: boolean) => void = () => {};
   export let touchDraft: () => void = () => {};
   let itemsTabDisabled = false;
+  let identityMode: "text" | "logo" = "text";
   let editingSectionId = "";
   let editingSectionValue = "";
   let creatingSectionInline = false;
@@ -128,6 +129,7 @@
     const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(option.value));
     return normalized === LOGO_ROOT || normalized.startsWith(`${LOGO_ROOT}/`);
   });
+  $: identityMode = draft?.meta.identityMode === "logo" ? "logo" : "text";
   $: itemsTabDisabled = (draft?.categories.length ?? 0) === 0;
   $: if (itemsTabDisabled && editPanel === "dish") {
     editPanel = "section";
@@ -256,6 +258,7 @@
   };
 
   const roleFieldOrder: VisibleRole[] = ["restaurant", "title", "section", "item"];
+  const identitySharedRoleOrder: VisibleRole[] = ["section", "item"];
 
   const handleRoleFontSelectionInput = (role: VisibleRole, event: Event) => {
     const target = event.currentTarget;
@@ -540,7 +543,7 @@
           </label>
         </div>
       </div>
-      {#if draft.meta.identityMode === "logo"}
+      {#if identityMode === "logo"}
         <div class="edit-block">
           <p class="edit-block__title">{t("logoAsset")}</p>
           <label class="editor-field">
@@ -551,7 +554,7 @@
                 value={draft.meta.logoSrc ?? ""}
                 on:change={handleLogoSrcEvent}
               >
-                <option value="">{t("selectImagePlaceholder")}</option>
+                <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                 {#each logoAssetOptions as option}
                   <option value={option.value}>{option.label}</option>
                 {/each}
@@ -568,26 +571,54 @@
           </label>
         </div>
       {/if}
-      <div class="edit-block">
-        <p class="edit-block__title">{t("restaurantName")}</p>
-        <label class="editor-field">
-          <span>{editLang.toUpperCase()}</span>
-          <input
-            type="text"
-            class="editor-input"
-            value={draft.meta.restaurantName?.[editLang] ?? ""}
-            on:input={(event) => {
-              const name = ensureRestaurantName();
-              if (!name) return;
-              handleLocalizedInput(name, editLang, event);
-            }}
-          />
-        </label>
-      </div>
-      <div class="edit-block">
-        <p class="edit-block__title">{t("menuTitle")}</p>
-        <label class="editor-field">
-          <span>{editLang.toUpperCase()}</span>
+      {#if identityMode === "text"}
+        <div class="identity-inline-row">
+          <label class="editor-field identity-inline-row__text">
+            <span>{t("restaurantName")} ({editLang.toUpperCase()})</span>
+            <input
+              type="text"
+              class="editor-input"
+              value={draft.meta.restaurantName?.[editLang] ?? ""}
+              on:input={(event) => {
+                const name = ensureRestaurantName();
+                if (!name) return;
+                handleLocalizedInput(name, editLang, event);
+              }}
+            />
+          </label>
+          <label class="editor-field identity-inline-row__font">
+            <span>{t("fontRoleRestaurant")}</span>
+            <select
+              class="editor-select"
+              value={getRoleFontSelectionForUi("restaurant", rolePreviewSelections)}
+              on:change={(event) => handleRoleFontSelectionInput("restaurant", event)}
+            >
+              <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+              {#each fontOptions as font}
+                <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+              {/each}
+              {#if resolveAssetSelectionSource(getRoleFontSelectionForUi("restaurant", rolePreviewSelections)) &&
+              !hasFontAssetSource(resolveAssetSelectionSource(getRoleFontSelectionForUi("restaurant", rolePreviewSelections)))}
+                <option value={encodeAssetSelection(resolveAssetSelectionSource(getRoleFontSelectionForUi("restaurant", rolePreviewSelections)))}>
+                  {resolveAssetSelectionSource(getRoleFontSelectionForUi("restaurant", rolePreviewSelections))}
+                </option>
+              {/if}
+              {#each fontAssetOptions as option}
+                <option value={encodeAssetSelection(option.value)}>{option.label}</option>
+              {/each}
+            </select>
+            <p
+              class="editor-font-preview"
+              style={buildFontPreviewStyle(getRoleFontSelectionForUi("restaurant", rolePreviewSelections))}
+            >
+              {t("fontPreviewSample")}
+            </p>
+          </label>
+        </div>
+      {/if}
+      <div class="identity-inline-row">
+        <label class="editor-field identity-inline-row__text">
+          <span>{t("menuTitle")} ({editLang.toUpperCase()})</span>
           <input
             type="text"
             class="editor-input"
@@ -599,8 +630,36 @@
             }}
           />
         </label>
+        <label class="editor-field identity-inline-row__font">
+          <span>{t("fontRoleTitle")}</span>
+          <select
+            class="editor-select"
+            value={getRoleFontSelectionForUi("title", rolePreviewSelections)}
+            on:change={(event) => handleRoleFontSelectionInput("title", event)}
+          >
+            <option value={FONT_SELECTION_DEFAULT}>{t("textStyleDefault")}</option>
+            {#each fontOptions as font}
+              <option value={encodeBuiltInSelection(font.value)}>{font.label}</option>
+            {/each}
+            {#if resolveAssetSelectionSource(getRoleFontSelectionForUi("title", rolePreviewSelections)) &&
+            !hasFontAssetSource(resolveAssetSelectionSource(getRoleFontSelectionForUi("title", rolePreviewSelections)))}
+              <option value={encodeAssetSelection(resolveAssetSelectionSource(getRoleFontSelectionForUi("title", rolePreviewSelections)))}>
+                {resolveAssetSelectionSource(getRoleFontSelectionForUi("title", rolePreviewSelections))}
+              </option>
+            {/if}
+            {#each fontAssetOptions as option}
+              <option value={encodeAssetSelection(option.value)}>{option.label}</option>
+            {/each}
+          </select>
+          <p
+            class="editor-font-preview"
+            style={buildFontPreviewStyle(getRoleFontSelectionForUi("title", rolePreviewSelections))}
+          >
+            {t("fontPreviewSample")}
+          </p>
+        </label>
       </div>
-      {#each roleFieldOrder as role}
+      {#each identitySharedRoleOrder as role}
         <div class="edit-block">
           <p class="edit-block__title">{t(roleFieldLabel[role])}</p>
           <label class="editor-field">
@@ -724,7 +783,7 @@
                       value={resolveBackgroundSourceSelection(bg)}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
-                      <option value="">{t("selectImagePlaceholder")}</option>
+                      <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                       {#if resolveBackgroundSourceSelection(bg) &&
                       !hasOptionValue(backgroundAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
@@ -947,7 +1006,7 @@
                       value={resolveDishAssetSelection(selectedItem)}
                       on:change={(event) => handleDishAssetInput(selectedItem, event)}
                     >
-                      <option value="">{t("selectImagePlaceholder")}</option>
+                      <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                       {#if resolveDishAssetSelection(selectedItem) &&
                       !hasOptionValue(itemAssetOptions, resolveDishAssetSelection(selectedItem))}
                         <option value={resolveDishAssetSelection(selectedItem)}>
@@ -995,7 +1054,7 @@
                           on:change={(event) =>
                             handleItemScrollAnimationSourceInput(selectedItem, event)}
                         >
-                          <option value="">{t("selectImagePlaceholder")}</option>
+                          <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                           {#if resolveItemScrollAnimationSelection(selectedItem) &&
                           !hasOptionValue(itemAssetOptions, resolveItemScrollAnimationSelection(selectedItem))}
                             <option value={resolveItemScrollAnimationSelection(selectedItem)}>

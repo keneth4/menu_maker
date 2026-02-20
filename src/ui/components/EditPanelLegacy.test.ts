@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import EditPanelLegacy from "./EditPanelLegacy.svelte";
 
+const getVisibleOptionTexts = (select: HTMLSelectElement | null) =>
+  Array.from(select?.querySelectorAll("option") ?? [])
+    .filter((option) => !option.hidden)
+    .map((option) => option.textContent);
+
 const makeDraft = () => {
   const item = {
     id: "dish-1",
@@ -115,8 +120,81 @@ describe("EditPanelLegacy", () => {
     const logoField = screen.getByText("wizardSrc").closest("label");
     const select = logoField?.querySelector("select") as HTMLSelectElement | null;
     expect(select).not.toBeNull();
-    const options = Array.from(select?.querySelectorAll("option") ?? []).map((option) => option.textContent);
-    expect(options).toEqual(["selectImagePlaceholder", "brand.webp"]);
+    expect(select?.value).toBe("");
+    const placeholder = select?.querySelector('option[value=""]');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.hidden).toBe(true);
+    expect(placeholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(select)).toEqual(["brand.webp"]);
+  });
+
+  it("renders identity fields and inline font rows by mode", () => {
+    const { draft, category, item } = makeDraft();
+    draft.meta.identityMode = "logo";
+
+    const logoView = render(EditPanelLegacy, {
+      props: {
+        t: (key: string) => key,
+        draft,
+        editPanel: "identity",
+        editLang: "es",
+        selectedCategoryId: "cat-1",
+        selectedItemId: "dish-1",
+        selectedCategory: category,
+        selectedItem: item,
+        getLocalizedValue: (value: Record<string, string> | undefined) => value?.es ?? ""
+      }
+    });
+
+    expect(screen.getByText("logoAsset")).toBeInTheDocument();
+    expect(screen.queryByText(/restaurantName/)).not.toBeInTheDocument();
+    expect(screen.getByText(/menuTitle/)).toBeInTheDocument();
+    expect(screen.queryByText("fontRoleRestaurant")).not.toBeInTheDocument();
+    expect(screen.getByText("fontRoleTitle")).toBeInTheDocument();
+    expect(screen.getByText("fontRoleSection")).toBeInTheDocument();
+    expect(screen.getByText("fontRoleItem")).toBeInTheDocument();
+    const logoRows = logoView.container.querySelectorAll(".identity-inline-row");
+    expect(logoRows).toHaveLength(1);
+    const logoRowControls = logoRows[0].querySelectorAll("input.editor-input, select.editor-select");
+    expect(logoRowControls).toHaveLength(2);
+    expect(logoRowControls[0]?.tagName).toBe("INPUT");
+    expect(logoRowControls[1]?.tagName).toBe("SELECT");
+    logoView.unmount();
+
+    draft.meta.identityMode = "text";
+    render(EditPanelLegacy, {
+      props: {
+        t: (key: string) => key,
+        draft,
+        editPanel: "identity",
+        editLang: "es",
+        selectedCategoryId: "cat-1",
+        selectedItemId: "dish-1",
+        selectedCategory: category,
+        selectedItem: item,
+        getLocalizedValue: (value: Record<string, string> | undefined) => value?.es ?? ""
+      }
+    });
+
+    expect(screen.queryByText("logoAsset")).not.toBeInTheDocument();
+    expect(screen.getByText(/restaurantName/)).toBeInTheDocument();
+    expect(screen.getByText(/menuTitle/)).toBeInTheDocument();
+    expect(screen.getByText("fontRoleRestaurant")).toBeInTheDocument();
+    expect(screen.getByText("fontRoleTitle")).toBeInTheDocument();
+    expect(screen.getByText("fontRoleSection")).toBeInTheDocument();
+    expect(screen.getByText("fontRoleItem")).toBeInTheDocument();
+    const textRows = document.querySelectorAll(".identity-inline-row");
+    expect(textRows).toHaveLength(2);
+    expect(textRows[0]?.textContent).toContain("restaurantName");
+    expect(textRows[0]?.textContent).toContain("fontRoleRestaurant");
+    expect(textRows[1]?.textContent).toContain("menuTitle");
+    expect(textRows[1]?.textContent).toContain("fontRoleTitle");
+    for (const row of textRows) {
+      const controls = row.querySelectorAll("input.editor-input, select.editor-select");
+      expect(controls).toHaveLength(2);
+      expect(controls[0]?.tagName).toBe("INPUT");
+      expect(controls[1]?.tagName).toBe("SELECT");
+    }
   });
 
   it("renders section list rows with edit/delete controls", async () => {
@@ -320,10 +398,12 @@ describe("EditPanelLegacy", () => {
       }
     });
     const bgSourceField = screen.getByText("wizardSrc").closest("label");
-    const bgOptions = Array.from(bgSourceField?.querySelectorAll("option") ?? []).map(
-      (option) => option.textContent
-    );
-    expect(bgOptions).toEqual(["selectImagePlaceholder", "bg.webp"]);
+    const bgSelect = bgSourceField?.querySelector("select") as HTMLSelectElement | null;
+    expect(bgSelect?.value).toBe("");
+    const bgPlaceholder = bgSelect?.querySelector('option[value=""]');
+    expect(bgPlaceholder?.hidden).toBe(true);
+    expect(bgPlaceholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(bgSelect)).toEqual(["bg.webp"]);
     backgroundView.unmount();
 
     render(EditPanelLegacy, {
@@ -333,10 +413,10 @@ describe("EditPanelLegacy", () => {
       }
     });
     const itemSourceField = screen.getByText("asset360").closest(".edit-item__source");
-    const itemSelect = itemSourceField?.querySelector("select");
-    const itemOptions = Array.from(itemSelect?.querySelectorAll("option") ?? []).map((option) =>
-      option.textContent
-    );
-    expect(itemOptions).toEqual(["selectImagePlaceholder", "dish.gif"]);
+    const itemSelect = itemSourceField?.querySelector("select") as HTMLSelectElement | null;
+    const itemPlaceholder = itemSelect?.querySelector('option[value=""]');
+    expect(itemPlaceholder?.hidden).toBe(true);
+    expect(itemPlaceholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(itemSelect)).toEqual(["dish.gif"]);
   });
 });

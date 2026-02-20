@@ -490,7 +490,7 @@
                     value={draft.meta.logoSrc ?? ""}
                     on:change={handleLogoSrcEvent}
                   >
-                    <option value="">{t("selectImagePlaceholder")}</option>
+                    <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                     {#each logoAssetOptions as option}
                       <option value={option.value}>{option.label}</option>
                     {/each}
@@ -569,7 +569,7 @@
                       value={resolveBackgroundSourceSelection(bg)}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
-                      <option value="">{t("selectImagePlaceholder")}</option>
+                      <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                       {#if resolveBackgroundSourceSelection(bg) &&
                       !hasOptionValue(backgroundAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
@@ -805,7 +805,7 @@
                   value={resolveWizardItemAssetSelection(wizardItem)}
                   on:change={(event) => handleWizardItemAssetInput(wizardItem, event)}
                 >
-                  <option value="">{t("selectImagePlaceholder")}</option>
+                  <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                   {#if resolveWizardItemAssetSelection(wizardItem) &&
                   !hasOptionValue(itemAssetOptions, resolveWizardItemAssetSelection(wizardItem))}
                     <option value={resolveWizardItemAssetSelection(wizardItem)}>
@@ -853,7 +853,7 @@
                     value={resolveWizardItemScrollAnimationSelection(wizardItem)}
                     on:change={(event) => handleWizardItemScrollSrcInput(wizardItem, event)}
                   >
-                    <option value="">{t("selectImagePlaceholder")}</option>
+                    <option value="" disabled hidden>{t("selectImagePlaceholder")}</option>
                     {#if resolveWizardItemScrollAnimationSelection(wizardItem) &&
                     !hasOptionValue(itemAssetOptions, resolveWizardItemScrollAnimationSelection(wizardItem))}
                       <option value={resolveWizardItemScrollAnimationSelection(wizardItem)}>

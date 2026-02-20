@@ -2764,6 +2764,25 @@ body {
   max-width: 100%;
 }
 
+.identity-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.identity-inline-row__text,
+.identity-inline-row__font {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .identity-inline-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .editor-field.editor-inline {
   display: flex;
   align-items: center;

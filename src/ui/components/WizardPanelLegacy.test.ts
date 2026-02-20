@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import WizardPanelLegacy from "./WizardPanelLegacy.svelte";
 
+const getVisibleOptionTexts = (select: HTMLSelectElement | null) =>
+  Array.from(select?.querySelectorAll("option") ?? [])
+    .filter((option) => !option.hidden)
+    .map((option) => option.textContent);
+
 describe("WizardPanelLegacy", () => {
   it("updates role font preview immediately when role selection changes", async () => {
     const draft = {
@@ -124,8 +129,12 @@ describe("WizardPanelLegacy", () => {
     const logoField = screen.getByText("logoAsset").closest("label");
     const select = logoField?.querySelector("select") as HTMLSelectElement | null;
     expect(select).not.toBeNull();
-    const options = Array.from(select?.querySelectorAll("option") ?? []).map((option) => option.textContent);
-    expect(options).toEqual(["selectImagePlaceholder", "brand.webp"]);
+    expect(select?.value).toBe("");
+    const placeholder = select?.querySelector('option[value=""]');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.hidden).toBe(true);
+    expect(placeholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(select)).toEqual(["brand.webp"]);
   });
 
   it("filters background/item selectors by managed folder", () => {
@@ -212,10 +221,12 @@ describe("WizardPanelLegacy", () => {
       }
     });
     const backgroundSourceField = screen.getByText("wizardSrc").closest("label");
-    const backgroundOptions = Array.from(
-      backgroundSourceField?.querySelectorAll("option") ?? []
-    ).map((option) => option.textContent);
-    expect(backgroundOptions).toEqual(["selectImagePlaceholder", "bg.webp"]);
+    const backgroundSelect = backgroundSourceField?.querySelector("select") as HTMLSelectElement | null;
+    expect(backgroundSelect?.value).toBe("");
+    const backgroundPlaceholder = backgroundSelect?.querySelector('option[value=""]');
+    expect(backgroundPlaceholder?.hidden).toBe(true);
+    expect(backgroundPlaceholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(backgroundSelect)).toEqual(["bg.webp"]);
     stepIdentityView.unmount();
 
     render(WizardPanelLegacy, {
@@ -225,9 +236,10 @@ describe("WizardPanelLegacy", () => {
       }
     });
     const itemSourceField = screen.getByText("asset360").closest("label");
-    const itemOptions = Array.from(itemSourceField?.querySelectorAll("option") ?? []).map(
-      (option) => option.textContent
-    );
-    expect(itemOptions).toEqual(["selectImagePlaceholder", "dish.gif"]);
+    const itemSelect = itemSourceField?.querySelector("select") as HTMLSelectElement | null;
+    const itemPlaceholder = itemSelect?.querySelector('option[value=""]');
+    expect(itemPlaceholder?.hidden).toBe(true);
+    expect(itemPlaceholder?.disabled).toBe(true);
+    expect(getVisibleOptionTexts(itemSelect)).toEqual(["dish.gif"]);
   });
 });
