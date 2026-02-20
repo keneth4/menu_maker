@@ -1,10 +1,18 @@
 import type { MenuProject } from "../../lib/types";
+import { mapLegacyAssetRelativeToManaged, toAssetRelativeForUi } from "./workspaceWorkflow";
 
 export type ProjectAssetEntry = {
   id: string;
   label: string;
   src: string;
   group: string;
+};
+
+const LOGO_ROOT = "originals/logos";
+
+const isManagedLogoSource = (source: string) => {
+  const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(source));
+  return normalized === LOGO_ROOT || normalized.startsWith(`${LOGO_ROOT}/`);
 };
 
 export const buildProjectAssetEntries = (
@@ -80,7 +88,19 @@ export const buildProjectAssetEntries = (
     group: "Fonts"
   }));
 
-  return [...backgrounds, ...items, ...fonts];
+  const logos =
+    draft.meta.logoSrc && isManagedLogoSource(draft.meta.logoSrc)
+      ? [
+          {
+            id: "logo-main",
+            label: "Logo",
+            src: draft.meta.logoSrc,
+            group: "Logos"
+          }
+        ]
+      : [];
+
+  return [...backgrounds, ...items, ...fonts, ...logos];
 };
 
 export const buildAssetOptionSourcePaths = (params: {

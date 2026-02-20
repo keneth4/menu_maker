@@ -115,7 +115,7 @@ describe("createRuntimeBindings", () => {
         readFileBytes: async () => null,
         prepareProjectDerivedAssets: async (_slug, value) => value
       },
-      userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts"],
+      userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts", "originals/logos"],
       workflowRefs: { pulseTimer: null, resetTimer: null },
       assetTaskRefs: { pulseTimer: null, resetTimer: null },
       getState: () => state,
@@ -291,7 +291,7 @@ describe("createRuntimeBindings", () => {
         readFileBytes: async () => null,
         prepareProjectDerivedAssets: async (_slug, value) => value
       },
-      userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts"],
+      userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts", "originals/logos"],
       workflowRefs: { pulseTimer: null, resetTimer: null },
       assetTaskRefs: { pulseTimer: null, resetTimer: null },
       getState: () => state,

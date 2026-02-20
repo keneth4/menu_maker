@@ -241,6 +241,57 @@ export const createAssetWorkspaceController = (
     );
   };
 
+  const resolveManagedPathFromRootFile = (value: string) => {
+    const trimmed = value.trim();
+    const slug = deps.getProjectSlug();
+    const absolutePrefix = `/projects/${slug}/assets/`;
+    const relativePrefix = `projects/${slug}/assets/`;
+    if (trimmed.startsWith(absolutePrefix)) {
+      return normalizeManagedPath(trimmed.slice(absolutePrefix.length));
+    }
+    if (trimmed.startsWith(relativePrefix)) {
+      return normalizeManagedPath(trimmed.slice(relativePrefix.length));
+    }
+    if (trimmed.startsWith("assets/")) {
+      return normalizeManagedPath(trimmed.slice("assets/".length));
+    }
+    return normalizeManagedPath(trimmed);
+  };
+
+  const removeEntriesFromLocalState = (
+    entries: Array<Pick<AssetWorkspaceEntry, "id" | "path" | "kind">>
+  ) => {
+    if (entries.length === 0) return;
+    const targets = entries.map((entry) => ({
+      id: entry.id,
+      path: normalizeManagedPath(entry.path),
+      kind: entry.kind
+    }));
+    const shouldRemove = (normalizedPath: string) =>
+      targets.some((target) => {
+        if (normalizedPath === target.path) return true;
+        return target.kind === "directory" && normalizedPath.startsWith(`${target.path}/`);
+      });
+
+    const state = deps.getState();
+    const nextEntries = state.fsEntries.filter(
+      (entry) => !shouldRemove(normalizeManagedPath(entry.path))
+    );
+    const nextRootFiles = state.rootFiles.filter(
+      (source) => !shouldRemove(resolveManagedPathFromRootFile(source))
+    );
+    const nextSelectedAssetIds = state.selectedAssetIds.filter(
+      (id) => !shouldRemove(normalizeManagedPath(id))
+    );
+
+    deps.setState({
+      fsEntries: nextEntries,
+      rootFiles: nextRootFiles,
+      selectedAssetIds: nextSelectedAssetIds
+    });
+    syncDerivedState();
+  };
+
   const updateAssetMode = () => {
     const state = deps.getState();
     if (state.rootHandle) {
@@ -392,12 +443,30 @@ export const createAssetWorkspaceController = (
 
   const syncDerivedState = () => {
     const state = deps.getState();
-    const visibleEntries =
+    const baseVisibleEntries =
       state.fsEntries.length > 0
         ? state.fsEntries
         : state.assetMode === "none"
           ? buildVirtualEntriesFromRootFiles(state.rootFiles)
           : [];
+    const visibleEntriesMap = new Map<string, AssetWorkspaceEntry>();
+    baseVisibleEntries.forEach((entry) => {
+      visibleEntriesMap.set(entry.path, entry);
+    });
+    deps.userManagedRoots.forEach((rootPath) => {
+      if (visibleEntriesMap.has(rootPath)) return;
+      const name = rootPath.split("/").filter(Boolean).pop() ?? rootPath;
+      visibleEntriesMap.set(rootPath, {
+        id: rootPath,
+        name,
+        path: rootPath,
+        kind: "directory",
+        handle: null,
+        parent: null,
+        source: state.assetMode === "filesystem" ? "filesystem" : "bridge"
+      });
+    });
+    const visibleEntries = Array.from(visibleEntriesMap.values());
     const seededExpandedPaths = { ...state.expandedPaths };
     visibleEntries.forEach((entry) => {
       if (entry.kind === "directory" && seededExpandedPaths[entry.path] === undefined) {
@@ -655,12 +724,14 @@ export const createAssetWorkspaceController = (
     if (state.assetMode === "filesystem") {
       if (!entry.parent) return;
       await entry.parent.removeEntry(entry.name, { recursive: entry.kind === "directory" });
+      removeEntriesFromLocalState([entry]);
       await refreshRootEntries();
       return;
     }
     if (state.assetMode === "bridge") {
       try {
         await bridgeRequest("delete", { path: entry.path });
+        removeEntriesFromLocalState([entry]);
         await refreshBridgeEntries();
       } catch (error) {
         deps.setState({ fsError: error instanceof Error ? error.message : deps.t("errOpenFolder") });
@@ -684,7 +755,7 @@ export const createAssetWorkspaceController = (
         await bridgeRequest("delete", { path: entry.path });
       }
     }
-    deps.setState({ selectedAssetIds: [] });
+    removeEntriesFromLocalState(targets);
     if (state.assetMode === "filesystem") {
       await refreshRootEntries();
     } else if (state.assetMode === "bridge") {

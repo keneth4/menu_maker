@@ -82,6 +82,7 @@ export const uiCopy = {
     defaultLang: "Idioma default",
     defaultLangFallback: "Idioma de interfaz (fallback)",
     languageRequiredHint: "Selecciona al menos un idioma para habilitar Guardar y Exportar.",
+    selectImagePlaceholder: "Selecciona una imagen",
     font: "Tipografía",
     textStyle: "Estilo de texto",
     textStyleDefault: "Default (heredado del proyecto/rol)",
@@ -192,9 +193,9 @@ export const uiCopy = {
     errNoFolder: "Tu navegador no soporta acceso a carpetas locales.",
     errOpenFolder: "No se pudo abrir la carpeta.",
     errAssetScope:
-      "Solo puedes gestionar archivos dentro de originals/backgrounds, originals/items y originals/fonts.",
+      "Solo puedes gestionar archivos dentro de originals/backgrounds, originals/items, originals/fonts y originals/logos.",
     errAssetRootProtected:
-      "Las carpetas base originals, originals/backgrounds, originals/items y originals/fonts no se pueden mover, renombrar ni borrar.",
+      "Las carpetas base originals, originals/backgrounds, originals/items, originals/fonts y originals/logos no se pueden mover, renombrar ni borrar.",
     errMoveFolder: "Tu navegador no soporta mover archivos por carpeta.",
     errZipMissing: "El zip no contiene menu.json.",
     errZipCompression: "El zip usa compresión no soportada. Usa un zip sin compresión.",
@@ -293,6 +294,7 @@ export const uiCopy = {
     defaultLang: "Default language",
     defaultLangFallback: "Interface language (fallback)",
     languageRequiredHint: "Select at least one language to enable Save and Export.",
+    selectImagePlaceholder: "Select an image",
     font: "Typography",
     textStyle: "Text style",
     textStyleDefault: "Default (project/role fallback)",
@@ -403,9 +405,9 @@ export const uiCopy = {
     errNoFolder: "Your browser doesn't support local folder access.",
     errOpenFolder: "Unable to open the folder.",
     errAssetScope:
-      "You can only manage files inside originals/backgrounds, originals/items, and originals/fonts.",
+      "You can only manage files inside originals/backgrounds, originals/items, originals/fonts, and originals/logos.",
     errAssetRootProtected:
-      "Base folders originals, originals/backgrounds, originals/items, and originals/fonts cannot be moved, renamed, or deleted.",
+      "Base folders originals, originals/backgrounds, originals/items, originals/fonts, and originals/logos cannot be moved, renamed, or deleted.",
     errMoveFolder: "Your browser doesn't support moving files by folder.",
     errZipMissing: "The zip file doesn't contain menu.json.",
     errZipCompression: "The zip uses unsupported compression. Use a stored zip.",

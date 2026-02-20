@@ -248,7 +248,6 @@
   let runtimeWorkspaceActions: Record<string, unknown> = {};
   let runtimeSurfaceModel: Record<string, unknown> = {};
   let runtimeSurfaceActions: Record<string, unknown> = {};
-
   const TEMPLATE_DEMO_PROJECT_SLUG = "sample-cafebrunch-menu";
   const TEMPLATE_DEMO_ASSET_PREFIXES = [
     `/projects/${TEMPLATE_DEMO_PROJECT_SLUG}/assets/`,
@@ -261,7 +260,6 @@
   const MIN_BACKGROUND_CAROUSEL_SECONDS = 2;
   const MAX_BACKGROUND_CAROUSEL_SECONDS = 60;
   const bridgeClient = createBridgeAssetClient(fetch);
-
   const normalizeAssetFolderPath = normalizeAssetFolderPathWorkflow;
   const joinAssetFolderPath = joinAssetFolderPathWorkflow;
   const mapLegacyAssetRelativeToManaged = mapLegacyAssetRelativeToManagedWorkflow;
@@ -270,7 +268,6 @@
   const toAssetRelativeForUi = toAssetRelativeForUiWorkflow;
   const isManagedAssetSourcePath = isManagedAssetSourcePathWorkflow;
   const buildAssetOptions = buildAssetOptionsWorkflow;
-
   const normalizeSectionBackgroundId = normalizeSectionBackgroundIdWorkflow;
   const getSectionModeBackgroundEntries = (project: MenuProject) =>
     getSectionModeBackgroundEntriesWorkflow(project, t("backgroundLabel"));
@@ -280,7 +277,6 @@
     autoAssignSectionBackgroundsByOrderWorkflow(project, t("backgroundLabel"));
   const getNextUnusedSectionBackgroundId = (project: MenuProject, currentCategoryId = "") =>
     getNextUnusedSectionBackgroundIdWorkflow(project, currentCategoryId, t("backgroundLabel"));
-
   const fontStyleController = createFontStyleController({ dataAttribute: "menuFont" });
   const previewBackgroundController = createPreviewBackgroundController({
     defaultCarouselSeconds: DEFAULT_BACKGROUND_CAROUSEL_SECONDS,
@@ -303,12 +299,9 @@
   });
   normalizeBackgroundCarouselSeconds = previewBackgroundController.normalizeBackgroundCarouselSeconds;
   isSectionBackgroundMode = previewBackgroundController.isSectionBackgroundMode;
-
   const uiCopy = uiCopyConfig;
-
   let t: (key: UiKey) => string = (key) => uiCopy.es[key];
   $: t = (key) => uiCopy[uiLang]?.[key] ?? key;
-
   $: if (draft) {
     const normalized = normalizeDraftSelectionStateWorkflow({
       draft,
@@ -332,7 +325,6 @@
     wizardLang = normalized.wizardLang;
     fontChoice = normalized.fontChoice;
   }
-
   $: if (draft) {
     projectAssets = buildProjectAssetEntriesWorkflow(
       draft,
@@ -340,7 +332,6 @@
       getLocalizedValue
     );
   }
-
   $: assetOptions = buildAssetOptions(
     buildAssetOptionSourcePathsWorkflow({
       rootFiles,
@@ -384,7 +375,6 @@
       void refreshBridgeEntries();
     }
   }
-
   $: effectivePreview =
     previewMode === "device" ? (deviceMode === "mobile" ? "mobile" : "full") : previewMode;
   $: editorVisible = editorOpen;
@@ -395,7 +385,6 @@
     !activeProject.meta.template &&
     activeProject.backgrounds.length === 0 &&
     activeProject.categories.length === 0;
-
   $: {
     const wizardState = buildWizardProgressStateWorkflow({
       draft,
@@ -413,12 +402,10 @@
       templateSyncSignature = "";
     }
   }
-
   $: if (draft && wizardShowcaseProject && !isWizardShowcaseEligibleWorkflow(draft)) {
     wizardShowcaseProject = null;
     wizardDemoPreview = false;
   }
-
   $: if (draft) {
     const signature = buildTemplateSyncSignatureWorkflow(draft);
     if (signature !== templateSyncSignature) {
@@ -426,18 +413,14 @@
       runtimePreviewAdapterController.initCarouselIndices(draft);
     }
   }
-
   onMount(async () => {
     await runtimeBootstrapController.mount();
   });
-
   onDestroy(() => {
     runtimeBootstrapController.destroy();
   });
-
   $: interactiveMediaController.setMediaHost(modalMediaHost);
   $: interactiveMediaController.setMediaImage(modalMediaImage);
-
   $: {
     const showcaseActive =
       editorTab === "wizard" &&
@@ -527,7 +510,6 @@
   const ensureMetaTitle = () => ensureDraftMetaLocalizedField(draft, "title");
   const ensureRestaurantName = () =>
     ensureDraftMetaLocalizedField(draft, "restaurantName");
-
   const cloneProject = cloneProjectWorkflow;
   const wizardShowcaseController = createWizardShowcaseController({
     templateDemoProjectSlug: TEMPLATE_DEMO_PROJECT_SLUG,
@@ -541,11 +523,9 @@
     await wizardShowcaseController.buildWizardShowcaseProject(draft, templateId);
   const createEmptyProject = (): MenuProject =>
     createEmptyProjectWorkflow(DEFAULT_BACKGROUND_CAROUSEL_SECONDS);
-
   const ensureDescription = ensureDescriptionWorkflow;
   const ensureLongDescription = ensureLongDescriptionWorkflow;
   const ensureAllergens = ensureAllergensWorkflow;
-
   const slugifyName = slugifyNameWorkflow;
   const normalizeZipName = normalizeZipNameWorkflow;
   const getSuggestedZipName = () => {
@@ -556,9 +536,7 @@
     const baseName = draft?.meta.name?.trim() || draft?.meta.slug || "menu";
     return getSuggestedZipNameWorkflow(baseName, "menu");
   };
-
   const buildExportStyles = () => buildExportStylesWorkflow(appCssRaw);
-
   const buildExportScript = (data: MenuProject) =>
     buildRuntimeScript(data, {
       defaultBackgroundCarouselSeconds: DEFAULT_BACKGROUND_CAROUSEL_SECONDS,
@@ -566,7 +544,6 @@
       maxBackgroundCarouselSeconds: MAX_BACKGROUND_CAROUSEL_SECONDS,
       instructionCopy
     });
-
   const runtimeAssetReader = createRuntimeAssetReader({
     getAssetMode: () => assetMode,
     getRootHandle: () => rootHandle,
@@ -576,7 +553,6 @@
     normalizeAssetSource: normalizeAssetSrc
   });
   const readAssetBytes = runtimeAssetReader.readAssetBytes;
-
   let wizardSteps: string[] = [];
   $: wizardSteps = [
     t("wizardStepStructure"),
@@ -585,22 +561,17 @@
     t("wizardStepDishes"),
     t("wizardStepPreview")
   ];
-
   const buildResponsiveSrcSetFromMedia = (item: MenuItem) =>
     buildResponsiveSrcSetForMenuItem(item);
-
   const getCarouselImageSource = (item: MenuItem) =>
     getCarouselImageSourceForMenuItem(item);
-
   const getDetailImageSource = (item: MenuItem) =>
     getDetailImageSourceForMenuItem(item);
-
   const getInteractiveDetailAsset = interactiveMediaController.getInteractiveDetailAsset;
   const supportsInteractiveMedia = interactiveMediaController.supportsInteractiveMedia;
   const getInteractiveAssetBytes = interactiveMediaController.prefetchInteractiveBytes;
   const teardownInteractiveDetailMedia = interactiveMediaController.teardown;
   const setupInteractiveDetailMedia = interactiveMediaController.setup;
-
   const runtimeShellController = createRuntimeShellController({
     getState: () => ({
       editorOpen,
@@ -624,7 +595,6 @@
     tryLockLandscape,
     isTargetWithinEditorPanel
   });
-
   const handleDesktopOutsidePointer = (event: PointerEvent) => {
     runtimeShellController.handleDesktopOutsidePointer(event);
   };
@@ -636,16 +606,13 @@
   const goToStep = (index: number) => runtimeShellController.goToStep(index);
   const goNextStep = () => runtimeShellController.goNextStep();
   const goPrevStep = () => runtimeShellController.goPrevStep();
-
   const getProjectSlug = () => draft?.meta.slug || activeSlug || "nuevo-proyecto";
   const normalizePath = normalizeAssetPath;
-
   const ensureAssetProjectWritable = () => {
     if (!assetProjectReadOnly) return true;
     fsError = t("assetsReadOnly");
     return false;
   };
-
   let updateAssetMode = () => {};
   let refreshBridgeEntries = async () => {};
   const runtimeStateBridge = createRuntimeStateBridge(
@@ -703,7 +670,6 @@
       ["previewStartupBlockingSources", () => previewStartupBlockingSources, (value) => (previewStartupBlockingSources = value)]
     ])
   );
-
   const {
     runtimeBindings,
     runtimeBootstrapController,
@@ -805,7 +771,6 @@
       () => runtimePreviewAdapterController.clearCarouselWheelState()
     ]
   });
-
   const {
     workflowStatusController,
     previewStartupController,
@@ -813,10 +778,14 @@
     projectWorkflowController,
     assetWorkspaceController
   } = runtimeBindings;
+  let syncedWorkflowStatusLang: "es" | "en" = uiLang;
+  $: if (uiLang !== syncedWorkflowStatusLang) {
+    syncedWorkflowStatusLang = uiLang;
+    workflowStatusController.syncUiLanguage();
+  }
   modalController = runtimeModalController;
   updateAssetMode = runtimeUpdateAssetMode;
   refreshBridgeEntries = runtimeRefreshBridgeEntries;
-
   const runtimeModalSurfaceController = createRuntimeModalSurfaceController({
     getModalController: () => modalController,
     getInteractiveDetailAsset,
@@ -831,7 +800,6 @@
     modalMediaHost,
     modalMediaImage
   });
-
   $: previewStartupController.syncProject(activeProject);
   $: {
     fsEntries;
@@ -840,14 +808,12 @@
     expandedPaths;
     assetWorkspaceController.syncDerivedState();
   }
-
   const buildFontStack = buildFontStackWorkflow;
   const getProjectInterfaceFontConfig = getProjectInterfaceFontConfigWorkflow;
   const collectProjectBuiltinFontHrefs = collectProjectBuiltinFontHrefsWorkflow;
   const buildProjectFontFaceCss = buildProjectFontFaceCssWorkflow;
   const buildPreviewFontVarStyle = buildPreviewFontVarStyleWorkflow;
   const getItemFontStyle = (item: MenuItem) => getItemFontStyleWorkflow(activeProject, item);
-
   const handleMenuWheel = runtimePreviewAdapterController.handleMenuWheel;
   const handleMenuScroll = runtimePreviewAdapterController.handleMenuScroll;
   const shiftSection = runtimePreviewAdapterController.shiftSection;
@@ -856,7 +822,6 @@
   const handleCarouselTouchStart = runtimePreviewAdapterController.handleCarouselTouchStart;
   const handleCarouselTouchMove = runtimePreviewAdapterController.handleCarouselTouchMove;
   const handleCarouselTouchEnd = runtimePreviewAdapterController.handleCarouselTouchEnd;
-
   let activeDish: MenuItem | null = null;
   let modalInteractiveEnabled = false;
   $: {
@@ -867,9 +832,7 @@
     activeDish = modalSurface.dish;
     modalInteractiveEnabled = modalSurface.interactiveEnabled;
   }
-
   const formatPrice = runtimePresentationController.formatPrice;
-
   const normalizeUiLocale = (value: string): "es" | "en" => (value === "en" ? "en" : "es");
   const setUiLangWithDraftSync = (lang: "es" | "en") => {
     const nextUiLang = normalizeUiLocale(lang);
@@ -900,7 +863,6 @@
       touchDraft();
     }
   };
-
   $: runtimeWorkspaceShell = { t, uiLang, locale, showLanding, loadError, project, activeProject, showEditorToggle, editorVisible, editorPresentation, editorTab, deviceMode, previewMode };
   $: runtimeWorkspaceEditor = {
     uiLang, draft, templateOptions, workflowMode, openError, exportStatus, exportError, workflowStep, workflowProgress, fontChoice, fontAssetOptions, rootLabel, assetProjectReadOnly, assetUploadInput, uploadTargetPath, uploadFolderOptions,

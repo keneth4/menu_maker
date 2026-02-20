@@ -13,6 +13,10 @@ import {
   isResponsiveImageMime,
   toBase64
 } from "../../application/assets/mediaWorkflow";
+import {
+  mapLegacyAssetRelativeToManaged as mapLegacyAssetRelativeToManagedWorkflow,
+  toAssetRelativeForUi as toAssetRelativeForUiWorkflow
+} from "../../application/assets/workspaceWorkflow";
 import { mapProjectAssetPaths } from "../../core/menu/assetPathMapping";
 import { normalizeProject } from "../../core/menu/normalization";
 import type { BridgeAssetClient } from "../../infrastructure/bridge/client";
@@ -223,6 +227,15 @@ export const createProjectWorkflowController = (
 
   const normalizeUiLocale = (value: string): "es" | "en" => (value === "en" ? "en" : "es");
   const normalizeLocaleCode = (value: string) => value.trim().toLowerCase();
+  const LOGO_ASSET_ROOT = "originals/logos";
+  const sanitizeLogoSource = (value: string | undefined) => {
+    const trimmed = (value ?? "").trim();
+    if (!trimmed) return "";
+    const normalized = mapLegacyAssetRelativeToManagedWorkflow(toAssetRelativeForUiWorkflow(trimmed));
+    const valid =
+      normalized === LOGO_ASSET_ROOT || normalized.startsWith(`${LOGO_ASSET_ROOT}/`);
+    return valid ? trimmed : "";
+  };
 
   const ensureWorkflowLocales = (
     project: MenuProject,
@@ -551,6 +564,7 @@ export const createProjectWorkflowController = (
     ) {
       data.meta.defaultLocale = normalizedLocales[0];
     }
+    data.meta.logoSrc = sanitizeLogoSource(data.meta.logoSrc);
 
     const activeSlug = data.meta.slug || "importado";
     const summary = {

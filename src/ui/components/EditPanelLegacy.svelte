@@ -1,5 +1,6 @@
 <script lang="ts">
   import { deriveFontFamilyFromSource } from "../../application/typography/fontWorkflow";
+  import { mapLegacyAssetRelativeToManaged, toAssetRelativeForUi } from "../../application/assets/workspaceWorkflow";
   import { fontOptions } from "../config/staticOptions";
   import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
 
@@ -95,14 +96,38 @@
   let itemsTabDisabled = false;
   let editingSectionId = "";
   let editingSectionValue = "";
+  let creatingSectionInline = false;
+  let creatingSectionValue = "";
   let sectionNameInput: HTMLInputElement | null = null;
+  let newSectionInput: HTMLInputElement | null = null;
   let rolePreviewSelections: Partial<Record<ProjectFontRole, string>> = {};
   let itemPreviewSelections: Record<string, string> = {};
 
-  let mediaAssetOptions: Array<{ value: string; label: string }> = [];
+  let backgroundAssetOptions: Array<{ value: string; label: string }> = [];
+  let itemAssetOptions: Array<{ value: string; label: string }> = [];
   let fontAssetOptions: Array<{ value: string; label: string }> = [];
-  $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
-  $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
+  let logoAssetOptions: Array<{ value: string; label: string }> = [];
+  const BACKGROUND_ROOT = "originals/backgrounds";
+  const ITEM_ROOT = "originals/items";
+  const FONT_ROOT = "originals/fonts";
+  const LOGO_ROOT = "originals/logos";
+  const isOptionWithinRoot = (optionValue: string, root: string) => {
+    const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(optionValue));
+    return normalized === root || normalized.startsWith(`${root}/`);
+  };
+  $: backgroundAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, BACKGROUND_ROOT)
+  );
+  $: itemAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, ITEM_ROOT)
+  );
+  $: fontAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, FONT_ROOT)
+  );
+  $: logoAssetOptions = assetOptions.filter((option) => {
+    const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(option.value));
+    return normalized === LOGO_ROOT || normalized.startsWith(`${LOGO_ROOT}/`);
+  });
   $: itemsTabDisabled = (draft?.categories.length ?? 0) === 0;
   $: if (itemsTabDisabled && editPanel === "dish") {
     editPanel = "section";
@@ -111,9 +136,17 @@
     sectionNameInput.focus();
     sectionNameInput.select();
   }
+  $: if (creatingSectionInline && newSectionInput) {
+    newSectionInput.focus();
+    newSectionInput.select();
+  }
   $: if (editingSectionId && draft && !draft.categories.some((category) => category.id === editingSectionId)) {
     editingSectionId = "";
     editingSectionValue = "";
+  }
+  $: if (creatingSectionInline && !draft) {
+    creatingSectionInline = false;
+    creatingSectionValue = "";
   }
 
   const FONT_SELECTION_DEFAULT = "default";
@@ -214,23 +247,17 @@
 
   const hasFontAssetSource = (source: string) => hasOptionValue(fontAssetOptions, source);
 
-  const roleFieldLabel: Record<ProjectFontRole, string> = {
+  type VisibleRole = Exclude<ProjectFontRole, "identity">;
+  const roleFieldLabel: Record<VisibleRole, string> = {
     restaurant: "fontRoleRestaurant",
     title: "fontRoleTitle",
-    identity: "fontRoleIdentity",
     section: "fontRoleSection",
     item: "fontRoleItem"
   };
 
-  const roleFieldOrder: ProjectFontRole[] = [
-    "restaurant",
-    "title",
-    "identity",
-    "section",
-    "item"
-  ];
+  const roleFieldOrder: VisibleRole[] = ["restaurant", "title", "section", "item"];
 
-  const handleRoleFontSelectionInput = (role: ProjectFontRole, event: Event) => {
+  const handleRoleFontSelectionInput = (role: VisibleRole, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
     rolePreviewSelections = {
@@ -241,7 +268,7 @@
   };
 
   const getRoleFontSelectionForUi = (
-    role: ProjectFontRole,
+    role: VisibleRole,
     previewSelections: Partial<Record<ProjectFontRole, string>>
   ) => previewSelections[role] ?? resolveRoleFontSelection(role);
 
@@ -250,11 +277,11 @@
 
   const resolveBackgroundSourceSelection = (bg: { src: string; originalSrc?: string }) => {
     const direct = bg.src?.trim() ?? "";
-    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+    if (direct && hasOptionValue(backgroundAssetOptions, direct)) {
       return direct;
     }
     const canonical = bg.originalSrc?.trim() ?? "";
-    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+    if (canonical && hasOptionValue(backgroundAssetOptions, canonical)) {
       return canonical;
     }
     return direct;
@@ -262,14 +289,23 @@
 
   const resolveDishAssetSelection = (item: MenuItem) => {
     const direct = item.media.hero360?.trim() ?? "";
-    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+    if (direct && hasOptionValue(itemAssetOptions, direct)) {
       return direct;
     }
     const canonical = item.media.originalHero360?.trim() ?? "";
-    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+    if (canonical && hasOptionValue(itemAssetOptions, canonical)) {
       return canonical;
     }
     return canonical || direct;
+  };
+
+  const resolveItemScrollAnimationSelection = (item: MenuItem) => {
+    const source = item.media.scrollAnimationSrc?.trim() ?? "";
+    if (!source) return "";
+    if (hasOptionValue(itemAssetOptions, source)) {
+      return source;
+    }
+    return source;
   };
 
   const handleItemFontSelectionInput = (item: MenuItem, event: Event) => {
@@ -324,6 +360,8 @@
   };
 
   const startInlineSectionEdit = (category: MenuCategory) => {
+    creatingSectionInline = false;
+    creatingSectionValue = "";
     selectedCategoryId = category.id;
     editingSectionId = category.id;
     editingSectionValue = category.name?.[editLang] ?? "";
@@ -334,9 +372,34 @@
     editingSectionValue = "";
   };
 
+  const cancelInlineSectionCreate = () => {
+    creatingSectionInline = false;
+    creatingSectionValue = "";
+  };
+
   const commitInlineSectionEdit = (category: MenuCategory) => {
     setSectionNameById(category.id, editLang, editingSectionValue.trim());
     cancelInlineSectionEdit();
+  };
+
+  const commitInlineSectionCreate = () => {
+    const nextValue = creatingSectionValue.trim();
+    if (!nextValue) return;
+    const previousCategoryIds = new Set((draft?.categories ?? []).map((category) => category.id));
+    addSection();
+    if (!draft) {
+      cancelInlineSectionCreate();
+      return;
+    }
+    const createdCategory = draft.categories.find((category) => !previousCategoryIds.has(category.id));
+    if (!createdCategory) {
+      cancelInlineSectionCreate();
+      return;
+    }
+    setSectionNameById(createdCategory.id, editLang, nextValue);
+    selectedCategoryId = createdCategory.id;
+    selectedItemId = "";
+    cancelInlineSectionCreate();
   };
 
   const handleInlineSectionKeydown = (category: MenuCategory, event: KeyboardEvent) => {
@@ -351,13 +414,22 @@
     }
   };
 
+  const handleInlineSectionCreateKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitInlineSectionCreate();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelInlineSectionCreate();
+    }
+  };
+
   const handleAddSectionClick = () => {
-    const previousCategoryIds = new Set((draft?.categories ?? []).map((category) => category.id));
-    addSection();
-    if (!draft) return;
-    const createdCategory = draft.categories.find((category) => !previousCategoryIds.has(category.id));
-    if (!createdCategory) return;
-    startInlineSectionEdit(createdCategory);
+    cancelInlineSectionEdit();
+    creatingSectionInline = true;
+    creatingSectionValue = "";
   };
 
   $: {
@@ -473,14 +545,14 @@
           <p class="edit-block__title">{t("logoAsset")}</p>
           <label class="editor-field">
             <span>{t("wizardSrc")}</span>
-            {#if mediaAssetOptions.length}
+            {#if logoAssetOptions.length}
               <select
                 class="editor-select"
                 value={draft.meta.logoSrc ?? ""}
                 on:change={handleLogoSrcEvent}
               >
-                <option value=""></option>
-                {#each mediaAssetOptions as option}
+                <option value="">{t("selectImagePlaceholder")}</option>
+                {#each logoAssetOptions as option}
                   <option value={option.value}>{option.label}</option>
                 {/each}
               </select>
@@ -552,9 +624,6 @@
                 <option value={encodeAssetSelection(option.value)}>{option.label}</option>
               {/each}
             </select>
-            {#if role === "identity"}
-              <small class="editor-hint">{t("fontRoleIdentityHint")}</small>
-            {/if}
             <p
               class="editor-font-preview"
               style={buildFontPreviewStyle(getRoleFontSelectionForUi(role, rolePreviewSelections))}
@@ -649,20 +718,20 @@
                 </div>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
-                  {#if mediaAssetOptions.length}
+                  {#if backgroundAssetOptions.length}
                     <select
                       class="editor-select"
                       value={resolveBackgroundSourceSelection(bg)}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
-                      <option value=""></option>
+                      <option value="">{t("selectImagePlaceholder")}</option>
                       {#if resolveBackgroundSourceSelection(bg) &&
-                      !hasOptionValue(mediaAssetOptions, resolveBackgroundSourceSelection(bg))}
+                      !hasOptionValue(backgroundAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
                           {getBackgroundDisplayLabel(bg, index)}
                         </option>
                       {/if}
-                      {#each mediaAssetOptions as option}
+                      {#each backgroundAssetOptions as option}
                         <option value={option.value}>{option.label}</option>
                       {/each}
                     </select>
@@ -694,8 +763,43 @@
             <span class="editor-action-icon" aria-hidden="true">＋</span>
           </button>
         </div>
-        {#if draft.categories.length > 0}
+        {#if creatingSectionInline || draft.categories.length > 0}
           <div class="edit-sections">
+            {#if creatingSectionInline}
+              <div class="edit-section">
+                <div class="edit-section__head">
+                  <input
+                    bind:this={newSectionInput}
+                    class="editor-input edit-section__name-input"
+                    type="text"
+                    bind:value={creatingSectionValue}
+                    aria-label={t("sectionName")}
+                    on:keydown={handleInlineSectionCreateKeydown}
+                  />
+                  <div class="edit-actions">
+                    <button
+                      class="editor-outline editor-icon-btn"
+                      type="button"
+                      aria-label={t("save")}
+                      title={t("save")}
+                      disabled={creatingSectionValue.trim().length === 0}
+                      on:click={commitInlineSectionCreate}
+                    >
+                      <span class="editor-action-icon" aria-hidden="true">💾</span>
+                    </button>
+                    <button
+                      class="editor-outline danger editor-icon-btn"
+                      type="button"
+                      aria-label={t("deleteSection")}
+                      title={t("deleteSection")}
+                      on:click={cancelInlineSectionCreate}
+                    >
+                      <span class="editor-action-icon" aria-hidden="true">✕</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/if}
             {#each draft.categories as category}
               <div class="edit-section">
                 <div class="edit-section__head">
@@ -837,20 +941,20 @@
                 </div>
                 <div class="editor-field edit-item__source">
                   <span>{t("asset360")}</span>
-                  {#if mediaAssetOptions.length}
+                  {#if itemAssetOptions.length}
                     <select
                       class="editor-select"
                       value={resolveDishAssetSelection(selectedItem)}
                       on:change={(event) => handleDishAssetInput(selectedItem, event)}
                     >
-                      <option value=""></option>
+                      <option value="">{t("selectImagePlaceholder")}</option>
                       {#if resolveDishAssetSelection(selectedItem) &&
-                      !hasOptionValue(mediaAssetOptions, resolveDishAssetSelection(selectedItem))}
+                      !hasOptionValue(itemAssetOptions, resolveDishAssetSelection(selectedItem))}
                         <option value={resolveDishAssetSelection(selectedItem)}>
                           {extractFilenameFromPath(resolveDishAssetSelection(selectedItem))}
                         </option>
                       {/if}
-                      {#each mediaAssetOptions as option}
+                      {#each itemAssetOptions as option}
                         <option value={option.value}>{option.label}</option>
                       {/each}
                     </select>
@@ -884,15 +988,21 @@
                   {#if (selectedItem.media.scrollAnimationMode ?? "hero360") === "alternate"}
                     <label class="editor-field">
                       <span>{t("itemScrollAnimationSrc")}</span>
-                      {#if mediaAssetOptions.length}
+                      {#if itemAssetOptions.length}
                         <select
                           class="editor-select"
-                          value={selectedItem.media.scrollAnimationSrc ?? ""}
+                          value={resolveItemScrollAnimationSelection(selectedItem)}
                           on:change={(event) =>
                             handleItemScrollAnimationSourceInput(selectedItem, event)}
                         >
-                          <option value=""></option>
-                          {#each mediaAssetOptions as option}
+                          <option value="">{t("selectImagePlaceholder")}</option>
+                          {#if resolveItemScrollAnimationSelection(selectedItem) &&
+                          !hasOptionValue(itemAssetOptions, resolveItemScrollAnimationSelection(selectedItem))}
+                            <option value={resolveItemScrollAnimationSelection(selectedItem)}>
+                              {extractFilenameFromPath(resolveItemScrollAnimationSelection(selectedItem))}
+                            </option>
+                          {/if}
+                          {#each itemAssetOptions as option}
                             <option value={option.value}>{option.label}</option>
                           {/each}
                         </select>

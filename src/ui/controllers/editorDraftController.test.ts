@@ -263,6 +263,20 @@ describe("editorDraftController", () => {
     expect(touchDraft).toHaveBeenCalled();
   });
 
+  it("accepts logo source only from originals/logos and clears legacy paths", () => {
+    const { controller, getState, touchDraft } = createHarness();
+
+    controller.setLogoSrc("/projects/demo/assets/originals/logos/brand.webp");
+    expect(getState().draft?.meta.logoSrc).toBe("/projects/demo/assets/originals/logos/brand.webp");
+
+    controller.setLogoSrc("/projects/demo/assets/branding/logo.webp");
+    expect(getState().draft?.meta.logoSrc).toBe("");
+
+    controller.setLogoSrc("assets/originals/logos/brand-2.webp");
+    expect(getState().draft?.meta.logoSrc).toBe("assets/originals/logos/brand-2.webp");
+    expect(touchDraft).toHaveBeenCalled();
+  });
+
   it("sets section name by id for the active language", () => {
     const { controller, getState, touchDraft } = createHarness();
 

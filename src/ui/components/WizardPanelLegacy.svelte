@@ -1,5 +1,6 @@
 <script lang="ts">
   import { deriveFontFamilyFromSource } from "../../application/typography/fontWorkflow";
+  import { mapLegacyAssetRelativeToManaged, toAssetRelativeForUi } from "../../application/assets/workspaceWorkflow";
   import { fontOptions } from "../config/staticOptions";
   import type { TemplateOption } from "../../core/templates/templateOptions";
   import type { MenuCategory, MenuItem, MenuProject, ProjectFontRole } from "../../lib/types";
@@ -90,12 +91,33 @@
   export let exportStaticSite: () => Promise<void> | void = () => {};
   export let touchDraft: () => void = () => {};
 
-  let mediaAssetOptions: Array<{ value: string; label: string }> = [];
+  let backgroundAssetOptions: Array<{ value: string; label: string }> = [];
+  let itemAssetOptions: Array<{ value: string; label: string }> = [];
   let fontAssetOptions: Array<{ value: string; label: string }> = [];
+  let logoAssetOptions: Array<{ value: string; label: string }> = [];
+  const BACKGROUND_ROOT = "originals/backgrounds";
+  const ITEM_ROOT = "originals/items";
+  const FONT_ROOT = "originals/fonts";
+  const LOGO_ROOT = "originals/logos";
   let rolePreviewSelections: Partial<Record<ProjectFontRole, string>> = {};
   let itemPreviewSelections: Record<string, string> = {};
-  $: mediaAssetOptions = assetOptions.filter((option) => !option.value.includes("/fonts/"));
-  $: fontAssetOptions = assetOptions.filter((option) => option.value.includes("/fonts/"));
+  const isOptionWithinRoot = (optionValue: string, root: string) => {
+    const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(optionValue));
+    return normalized === root || normalized.startsWith(`${root}/`);
+  };
+  $: backgroundAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, BACKGROUND_ROOT)
+  );
+  $: itemAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, ITEM_ROOT)
+  );
+  $: fontAssetOptions = assetOptions.filter((option) =>
+    isOptionWithinRoot(option.value, FONT_ROOT)
+  );
+  $: logoAssetOptions = assetOptions.filter((option) => {
+    const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(option.value));
+    return normalized === LOGO_ROOT || normalized.startsWith(`${LOGO_ROOT}/`);
+  });
 
   const FONT_SELECTION_DEFAULT = "default";
   const FONT_SELECTION_BUILTIN_PREFIX = "builtin:";
@@ -179,16 +201,16 @@
 
   const hasFontAssetSource = (source: string) => hasOptionValue(fontAssetOptions, source);
 
-  const roleFieldLabel: Record<ProjectFontRole, string> = {
+  type WizardRole = Exclude<ProjectFontRole, "identity">;
+  const roleFieldLabel: Record<WizardRole, string> = {
     restaurant: "fontRoleRestaurant",
     title: "fontRoleTitle",
-    identity: "fontRoleIdentity",
     section: "fontRoleSection",
     item: "fontRoleItem"
   };
-  const wizardIdentityRoleOrder: ProjectFontRole[] = ["restaurant", "title", "identity"];
+  const wizardIdentityRoleOrder: WizardRole[] = ["restaurant", "title"];
 
-  const handleRoleFontSelectionInput = (role: ProjectFontRole, event: Event) => {
+  const handleRoleFontSelectionInput = (role: WizardRole, event: Event) => {
     const target = event.currentTarget;
     if (!(target instanceof HTMLSelectElement)) return;
     rolePreviewSelections = {
@@ -199,7 +221,7 @@
   };
 
   const getRoleFontSelectionForUi = (
-    role: ProjectFontRole,
+    role: WizardRole,
     previewSelections: Partial<Record<ProjectFontRole, string>>
   ) => previewSelections[role] ?? resolveRoleFontSelection(role);
 
@@ -220,11 +242,11 @@
 
   const resolveBackgroundSourceSelection = (bg: { src: string; originalSrc?: string }) => {
     const direct = bg.src?.trim() ?? "";
-    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+    if (direct && hasOptionValue(backgroundAssetOptions, direct)) {
       return direct;
     }
     const canonical = bg.originalSrc?.trim() ?? "";
-    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+    if (canonical && hasOptionValue(backgroundAssetOptions, canonical)) {
       return canonical;
     }
     return direct;
@@ -265,14 +287,23 @@
 
   const resolveWizardItemAssetSelection = (item: MenuItem) => {
     const direct = item.media.hero360?.trim() ?? "";
-    if (direct && hasOptionValue(mediaAssetOptions, direct)) {
+    if (direct && hasOptionValue(itemAssetOptions, direct)) {
       return direct;
     }
     const canonical = item.media.originalHero360?.trim() ?? "";
-    if (canonical && hasOptionValue(mediaAssetOptions, canonical)) {
+    if (canonical && hasOptionValue(itemAssetOptions, canonical)) {
       return canonical;
     }
     return canonical || direct;
+  };
+
+  const resolveWizardItemScrollAnimationSelection = (item: MenuItem) => {
+    const source = item.media.scrollAnimationSrc?.trim() ?? "";
+    if (!source) return "";
+    if (hasOptionValue(itemAssetOptions, source)) {
+      return source;
+    }
+    return source;
   };
 
   const resolveBuiltInFamilyFromSelection = (selection: string) =>
@@ -294,7 +325,7 @@
   $: {
     let changed = false;
     const next = { ...rolePreviewSelections };
-    const allRoles: ProjectFontRole[] = ["restaurant", "title", "identity", "section", "item"];
+    const allRoles: WizardRole[] = ["restaurant", "title", "section", "item"];
     for (const role of allRoles) {
       if (next[role] !== undefined && next[role] === resolveRoleFontSelection(role)) {
         delete next[role];
@@ -453,14 +484,14 @@
             {:else if draft.meta.identityMode === "logo"}
               <label class="editor-field">
                 <span>{t("logoAsset")}</span>
-                {#if mediaAssetOptions.length}
+                {#if logoAssetOptions.length}
                   <select
                     class="editor-select"
                     value={draft.meta.logoSrc ?? ""}
                     on:change={handleLogoSrcEvent}
                   >
-                    <option value=""></option>
-                    {#each mediaAssetOptions as option}
+                    <option value="">{t("selectImagePlaceholder")}</option>
+                    {#each logoAssetOptions as option}
                       <option value={option.value}>{option.label}</option>
                     {/each}
                   </select>
@@ -512,9 +543,6 @@
                     <option value={encodeAssetSelection(option.value)}>{option.label}</option>
                   {/each}
                 </select>
-                {#if role === "identity"}
-                  <small class="editor-hint">{t("fontRoleIdentityHint")}</small>
-                {/if}
                 <p
                   class="editor-font-preview"
                   style={buildFontPreviewStyle(getRoleFontSelectionForUi(role, rolePreviewSelections))}
@@ -535,20 +563,20 @@
                 <p class="edit-hint">{getBackgroundDisplayLabel(bg, index)}</p>
                 <label class="editor-field">
                   <span>{t("wizardSrc")}</span>
-                  {#if mediaAssetOptions.length}
+                  {#if backgroundAssetOptions.length}
                     <select
                       class="editor-select"
                       value={resolveBackgroundSourceSelection(bg)}
                       on:change={(event) => handleBackgroundSourceInput(bg, event)}
                     >
-                      <option value=""></option>
+                      <option value="">{t("selectImagePlaceholder")}</option>
                       {#if resolveBackgroundSourceSelection(bg) &&
-                      !hasOptionValue(mediaAssetOptions, resolveBackgroundSourceSelection(bg))}
+                      !hasOptionValue(backgroundAssetOptions, resolveBackgroundSourceSelection(bg))}
                         <option value={resolveBackgroundSourceSelection(bg)}>
                           {getBackgroundDisplayLabel(bg, index)}
                         </option>
                       {/if}
-                      {#each mediaAssetOptions as option}
+                      {#each backgroundAssetOptions as option}
                         <option value={option.value}>{option.label}</option>
                       {/each}
                     </select>
@@ -771,20 +799,20 @@
             {/if}
             <label class="editor-field">
               <span>{t("asset360")}</span>
-              {#if mediaAssetOptions.length}
+              {#if itemAssetOptions.length}
                 <select
                   class="editor-select"
                   value={resolveWizardItemAssetSelection(wizardItem)}
                   on:change={(event) => handleWizardItemAssetInput(wizardItem, event)}
                 >
-                  <option value=""></option>
+                  <option value="">{t("selectImagePlaceholder")}</option>
                   {#if resolveWizardItemAssetSelection(wizardItem) &&
-                  !hasOptionValue(mediaAssetOptions, resolveWizardItemAssetSelection(wizardItem))}
+                  !hasOptionValue(itemAssetOptions, resolveWizardItemAssetSelection(wizardItem))}
                     <option value={resolveWizardItemAssetSelection(wizardItem)}>
                       {extractFilenameFromPath(resolveWizardItemAssetSelection(wizardItem))}
                     </option>
                   {/if}
-                  {#each mediaAssetOptions as option}
+                  {#each itemAssetOptions as option}
                     <option value={option.value}>{option.label}</option>
                   {/each}
                 </select>
@@ -819,14 +847,20 @@
             {#if (wizardItem.media.scrollAnimationMode ?? "hero360") === "alternate"}
               <label class="editor-field">
                 <span>{t("itemScrollAnimationSrc")}</span>
-                {#if mediaAssetOptions.length}
+                {#if itemAssetOptions.length}
                   <select
                     class="editor-select"
-                    value={wizardItem.media.scrollAnimationSrc ?? ""}
+                    value={resolveWizardItemScrollAnimationSelection(wizardItem)}
                     on:change={(event) => handleWizardItemScrollSrcInput(wizardItem, event)}
                   >
-                    <option value=""></option>
-                    {#each mediaAssetOptions as option}
+                    <option value="">{t("selectImagePlaceholder")}</option>
+                    {#if resolveWizardItemScrollAnimationSelection(wizardItem) &&
+                    !hasOptionValue(itemAssetOptions, resolveWizardItemScrollAnimationSelection(wizardItem))}
+                      <option value={resolveWizardItemScrollAnimationSelection(wizardItem)}>
+                        {extractFilenameFromPath(resolveWizardItemScrollAnimationSelection(wizardItem))}
+                      </option>
+                    {/if}
+                    {#each itemAssetOptions as option}
                       <option value={option.value}>{option.label}</option>
                     {/each}
                   </select>

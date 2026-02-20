@@ -1,7 +1,8 @@
 export const USER_MANAGED_ASSET_ROOTS = [
   "originals/backgrounds",
   "originals/items",
-  "originals/fonts"
+  "originals/fonts",
+  "originals/logos"
 ] as const;
 
 export const normalizeAssetFolderPath = (value: string) =>
@@ -30,6 +31,8 @@ export const mapLegacyAssetRelativeToManaged = (value: string) => {
     relative === "originals/items" ||
     relative.startsWith("originals/fonts/") ||
     relative === "originals/fonts" ||
+    relative.startsWith("originals/logos/") ||
+    relative === "originals/logos" ||
     relative.startsWith("derived/")
   ) {
     return relative;
@@ -45,6 +48,12 @@ export const mapLegacyAssetRelativeToManaged = (value: string) => {
   }
   if (relative.startsWith("fonts/") || relative === "fonts") {
     return joinAssetFolderPath("originals/fonts", relative.slice("fonts".length));
+  }
+  if (relative.startsWith("logos/") || relative === "logos") {
+    return joinAssetFolderPath("originals/logos", relative.slice("logos".length));
+  }
+  if (relative.startsWith("logo/") || relative === "logo") {
+    return joinAssetFolderPath("originals/logos", relative.slice("logo".length));
   }
   return relative;
 };

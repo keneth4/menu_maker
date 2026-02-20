@@ -87,4 +87,60 @@ describe("workflowStatusController", () => {
     controller.destroy();
     vi.useRealTimers();
   });
+
+  it("retranslates active progress labels when uiLang changes", () => {
+    let state: WorkflowStatusState = {
+      workflowMode: null,
+      workflowStep: "",
+      workflowProgress: 0,
+      assetTaskVisible: false,
+      assetTaskStep: "",
+      assetTaskProgress: 0,
+      uiLang: "es"
+    };
+    const workflowRefs = {
+      pulseTimer: null as ReturnType<typeof setInterval> | null,
+      resetTimer: null as ReturnType<typeof setTimeout> | null
+    };
+    const assetTaskRefs = {
+      pulseTimer: null as ReturnType<typeof setInterval> | null,
+      resetTimer: null as ReturnType<typeof setTimeout> | null
+    };
+    const translations = {
+      es: {
+        progressSaveStart: "Preparando guardado...",
+        progressUploadStart: "Leyendo zip del proyecto..."
+      },
+      en: {
+        progressSaveStart: "Preparing save...",
+        progressUploadStart: "Reading project zip..."
+      }
+    };
+    const controller = createWorkflowStatusController({
+      translate: (key) => translations[state.uiLang][key as keyof (typeof translations)["es"]] ?? key,
+      getState: () => state,
+      setState: (next) => {
+        state = { ...state, ...next };
+      },
+      workflowRefs,
+      assetTaskRefs
+    });
+
+    controller.startWorkflow("save", "progressSaveStart", 5);
+    controller.startAssetTask("progressUploadStart", 4);
+    expect(state.workflowStep).toBe("Preparando guardado...");
+    expect(state.assetTaskStep).toBe("Leyendo zip del proyecto...");
+
+    state = { ...state, uiLang: "en" };
+    controller.syncUiLanguage();
+    expect(state.workflowStep).toBe("Preparing save...");
+    expect(state.assetTaskStep).toBe("Reading project zip...");
+
+    controller.updateWorkflowAssetStep("export", 3, 10, 46, 76);
+    expect(state.workflowStep).toBe("Processing assets (3/10)");
+
+    state = { ...state, uiLang: "es" };
+    controller.syncUiLanguage();
+    expect(state.workflowStep).toBe("Procesando assets (3/10)");
+  });
 });

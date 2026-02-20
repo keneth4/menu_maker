@@ -90,6 +90,35 @@ describe("EditPanelLegacy", () => {
     expect(select?.value).toBe("/projects/demo/assets/originals/items/dish.gif");
   });
 
+  it("shows only logo-root assets in identity logo selector", () => {
+    const { draft, category, item } = makeDraft();
+    draft.meta.identityMode = "logo";
+
+    render(EditPanelLegacy, {
+      props: {
+        t: (key: string) => key,
+        draft,
+        editPanel: "identity",
+        editLang: "es",
+        selectedCategoryId: "cat-1",
+        selectedItemId: "dish-1",
+        selectedCategory: category,
+        selectedItem: item,
+        assetOptions: [
+          { value: "/projects/demo/assets/originals/backgrounds/bg.webp", label: "bg.webp" },
+          { value: "/projects/demo/assets/originals/items/dish.gif", label: "dish.gif" },
+          { value: "/projects/demo/assets/originals/logos/brand.webp", label: "brand.webp" }
+        ]
+      }
+    });
+
+    const logoField = screen.getByText("wizardSrc").closest("label");
+    const select = logoField?.querySelector("select") as HTMLSelectElement | null;
+    expect(select).not.toBeNull();
+    const options = Array.from(select?.querySelectorAll("option") ?? []).map((option) => option.textContent);
+    expect(options).toEqual(["selectImagePlaceholder", "brand.webp"]);
+  });
+
   it("renders section list rows with edit/delete controls", async () => {
     const { draft, category, item } = makeDraft();
     draft.categories.push({
@@ -151,7 +180,7 @@ describe("EditPanelLegacy", () => {
     expect(screen.queryByRole("button", { name: "clear" })).not.toBeInTheDocument();
   });
 
-  it("starts inline edit immediately for newly added section", async () => {
+  it("creates section only after explicit inline save", async () => {
     const { draft, category, item } = makeDraft();
     const addSection = vi.fn(() => {
       draft.categories.push({
@@ -161,6 +190,41 @@ describe("EditPanelLegacy", () => {
         items: []
       });
     });
+    const setSectionNameById = vi.fn();
+
+    render(EditPanelLegacy, {
+      props: {
+        t: (key: string) => key,
+        draft,
+        editPanel: "section",
+        editLang: "es",
+        selectedCategoryId: "cat-1",
+        selectedItemId: "dish-1",
+        selectedCategory: category,
+        selectedItem: item,
+        addSection,
+        setSectionNameById,
+        getLocalizedValue: (value: Record<string, string> | undefined) => value?.es ?? ""
+      }
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "addSection" }));
+    expect(addSection).toHaveBeenCalledTimes(0);
+    const sectionInput = screen.getByRole("textbox", { name: "sectionName" }) as HTMLInputElement;
+    const saveButton = screen.getByRole("button", { name: "save" }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+
+    await fireEvent.input(sectionInput, { target: { value: "Nuevos platos" } });
+    expect(saveButton.disabled).toBe(false);
+    await fireEvent.click(saveButton);
+
+    expect(addSection).toHaveBeenCalledTimes(1);
+    expect(setSectionNameById).toHaveBeenCalledWith("cat-2", "es", "Nuevos platos");
+  });
+
+  it("keeps pending section inline edit when switching subtabs", async () => {
+    const { draft, category, item } = makeDraft();
+    const addSection = vi.fn();
 
     render(EditPanelLegacy, {
       props: {
@@ -178,9 +242,13 @@ describe("EditPanelLegacy", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "addSection" }));
-
-    expect(addSection).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("textbox", { name: "sectionName" })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "editDishes" }));
+    await fireEvent.click(screen.getByRole("button", { name: "editSections" }));
+
+    expect(screen.getByRole("textbox", { name: "sectionName" })).toBeInTheDocument();
+    expect(addSection).not.toHaveBeenCalled();
   });
 
   it("updates identity font preview immediately when selection changes", async () => {
@@ -215,5 +283,60 @@ describe("EditPanelLegacy", () => {
     const refreshedLabel = screen.getAllByText("textStyle")[0].closest("label");
     const refreshedPreview = refreshedLabel?.querySelector(".editor-font-preview");
     expect(refreshedPreview?.getAttribute("style") ?? "").toContain("Poppins");
+  });
+
+  it("filters background/item asset selectors by managed folder", () => {
+    const { draft, category, item } = makeDraft();
+    draft.backgrounds = [
+      {
+        id: "bg-1",
+        src: "",
+        originalSrc: "",
+        type: "image"
+      }
+    ];
+
+    const commonProps = {
+      t: (key: string) => key,
+      draft,
+      editLang: "es",
+      selectedCategoryId: "cat-1",
+      selectedItemId: "dish-1",
+      selectedCategory: category,
+      selectedItem: item,
+      assetOptions: [
+        { value: "/projects/demo/assets/originals/backgrounds/bg.webp", label: "bg.webp" },
+        { value: "/projects/demo/assets/originals/items/dish.gif", label: "dish.gif" },
+        { value: "/projects/demo/assets/originals/fonts/menu.woff2", label: "menu.woff2" }
+      ],
+      getLocalizedValue: (value: Record<string, string> | undefined) => value?.es ?? "",
+      textOf: (value: Record<string, string> | undefined) => value?.es ?? ""
+    };
+
+    const backgroundView = render(EditPanelLegacy, {
+      props: {
+        ...commonProps,
+        editPanel: "background"
+      }
+    });
+    const bgSourceField = screen.getByText("wizardSrc").closest("label");
+    const bgOptions = Array.from(bgSourceField?.querySelectorAll("option") ?? []).map(
+      (option) => option.textContent
+    );
+    expect(bgOptions).toEqual(["selectImagePlaceholder", "bg.webp"]);
+    backgroundView.unmount();
+
+    render(EditPanelLegacy, {
+      props: {
+        ...commonProps,
+        editPanel: "dish"
+      }
+    });
+    const itemSourceField = screen.getByText("asset360").closest(".edit-item__source");
+    const itemSelect = itemSourceField?.querySelector("select");
+    const itemOptions = Array.from(itemSelect?.querySelectorAll("option") ?? []).map((option) =>
+      option.textContent
+    );
+    expect(itemOptions).toEqual(["selectImagePlaceholder", "dish.gif"]);
   });
 });

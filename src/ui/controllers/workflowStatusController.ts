@@ -71,6 +71,7 @@ export type WorkflowStatusController = {
   ) => void;
   finishAssetTask: (stepKey: UiKey) => void;
   failAssetTask: () => void;
+  syncUiLanguage: () => void;
   destroy: () => void;
 };
 
@@ -93,6 +94,52 @@ export const buildWorkflowAssetStepLabel = (
 export const createWorkflowStatusController = (
   deps: WorkflowStatusControllerDeps
 ): WorkflowStatusController => {
+  let workflowStepMeta:
+    | { kind: "none" }
+    | { kind: "key"; stepKey: UiKey }
+    | { kind: "asset"; mode: WorkflowMode; current: number; total: number } = {
+    kind: "none"
+  };
+  let assetTaskStepKey: UiKey | null = null;
+
+  const resolveWorkflowStepLabel = (state: WorkflowStatusState) => {
+    if (workflowStepMeta.kind === "key") {
+      return deps.translate(workflowStepMeta.stepKey);
+    }
+    if (workflowStepMeta.kind === "asset") {
+      return buildWorkflowAssetStepLabel(
+        workflowStepMeta.mode,
+        workflowStepMeta.current,
+        workflowStepMeta.total,
+        state.uiLang
+      );
+    }
+    return "";
+  };
+
+  const resolveAssetTaskStepLabel = () =>
+    assetTaskStepKey ? deps.translate(assetTaskStepKey) : "";
+
+  const syncUiLanguage = () => {
+    const state = deps.getState();
+    const patch: WorkflowStatusStatePatch = {};
+    if (state.workflowStep) {
+      const translatedWorkflowStep = resolveWorkflowStepLabel(state);
+      if (translatedWorkflowStep && translatedWorkflowStep !== state.workflowStep) {
+        patch.workflowStep = translatedWorkflowStep;
+      }
+    }
+    if (state.assetTaskStep) {
+      const translatedAssetTaskStep = resolveAssetTaskStepLabel();
+      if (translatedAssetTaskStep && translatedAssetTaskStep !== state.assetTaskStep) {
+        patch.assetTaskStep = translatedAssetTaskStep;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      deps.setState(patch);
+    }
+  };
+
   const workflowProgressController = createProgressController(
     deps.workflowRefs,
     () => {
@@ -111,6 +158,9 @@ export const createWorkflowStatusController = (
       }
       if (next.step !== undefined) {
         patch.workflowStep = next.step;
+        if (!next.step) {
+          workflowStepMeta = { kind: "none" };
+        }
       }
       if (next.progress !== undefined) {
         patch.workflowProgress = next.progress;
@@ -144,6 +194,9 @@ export const createWorkflowStatusController = (
       }
       if (next.step !== undefined) {
         patch.assetTaskStep = next.step;
+        if (!next.step) {
+          assetTaskStepKey = null;
+        }
       }
       if (next.progress !== undefined) {
         patch.assetTaskProgress = next.progress;
@@ -166,10 +219,12 @@ export const createWorkflowStatusController = (
   };
 
   const startWorkflow = (mode: WorkflowMode, stepKey: UiKey, percent = 3) => {
+    workflowStepMeta = { kind: "key", stepKey };
     workflowProgressController.start(mode, deps.translate(stepKey), percent);
   };
 
   const updateWorkflow = (stepKey: UiKey, percent: number) => {
+    workflowStepMeta = { kind: "key", stepKey };
     const state = deps.getState();
     workflowProgressController.update(
       deps.translate(stepKey),
@@ -182,6 +237,7 @@ export const createWorkflowStatusController = (
     stepKey: UiKey,
     options: { cadenceMs?: number; tickIncrement?: number } = {}
   ) => {
+    workflowStepMeta = { kind: "key", stepKey };
     const state = deps.getState();
     updateWorkflow(stepKey, state.workflowProgress);
     workflowProgressController.pulse(targetPercent, deps.translate(stepKey), options);
@@ -199,6 +255,12 @@ export const createWorkflowStatusController = (
     const boundedCurrent = Math.max(0, Math.min(current, safeTotal));
     const progress =
       startPercent + ((endPercent - startPercent) * boundedCurrent) / safeTotal;
+    workflowStepMeta = {
+      kind: "asset",
+      mode,
+      current: boundedCurrent,
+      total: safeTotal
+    };
     deps.setState({
       workflowProgress: Math.max(state.workflowProgress, progress),
       workflowStep: buildWorkflowAssetStepLabel(mode, boundedCurrent, safeTotal, state.uiLang)
@@ -206,10 +268,12 @@ export const createWorkflowStatusController = (
   };
 
   const finishWorkflow = (stepKey: UiKey) => {
+    workflowStepMeta = { kind: "key", stepKey };
     workflowProgressController.finish(deps.translate(stepKey));
   };
 
   const failWorkflow = () => {
+    workflowStepMeta = { kind: "none" };
     workflowProgressController.fail();
   };
 
@@ -222,10 +286,12 @@ export const createWorkflowStatusController = (
   };
 
   const startAssetTask = (stepKey: UiKey, percent = 4) => {
+    assetTaskStepKey = stepKey;
     assetTaskProgressController.start("upload", deps.translate(stepKey), percent);
   };
 
   const updateAssetTask = (stepKey: UiKey, percent: number) => {
+    assetTaskStepKey = stepKey;
     const state = deps.getState();
     assetTaskProgressController.update(
       deps.translate(stepKey),
@@ -238,16 +304,19 @@ export const createWorkflowStatusController = (
     stepKey: UiKey,
     options: { cadenceMs?: number; tickIncrement?: number } = {}
   ) => {
+    assetTaskStepKey = stepKey;
     const state = deps.getState();
     updateAssetTask(stepKey, state.assetTaskProgress);
     assetTaskProgressController.pulse(targetPercent, deps.translate(stepKey), options);
   };
 
   const finishAssetTask = (stepKey: UiKey) => {
+    assetTaskStepKey = stepKey;
     assetTaskProgressController.finish(deps.translate(stepKey));
   };
 
   const failAssetTask = () => {
+    assetTaskStepKey = null;
     assetTaskProgressController.fail();
   };
 
@@ -272,6 +341,7 @@ export const createWorkflowStatusController = (
     pulseAssetTask,
     finishAssetTask,
     failAssetTask,
+    syncUiLanguage,
     destroy
   };
 };

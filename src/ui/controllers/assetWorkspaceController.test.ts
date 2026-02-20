@@ -25,7 +25,7 @@ const createBaseState = (): AssetWorkspaceState => ({
 const createController = (state: AssetWorkspaceState) =>
   createAssetWorkspaceController({
     t: (key) => key,
-    userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts"],
+    userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts", "originals/logos"],
     bridgeClient: {
       ping: async () => true,
       list: async () => [],
@@ -79,7 +79,7 @@ const createControllerWithOverrides = (
 ) =>
   createAssetWorkspaceController({
     t: (key) => key,
-    userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts"],
+    userManagedRoots: ["originals/backgrounds", "originals/items", "originals/fonts", "originals/logos"],
     bridgeClient: {
       ping: async () => true,
       list: async () => [],
@@ -157,7 +157,34 @@ describe("createAssetWorkspaceController", () => {
 
     expect(state.treeRows.length).toBeGreaterThan(0);
     expect(state.uploadFolderOptions.some((entry) => entry.value === "originals/items")).toBe(true);
+    expect(state.uploadFolderOptions.some((entry) => entry.value === "originals/logos")).toBe(true);
     expect(state.uploadTargetPath).toBe("originals/backgrounds");
+  });
+
+  it("keeps managed roots visible even when a root has no files", () => {
+    const state = createBaseState();
+    state.assetMode = "bridge";
+    state.fsEntries = [
+      {
+        id: "originals/items/soup.webp",
+        name: "soup.webp",
+        path: "originals/items/soup.webp",
+        kind: "file",
+        handle: null,
+        parent: null,
+        source: "bridge"
+      }
+    ] as AssetWorkspaceEntry[];
+
+    const controller = createController(state);
+    controller.syncDerivedState();
+
+    const rootRowPaths = state.treeRows
+      .filter((row) => row.entry.kind === "directory")
+      .map((row) => row.entry.path);
+    expect(rootRowPaths).toContain("originals/logos");
+    expect(rootRowPaths).toContain("originals/backgrounds");
+    expect(rootRowPaths).toContain("originals/fonts");
   });
 
   it("toggles selection and expansion state", () => {
@@ -338,5 +365,59 @@ describe("createAssetWorkspaceController", () => {
       "originals/backgrounds/hero.webp",
       "originals/items/hero.webp"
     );
+  });
+
+  it("optimistically removes deleted bridge assets before refresh resolves", async () => {
+    const state = createBaseState();
+    state.fsEntries = [
+      {
+        id: "originals/items/soup.webp",
+        name: "soup.webp",
+        path: "originals/items/soup.webp",
+        kind: "file",
+        handle: null,
+        parent: null,
+        source: "bridge"
+      }
+    ] as AssetWorkspaceEntry[];
+    state.rootFiles = ["/projects/demo/assets/originals/items/soup.webp"];
+    state.selectedAssetIds = ["originals/items/soup.webp"];
+
+    let resolveList: ((value: { path: string; kind: "file" | "directory" }[]) => void) | null = null;
+    const listPromise = new Promise<{ path: string; kind: "file" | "directory" }[]>(
+      (resolve) => {
+        resolveList = resolve;
+      }
+    );
+    const request = vi.fn(async () => undefined);
+
+    const controller = createControllerWithOverrides(state, {
+      bridgeClient: {
+        ping: async () => true,
+        list: async () => await listPromise,
+        request,
+        readFileBytes: async () => null,
+        prepareProjectDerivedAssets: async () => ({}) as MenuProject
+      }
+    });
+
+    const deleting = controller.deleteEntry({
+      id: "originals/items/soup.webp",
+      name: "soup.webp",
+      path: "originals/items/soup.webp",
+      kind: "file"
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(state.fsEntries).toEqual([]);
+    expect(state.rootFiles).toEqual([]);
+    expect(state.selectedAssetIds).toEqual([]);
+
+    resolveList?.([]);
+    await deleting;
+    expect(request).toHaveBeenCalledWith("delete", "demo", { path: "originals/items/soup.webp" });
   });
 });

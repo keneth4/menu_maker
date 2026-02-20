@@ -31,21 +31,20 @@ const makeProject = (): MenuProject => ({
   }
 });
 
-describe("fontWorkflow identity split roles", () => {
-  it("falls back restaurant/title role fonts to identity role", () => {
+describe("fontWorkflow role fallback", () => {
+  it("falls back restaurant/title role fonts to interface font", () => {
     const project = makeProject();
     project.meta.fontRoles = {
       identity: { family: "Cinzel" }
     };
 
-    expect(resolveProjectRoleFontConfig(project, "restaurant").family).toBe("Cinzel");
-    expect(resolveProjectRoleFontConfig(project, "title").family).toBe("Cinzel");
+    expect(resolveProjectRoleFontConfig(project, "restaurant").family).toBe("Fraunces");
+    expect(resolveProjectRoleFontConfig(project, "title").family).toBe("Fraunces");
   });
 
   it("allows explicit restaurant/title role overrides", () => {
     const project = makeProject();
     project.meta.fontRoles = {
-      identity: { family: "Cinzel" },
       restaurant: { family: "Playfair Display" },
       title: { family: "Cormorant Garamond" }
     };

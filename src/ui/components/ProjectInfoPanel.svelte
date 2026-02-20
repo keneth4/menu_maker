@@ -20,6 +20,7 @@
   const uniqueLocales = (list: string[]) => Array.from(new Set(list.map(normalizeLocaleCode).filter(Boolean)));
   let defaultLocaleOptionList: string[] = [];
   let resolvedDefaultLocale = "es";
+  let pendingDefaultLocaleSync = "";
 
   $: {
     const selectedLocales = uniqueLocales(model.draft?.meta.locales ?? []);
@@ -33,6 +34,18 @@
       draftDefault && hasLocale(defaultLocaleOptionList, draftDefault)
         ? draftDefault
         : (defaultLocaleOptionList[0] ?? normalizeUiLocale(model.uiLang));
+  }
+
+  $: {
+    const draftDefault = normalizeLocaleCode(model.draft?.meta.defaultLocale ?? "");
+    if (!model.draft || !resolvedDefaultLocale) {
+      pendingDefaultLocaleSync = "";
+    } else if (draftDefault === resolvedDefaultLocale) {
+      pendingDefaultLocaleSync = "";
+    } else if (pendingDefaultLocaleSync !== resolvedDefaultLocale) {
+      pendingDefaultLocaleSync = resolvedDefaultLocale;
+      actions.setDefaultLocale(resolvedDefaultLocale);
+    }
   }
 
   $: {

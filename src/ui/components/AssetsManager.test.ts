@@ -11,7 +11,8 @@ const createModel = (overrides: Record<string, unknown> = {}) => ({
   uploadFolderOptions: [
     { value: "originals/backgrounds", label: "Backgrounds" },
     { value: "originals/items", label: "Items" },
-    { value: "originals/fonts", label: "Fonts" }
+    { value: "originals/fonts", label: "Fonts" },
+    { value: "originals/logos", label: "Logos" }
   ],
   needsAssets: false,
   fsError: "",
@@ -175,6 +176,12 @@ describe("AssetsManager", () => {
       path: "originals/items",
       kind: "directory"
     } as const;
+    const lockedLogos = {
+      id: "originals/logos",
+      name: "logos",
+      path: "originals/logos",
+      kind: "directory"
+    } as const;
     const editable = {
       id: "originals/items/custom",
       name: "custom",
@@ -182,10 +189,11 @@ describe("AssetsManager", () => {
       kind: "directory"
     } as const;
     const model = createModel({
-      fsEntries: [lockedOriginals, lockedItems, editable],
+      fsEntries: [lockedOriginals, lockedItems, lockedLogos, editable],
       treeRows: [
         { entry: lockedOriginals, depth: 0, hasChildren: true, expanded: true },
         { entry: lockedItems, depth: 1, hasChildren: true, expanded: true },
+        { entry: lockedLogos, depth: 1, hasChildren: true, expanded: true },
         { entry: editable, depth: 2, hasChildren: false, expanded: false }
       ]
     });
@@ -196,11 +204,13 @@ describe("AssetsManager", () => {
     const renameButtons = screen.getAllByRole("button", { name: "rename" }) as HTMLButtonElement[];
     expect(renameButtons[0]).toBeDisabled();
     expect(renameButtons[1]).toBeDisabled();
-    expect(renameButtons[2]).not.toBeDisabled();
+    expect(renameButtons[2]).toBeDisabled();
+    expect(renameButtons[3]).not.toBeDisabled();
 
     const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
     expect(checkboxes[0]).toBeDisabled();
     expect(checkboxes[1]).toBeDisabled();
-    expect(checkboxes[2]).not.toBeDisabled();
+    expect(checkboxes[2]).toBeDisabled();
+    expect(checkboxes[3]).not.toBeDisabled();
   });
 });

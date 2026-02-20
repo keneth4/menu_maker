@@ -412,12 +412,13 @@ test("wizard flow starts with editor open", async ({ page }) => {
   await expect(page.locator(".editor-panel")).toHaveClass(/open/);
 });
 
-test("assets upload target selector supports backgrounds, items, and fonts", async ({ page }) => {
+test("assets upload target selector supports backgrounds, items, fonts, and logos", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /crear proyecto|create project/i }).click();
   await openEditor(page);
 
   await page.locator(".editor-tabs").getByRole("button", { name: /assets/i }).click();
+  await expect(page.locator(".asset-meta", { hasText: "originals/logos" }).first()).toBeVisible();
   const uploadTarget = page.locator(".asset-drop select.editor-select").first();
   await expect(uploadTarget).toBeEnabled();
   await expect(uploadTarget).toHaveValue("originals/backgrounds");
@@ -427,6 +428,79 @@ test("assets upload target selector supports backgrounds, items, and fonts", asy
 
   await uploadTarget.selectOption("originals/fonts");
   await expect(uploadTarget).toHaveValue("originals/fonts");
+
+  await uploadTarget.selectOption("originals/logos");
+  await expect(uploadTarget).toHaveValue("originals/logos");
+});
+
+test("logo selector only lists originals/logos assets", async ({ page }, testInfo) => {
+  const slug = "logo-selector-root-only";
+  const project = makeProjectFixture("Logo Selector Root", slug) as any;
+  project.meta.identityMode = "logo";
+  project.meta.logoSrc = `/projects/${slug}/assets/originals/logos/brand-logo.webp`;
+  project.meta.fontRoles = {};
+  project.meta.backgroundDisplayMode = "carousel";
+  project.meta.backgroundCarouselSeconds = 10;
+  project.meta.fontSource = `/projects/${slug}/assets/originals/fonts/menu-font.woff2`;
+  project.backgrounds = [
+    {
+      id: "bg-1",
+      label: "BG 1",
+      src: `/projects/${slug}/assets/originals/backgrounds/cover-bg.webp`,
+      type: "image"
+    }
+  ];
+  project.categories = [
+    {
+      id: "cat-1",
+      name: { es: "Entradas", en: "Starters" },
+      items: [
+        {
+          id: "item-1",
+          name: { es: "Sopa", en: "Soup" },
+          description: { es: "", en: "" },
+          longDescription: { es: "", en: "" },
+          priceVisible: true,
+          price: { amount: 10, currency: "MXN" },
+          allergens: [],
+          vegan: false,
+          media: {
+            hero360: `/projects/${slug}/assets/originals/items/dish.webp`
+          }
+        }
+      ]
+    }
+  ];
+  const fixturePath = await writeJsonFixture(testInfo, project);
+
+  await disableBridgeMode(page);
+  await page.goto("/");
+  await openProjectFromLanding(page, fixturePath);
+  await openEditor(page);
+
+  await page.locator(".editor-tabs").getByRole("button", { name: /edición|edit/i }).click();
+  await page.getByRole("button", { name: /identidad|identity/i }).click();
+  await page.getByRole("radio", { name: /logo/i }).check();
+
+  const logoSelect = page
+    .locator(".edit-block", { hasText: /asset del logo|logo asset/i })
+    .locator("select.editor-select")
+    .first();
+  await expect(logoSelect).toHaveValue(
+    new RegExp(`/projects/${slug}/assets/originals/logos/brand-logo\\.webp`)
+  );
+  await expect(logoSelect.locator("option")).toHaveCount(2);
+  await expect(logoSelect.locator("option").nth(1)).toHaveText("brand-logo.webp");
+
+  const logoOptionTexts = await logoSelect.locator("option").allTextContents();
+  expect(logoOptionTexts.some((value) => value.includes("cover-bg.webp"))).toBeFalsy();
+  expect(logoOptionTexts.some((value) => value.includes("dish.webp"))).toBeFalsy();
+  expect(logoOptionTexts.some((value) => value.includes("menu-font.woff2"))).toBeFalsy();
+
+  await expect(page.locator(".menu-logo")).toHaveAttribute(
+    "src",
+    new RegExp(`/projects/${slug}/assets/originals/logos/brand-logo\\.webp`)
+  );
 });
 
 test("wizard step 0 preview shows template demo backgrounds", async ({ page }) => {

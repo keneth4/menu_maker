@@ -47,7 +47,13 @@
   export let moveEntry: (entry: AssetEntry) => void = () => {};
   export let deleteEntry: (entry: AssetEntry) => void = () => {};
 
-  const LOCKED_ROOTS = new Set(["originals", "originals/backgrounds", "originals/items", "originals/fonts"]);
+  const LOCKED_ROOTS = new Set([
+    "originals",
+    "originals/backgrounds",
+    "originals/items",
+    "originals/fonts",
+    "originals/logos"
+  ]);
   const isLockedRoot = (path: string) => LOCKED_ROOTS.has(path.trim());
   const normalizePath = (path: string) =>
     path

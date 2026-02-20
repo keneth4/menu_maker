@@ -6,6 +6,7 @@ import type {
   ProjectFontRole
 } from "../../lib/types";
 import { normalizeSensitivityLevel } from "../../application/preview/scrollSensitivityWorkflow";
+import { mapLegacyAssetRelativeToManaged, toAssetRelativeForUi } from "../../application/assets/workspaceWorkflow";
 
 type CommonAllergen = {
   id: string;
@@ -123,6 +124,16 @@ const createLocalized = (locales: string[]) =>
   }, {});
 
 const normalizeLocaleCode = (value: string) => value.trim().toLowerCase();
+const LOGO_ASSET_ROOT = "originals/logos";
+const isManagedLogoSource = (value: string) => {
+  const normalized = mapLegacyAssetRelativeToManaged(toAssetRelativeForUi(value.trim()));
+  return normalized === LOGO_ASSET_ROOT || normalized.startsWith(`${LOGO_ASSET_ROOT}/`);
+};
+const sanitizeLogoSource = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return isManagedLogoSource(trimmed) ? trimmed : "";
+};
 
 const createEmptyDish = (locales: string[], currency: string, id: string): MenuItem => ({
   id,
@@ -774,7 +785,7 @@ export const createEditorDraftController = (
   const setLogoSrc = (src: string) => {
     const state = deps.getState();
     if (!state.draft) return;
-    state.draft.meta.logoSrc = src;
+    state.draft.meta.logoSrc = sanitizeLogoSource(src);
     deps.touchDraft();
   };
 

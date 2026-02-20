@@ -13,7 +13,7 @@ const makeProject = (): MenuProject => ({
     restaurantName: { es: "", en: "" },
     title: { es: "", en: "" },
     identityMode: "text",
-    logoSrc: "",
+    logoSrc: "/projects/demo/assets/originals/logos/brand.webp",
     fontFamily: "Fraunces",
     fontSource: "/projects/demo/assets/originals/fonts/interface.woff2",
     fontRoles: {
@@ -76,6 +76,27 @@ describe("projectAssetWorkflow", () => {
     expect(entries.some((entry) => entry.group === "Fondos")).toBe(true);
     expect(entries.some((entry) => entry.group === "Items")).toBe(true);
     expect(entries.some((entry) => entry.group === "Fonts")).toBe(true);
+    expect(entries.some((entry) => entry.group === "Logos")).toBe(true);
+  });
+
+  it("includes logo entry only when logo source is under originals/logos", () => {
+    const managedLogoProject = makeProject();
+    managedLogoProject.meta.logoSrc = "/projects/demo/assets/originals/logos/brand.webp";
+    const managedEntries = buildProjectAssetEntries(
+      managedLogoProject,
+      "es",
+      (entry, lang, fallback) => entry?.[lang] ?? entry?.[fallback] ?? ""
+    );
+    expect(managedEntries.some((entry) => entry.group === "Logos")).toBe(true);
+
+    const legacyLogoProject = makeProject();
+    legacyLogoProject.meta.logoSrc = "/projects/demo/assets/branding/logo.webp";
+    const legacyEntries = buildProjectAssetEntries(
+      legacyLogoProject,
+      "es",
+      (entry, lang, fallback) => entry?.[lang] ?? entry?.[fallback] ?? ""
+    );
+    expect(legacyEntries.some((entry) => entry.group === "Logos")).toBe(false);
   });
 
   it("builds asset option paths with root override and managed-path filtering", () => {

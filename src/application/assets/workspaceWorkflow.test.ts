@@ -12,6 +12,7 @@ describe("workspaceWorkflow", () => {
     expect(isLockedManagedAssetRoot("originals/backgrounds")).toBe(true);
     expect(isLockedManagedAssetRoot("originals/items")).toBe(true);
     expect(isLockedManagedAssetRoot("originals/fonts")).toBe(true);
+    expect(isLockedManagedAssetRoot("originals/logos")).toBe(true);
     expect(isLockedManagedAssetRoot("originals/items/custom")).toBe(false);
   });
 
@@ -21,6 +22,16 @@ describe("workspaceWorkflow", () => {
     );
     expect(normalized).toBe("originals/items/photo.jpg");
     expect(isManagedAssetRelativePath(normalized)).toBe(true);
+    expect(
+      mapLegacyAssetRelativeToManaged(
+        toAssetRelativeForUi("/projects/demo/assets/logo/brand.webp")
+      )
+    ).toBe("originals/logos/brand.webp");
+    expect(
+      mapLegacyAssetRelativeToManaged(
+        toAssetRelativeForUi("/projects/demo/assets/logos/brand.webp")
+      )
+    ).toBe("originals/logos/brand.webp");
     expect(isManagedAssetRelativePath("originals")).toBe(false);
   });
 });

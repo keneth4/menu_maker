@@ -249,6 +249,58 @@ describe("ProjectInfoPanel", () => {
     expect(defaultSelect).toHaveValue("fr");
   });
 
+  it("auto-syncs invalid default locale to the first available selected locale", () => {
+    const draft = {
+      meta: {
+        name: "Menu",
+        template: "focus-rows",
+        locales: ["fr", "pt"],
+        defaultLocale: "es",
+        currency: "USD",
+        currencyPosition: "left",
+        fontSource: ""
+      }
+    } as any;
+
+    const actions = {
+      createNewProject: vi.fn(),
+      openProjectDialog: vi.fn(),
+      saveProject: vi.fn(),
+      exportStaticSite: vi.fn(),
+      setTemplate: vi.fn(),
+      toggleLanguage: vi.fn(),
+      setDefaultLocale: vi.fn(),
+      handleCurrencyChange: vi.fn(),
+      toggleCurrencyPosition: vi.fn(),
+      setItemScrollSensitivity: vi.fn(),
+      setSectionScrollSensitivity: vi.fn()
+    };
+
+    render(ProjectInfoPanel, {
+      props: {
+        model: {
+          t: (key: string) => key,
+          draft,
+          uiLang: "en",
+          templateOptions: [{ id: "focus-rows", label: { es: "Focus", en: "Focus" } }],
+          workflowMode: null,
+          openError: "",
+          exportStatus: "",
+          exportError: "",
+          workflowStep: "",
+          workflowProgress: 0,
+          scrollSensitivity: {
+            item: 5,
+            section: 5
+          }
+        },
+        actions
+      }
+    });
+
+    expect(actions.setDefaultLocale).toHaveBeenCalledWith("fr");
+  });
+
   it("normalizes selected locales for default language options", () => {
     const draft = {
       meta: {

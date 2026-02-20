@@ -264,6 +264,21 @@ describe("projectWorkflowController", () => {
     expect(getState().locale).toBe("en");
   });
 
+  it("clears loaded logo source when it is outside originals/logos", async () => {
+    const loaded = makeProject("importado");
+    loaded.meta.logoSrc = "/projects/importado/assets/branding/logo.webp";
+    const { controller, getState } = createHarness();
+
+    await controller.applyLoadedProject(loaded, "importado.zip");
+    expect(getState().draft?.meta.logoSrc).toBe("");
+
+    loaded.meta.logoSrc = "/projects/importado/assets/originals/logos/logo.webp";
+    await controller.applyLoadedProject(loaded, "importado.zip");
+    expect(getState().draft?.meta.logoSrc).toBe(
+      "/projects/importado/assets/originals/logos/logo.webp"
+    );
+  });
+
   it("auto-selects uiLang for save/export when no languages are selected", async () => {
     const noLocalesProject = makeProject("no-locales");
     noLocalesProject.meta.locales = [];

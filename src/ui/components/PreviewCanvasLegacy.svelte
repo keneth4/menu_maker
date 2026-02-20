@@ -82,6 +82,28 @@
   const getCarouselMediaKey = (categoryId: string, itemId: string, source = "") =>
     `${categoryId}::${itemId}::${source}`;
 
+  const buildProjectCarouselMediaKeySet = (project: MenuProject | null) => {
+    const keys = new Set<string>();
+    if (!project) return keys;
+    project.categories.forEach((category) => {
+      category.items.forEach((item) => {
+        const source = getCarouselImageSource(item).trim();
+        keys.add(getCarouselMediaKey(category.id, item.id, source));
+      });
+    });
+    return keys;
+  };
+
+  const pruneCarouselMediaKeys = (sourceKeys: Set<string>, validKeys: Set<string>) => {
+    const next = new Set<string>();
+    sourceKeys.forEach((key) => {
+      if (validKeys.has(key)) {
+        next.add(key);
+      }
+    });
+    return next;
+  };
+
   const markCarouselMediaReady = (mediaKey: string) => {
     if (readyCarouselMediaKeys.has(mediaKey)) return;
     const next = new Set(readyCarouselMediaKeys);
@@ -115,8 +137,9 @@
       : "";
     if (signature !== carouselMediaProjectSignature) {
       carouselMediaProjectSignature = signature;
-      loadedCarouselMediaKeys = new Set<string>();
-      readyCarouselMediaKeys = new Set<string>();
+      const validKeys = buildProjectCarouselMediaKeySet(activeProject);
+      loadedCarouselMediaKeys = pruneCarouselMediaKeys(loadedCarouselMediaKeys, validKeys);
+      readyCarouselMediaKeys = pruneCarouselMediaKeys(readyCarouselMediaKeys, validKeys);
     }
   }
 
