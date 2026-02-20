@@ -138,6 +138,7 @@ const startStaticServer = async (rootDir: string) => {
 };
 
 const ACTIVE_BG_SELECTOR = ".menu-background.active";
+const IMMEDIATE_SWITCH_TIMEOUT_MS = 350;
 
 const getActiveBackgroundSource = async (page: Page) =>
   await page.locator(ACTIVE_BG_SELECTOR).first().getAttribute("data-bg-src");
@@ -151,6 +152,26 @@ const getBackgroundTransitionDuration = async (page: Page) =>
     return window.getComputedStyle(layer).transitionDuration;
   });
 
+const getClosestHorizontalSectionIndex = async (page: Page) =>
+  await page.evaluate(() => {
+    const container = document.querySelector<HTMLElement>(".menu-scroll");
+    if (!container) return -1;
+    const sections = Array.from(container.querySelectorAll<HTMLElement>(".menu-section"));
+    if (!sections.length) return -1;
+    const center = container.scrollLeft + container.clientWidth / 2;
+    let closest = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    sections.forEach((section, index) => {
+      const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
+      const distance = Math.abs(sectionCenter - center);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = index;
+      }
+    });
+    return closest;
+  });
+
 const goToNextSection = async (page: Page) => {
   await page.locator(".section-nav__btn.next").click();
 };
@@ -160,6 +181,8 @@ const createFixture = (): SectionBackgroundFixture => {
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23ef4444'/%3E%3C/svg%3E";
   const bgB =
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%230ea5e9'/%3E%3C/svg%3E";
+  const bgC =
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%2310b981'/%3E%3C/svg%3E";
   const itemGif =
     "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
@@ -180,7 +203,8 @@ const createFixture = (): SectionBackgroundFixture => {
     },
     backgrounds: [
       { id: "bg-a", label: "A", src: bgA, type: "image" },
-      { id: "bg-b", label: "B", src: bgB, type: "image" }
+      { id: "bg-b", label: "B", src: bgB, type: "image" },
+      { id: "bg-c", label: "C", src: bgC, type: "image" }
     ],
     categories: [
       {
@@ -216,6 +240,23 @@ const createFixture = (): SectionBackgroundFixture => {
             media: { hero360: itemGif }
           }
         ]
+      },
+      {
+        id: "cat-c",
+        name: { es: "Tres", en: "Three" },
+        backgroundId: "bg-c",
+        items: [
+          {
+            id: "item-c",
+            name: { es: "Item C", en: "Item C" },
+            description: { es: "Desc C", en: "Desc C" },
+            longDescription: { es: "", en: "" },
+            price: { amount: 14, currency: "USD" },
+            allergens: [],
+            vegan: false,
+            media: { hero360: itemGif }
+          }
+        ]
       }
     ],
     sound: {
@@ -245,8 +286,19 @@ test("section background mode stays in parity between preview and export", async
 
   await goToNextSection(page);
   await expect
-    .poll(async () => await getActiveBackgroundSource(page), { timeout: 1200 })
+    .poll(async () => await getActiveBackgroundSource(page), {
+      timeout: IMMEDIATE_SWITCH_TIMEOUT_MS
+    })
     .toBe(fixture.backgrounds[1].src);
+  await expect
+    .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+    .toBe(1);
+  await goToNextSection(page);
+  await expect
+    .poll(async () => await getActiveBackgroundSource(page), {
+      timeout: IMMEDIATE_SWITCH_TIMEOUT_MS
+    })
+    .toBe(fixture.backgrounds[2].src);
 
   await openEditorIfClosed(page);
   const downloadPromise = page.waitForEvent("download");
@@ -271,8 +323,19 @@ test("section background mode stays in parity between preview and export", async
 
     await goToNextSection(page);
     await expect
-      .poll(async () => await getActiveBackgroundSource(page), { timeout: 1200 })
+      .poll(async () => await getActiveBackgroundSource(page), {
+        timeout: IMMEDIATE_SWITCH_TIMEOUT_MS
+      })
       .toBe(fixture.backgrounds[1].src);
+    await expect
+      .poll(async () => await getClosestHorizontalSectionIndex(page), { timeout: 1200 })
+      .toBe(1);
+    await goToNextSection(page);
+    await expect
+      .poll(async () => await getActiveBackgroundSource(page), {
+        timeout: IMMEDIATE_SWITCH_TIMEOUT_MS
+      })
+      .toBe(fixture.backgrounds[2].src);
   } finally {
     await server.close();
     await rm(tempDir, { recursive: true, force: true });
@@ -284,6 +347,7 @@ test("section background mode does not fallback when mapping is invalid", async 
   const fixture = createFixture();
   fixture.categories[0].backgroundId = "bg-missing-a";
   fixture.categories[1].backgroundId = "bg-missing-b";
+  fixture.categories[2].backgroundId = "bg-missing-c";
   const fixturePath = await writeJsonFixture(testInfo, fixture);
   await disableBridgeMode(page);
   await page.goto("/");

@@ -1380,6 +1380,25 @@ body {
   color: rgba(226, 232, 240, 0.7);
 }
 
+.edit-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-section__name {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.edit-section__name-input {
+  min-width: 0;
+  width: min(100%, 420px);
+}
+
 .edit-section__body {
   display: grid;
   gap: 12px;
@@ -1586,6 +1605,12 @@ body {
   align-items: start;
 }
 
+.asset-item--inline {
+  border-style: dashed;
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(30, 41, 59, 0.4);
+}
+
 .asset-check {
   display: flex;
   justify-content: center;
@@ -1602,6 +1627,20 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.asset-name--editing {
+  width: 100%;
+}
+
+.asset-name-input {
+  width: min(100%, 360px);
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(2, 6, 23, 0.55);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  padding: 6px 9px;
 }
 
 .asset-toggle {
@@ -1672,6 +1711,12 @@ body {
   background: rgba(251, 191, 36, 0.14);
 }
 
+.edit-subtab:disabled,
+.edit-subtab.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .edit-lang-chip {
   margin-left: auto;
   border-radius: 999px;
@@ -1706,6 +1751,27 @@ body {
   gap: 12px;
   min-width: 0;
   max-width: 100%;
+}
+
+.project-money-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.project-money-position {
+  min-width: 170px;
+}
+
+@media (max-width: 640px) {
+  .project-money-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-money-position {
+    min-width: 0;
+  }
 }
 
 .edit-actions {
@@ -2104,11 +2170,34 @@ body {
   max-width: 100%;
 }
 
+.identity-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.identity-inline-row__text,
+.identity-inline-row__font {
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .identity-inline-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .editor-field.editor-inline {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.editor-field.editor-inline.editor-inline--spaced {
+  margin: 6px 0;
 }
 
 .editor-field.editor-inline input[type="checkbox"] {

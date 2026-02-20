@@ -89,4 +89,40 @@ describe("buildRuntimeScript", () => {
     expect(script).toContain("const JUKEBOX_HORIZONTAL_SECTION_THRESHOLD_PX = 54;");
     expect(script).toContain("const JUKEBOX_TOUCH_DELTA_SCALE = 5.46;");
   });
+
+  it("eagerly hydrates section backgrounds in runtime output", () => {
+    const project = makeProject();
+    project.meta.backgroundDisplayMode = "section";
+    const script = buildRuntimeScript(project, {
+      defaultBackgroundCarouselSeconds: 9,
+      minBackgroundCarouselSeconds: 2,
+      maxBackgroundCarouselSeconds: 60,
+      instructionCopy: { es: {}, en: {} }
+    });
+
+    expect(script).toContain('if (backgroundDisplayMode === "section") {');
+    expect(script).toContain("const sectionBackgroundPreloadSources = new Set();");
+    expect(script).toContain("backgrounds.forEach((background, index) => {");
+    expect(script).toContain("warmIndexes.add(index);");
+    expect(script).toContain("const preload = new Image();");
+    expect(script).toContain("sectionBackgroundPreloadImages.push(preload);");
+    expect(script).toContain("if (!warmIndexes.has(index)) return;");
+  });
+
+  it("syncs section background immediately during horizontal section scroll", () => {
+    const project = makeProject();
+    project.meta.template = "jukebox";
+    project.meta.backgroundDisplayMode = "section";
+    const script = buildRuntimeScript(project, {
+      defaultBackgroundCarouselSeconds: 9,
+      minBackgroundCarouselSeconds: 2,
+      maxBackgroundCarouselSeconds: 60,
+      instructionCopy: { es: {}, en: {} }
+    });
+
+    expect(script).toContain("const HORIZONTAL_INDEX_HYSTERESIS_PX = 24;");
+    expect(script).toContain("stableHorizontalSectionIndex");
+    expect(script).toContain("const closestIndex = getClosestHorizontalSectionIndex(scroll);");
+    expect(script).toContain("syncBackgroundForSectionIndex(closestIndex);");
+  });
 });

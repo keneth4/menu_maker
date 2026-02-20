@@ -148,6 +148,8 @@ const detailPrefetchedSources = new Set();
 const startupAssetBytes = new Map();
 let startupAssetBytesPromise = null;
 let startupAssetBytesReady = false;
+const sectionBackgroundPreloadSources = new Set();
+const sectionBackgroundPreloadImages = [];
 let detailRotateDirection = -1;
 const jukeboxWheelState = new Map();
 const focusRowWheelState = new Map();
@@ -1815,16 +1817,27 @@ const render = () => {
   }
   applyBackgroundState = () => {
     const layers = Array.from(app.querySelectorAll(".menu-background"));
-    const warmIndexes = [];
-    if (backgrounds.length > 0 && activeBackgroundIndex >= 0) {
-      warmIndexes.push(activeBackgroundIndex);
+    const warmIndexes = new Set();
+    if (backgroundDisplayMode === "section") {
+      backgrounds.forEach((background, index) => {
+        warmIndexes.add(index);
+        const source = (background?.src || "").trim();
+        if (!source || sectionBackgroundPreloadSources.has(source)) return;
+        sectionBackgroundPreloadSources.add(source);
+        const preload = new Image();
+        preload.decoding = "async";
+        preload.src = source;
+        sectionBackgroundPreloadImages.push(preload);
+      });
+    } else if (backgrounds.length > 0 && activeBackgroundIndex >= 0) {
+      warmIndexes.add(activeBackgroundIndex);
       if (backgrounds.length > 1) {
-        warmIndexes.push((activeBackgroundIndex + 1) % backgrounds.length);
+        warmIndexes.add((activeBackgroundIndex + 1) % backgrounds.length);
       }
     }
     layers.forEach((layer, index) => {
       layer.classList.toggle("active", index === activeBackgroundIndex);
-      if (!warmIndexes.includes(index)) return;
+      if (!warmIndexes.has(index)) return;
       if (layer.dataset.bgLoaded === "1") return;
       const source = (layer.dataset.bgSrc || "").trim();
       if (!source) return;
@@ -1986,21 +1999,45 @@ const bindCarouselNav = () => {
   });
 };
 
+const HORIZONTAL_INDEX_HYSTERESIS_PX = 24;
+let stableHorizontalSectionIndex = -1;
 const getClosestHorizontalSectionIndex = (container) => {
   const sections = Array.from(container.querySelectorAll(".menu-section"));
-  if (sections.length === 0) return -1;
+  if (sections.length === 0) {
+    stableHorizontalSectionIndex = -1;
+    return -1;
+  }
   const center = container.scrollLeft + container.clientWidth / 2;
-  let closest = 0;
-  let minDistance = Number.POSITIVE_INFINITY;
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
   sections.forEach((section, index) => {
     const sectionCenter = section.offsetLeft + section.offsetWidth / 2;
     const distance = Math.abs(sectionCenter - center);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closest = index;
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
     }
   });
-  return closest;
+
+  if (
+    stableHorizontalSectionIndex >= 0 &&
+    stableHorizontalSectionIndex < sections.length &&
+    stableHorizontalSectionIndex !== closestIndex
+  ) {
+    const stableSection = sections[stableHorizontalSectionIndex];
+    const stableCenter = stableSection.offsetLeft + stableSection.offsetWidth / 2;
+    const stableDistance = Math.abs(stableCenter - center);
+    const hysteresisPx = Math.max(
+      HORIZONTAL_INDEX_HYSTERESIS_PX,
+      Math.round(container.clientWidth * 0.04)
+    );
+    if (stableDistance <= closestDistance + hysteresisPx) {
+      closestIndex = stableHorizontalSectionIndex;
+    }
+  }
+
+  stableHorizontalSectionIndex = closestIndex;
+  return closestIndex;
 };
 
 const centerSectionHorizontally = (container, index, behavior = "smooth") => {
@@ -2525,6 +2562,10 @@ const bindSectionFocus = () => {
     if (scroll.scrollWidth <= scroll.clientWidth + 4) return;
     let snapTimeout;
     const onScroll = () => {
+      const closestIndex = getClosestHorizontalSectionIndex(scroll);
+      if (closestIndex >= 0) {
+        syncBackgroundForSectionIndex(closestIndex);
+      }
       if (snapTimeout) window.clearTimeout(snapTimeout);
       snapTimeout = window.setTimeout(() => {
         const snapIndex = getClosestHorizontalSectionIndex(scroll);

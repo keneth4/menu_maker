@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "slug": "cafebrunch-menu",
-  "generatedAt": "2026-02-17T23:07:39.632Z",
+  "generatedAt": "2026-02-20T02:25:30.548Z",
   "assets": [
     {
       "outputPath": "app.js",
       "sourcePath": null,
       "role": "shell",
       "mime": "application/javascript",
-      "bytes": 123272,
+      "bytes": 124717,
       "responsiveVariant": null,
       "firstView": false
     },
@@ -157,6 +157,15 @@
       "firstView": false
     },
     {
+      "outputPath": "assets/originals/fonts/MolganRegular-YqWj2.otf",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/fonts/MolganRegular-YqWj2.otf",
+      "role": "font",
+      "mime": "font/otf",
+      "bytes": 23768,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
       "outputPath": "assets/originals/items/all-berry-donut-a85640.gif",
       "sourcePath": "projects/cafebrunch-menu/assets/originals/items/all-berry-donut-a85640.gif",
       "role": "other",
@@ -265,6 +274,15 @@
       "firstView": false
     },
     {
+      "outputPath": "assets/originals/logos/pngegg.png",
+      "sourcePath": "projects/cafebrunch-menu/assets/originals/logos/pngegg.png",
+      "role": "other",
+      "mime": "image/png",
+      "bytes": 43103,
+      "responsiveVariant": null,
+      "firstView": false
+    },
+    {
       "outputPath": "favicon.ico",
       "sourcePath": null,
       "role": "shell",
@@ -287,7 +305,7 @@
       "sourcePath": null,
       "role": "shell",
       "mime": "application/json",
-      "bytes": 35228,
+      "bytes": 35406,
       "responsiveVariant": null,
       "firstView": false
     },
@@ -323,7 +341,7 @@
       "sourcePath": null,
       "role": "shell",
       "mime": "text/css",
-      "bytes": 43669,
+      "bytes": 45186,
       "responsiveVariant": null,
       "firstView": false
     }

@@ -23,13 +23,19 @@
     "defaultLocale": "en",
     "currency": "MXN",
     "currencyPosition": "left",
-    "identityMode": "text",
-    "logoSrc": "",
+    "identityMode": "logo",
+    "logoSrc": "assets/originals/logos/pngegg.png",
     "backgroundCarouselSeconds": 9,
     "backgroundDisplayMode": "section",
     "scrollSensitivity": {
       "item": 5,
       "section": 5
+    },
+    "fontRoles": {
+      "restaurant": {
+        "family": "",
+        "source": "assets/originals/fonts/MolganRegular-YqWj2.otf"
+      }
     }
   },
   "backgrounds": [
