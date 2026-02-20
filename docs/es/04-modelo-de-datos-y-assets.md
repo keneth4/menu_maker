@@ -4,7 +4,10 @@
 Estructura principal:
 - `meta`
   - slug, name, template, locales/defaultLocale, currency, typography, identidad
+  - `identityMode`: `"text"` | `"logo"`
+  - `logoSrc`: source de logo administrado (estrictamente bajo `assets/originals/logos/**` cuando existe)
   - `fontRoles` overrides por rol (`identity`, `restaurant`, `title`, `section`, `item`)
+  - `backgroundCarouselSeconds` normalizado a `2..60` (default/fallback `10`)
   - `scrollSensitivity` (ajuste global de interaccion runtime)
     - `item`: `1..10` (sensibilidad wheel/drag entre items)
     - `section`: `1..10` (sensibilidad para cambio horizontal de seccion)
@@ -15,6 +18,7 @@ Estructura principal:
 - `categories[].items[]`
   - copy localizado, price, allergens, vegan
   - media (`hero360`, opcional `originalHero360`, variantes responsive/derived)
+  - `media.rotationDirection`: `"cw"` | `"ccw"` (default/fallback `"cw"`)
 
 Ruta de normalizacion:
 - `normalizeProject` en `src/core/menu/normalization.ts`
@@ -45,17 +49,30 @@ Los IDs se canonicalizan con alias + fallback seguro:
 - IDs invalidos -> `focus-rows`
 - aliases legacy -> IDs canonicos (`focus-rows`, `jukebox`)
 
+## Comportamiento actual del editor de identidad
+En `Edicion > Identidad`:
+- modo `text`: muestra `Titulo`, `Subtitulo` y controles por rol para `titulo`, `subtitulo`, `secciones` e `items`.
+- modo `logo`: muestra `Asset del logo`, mantiene `Subtitulo`, y muestra controles por rol para `subtitulo`, `secciones` e `items` (los controles de titulo se ocultan).
+- Las filas de titulo/subtitulo son pares inline en este orden: input de texto localizado primero y selector de fuente despues.
+- El mapeo interno de keys de rol se mantiene backward-compatible: `restaurant` corresponde a **Fuente del titulo** y `title` corresponde a **Fuente del subtitulo**.
+
 ## Contrato de assets
 Roots administrados:
 - `assets/originals/backgrounds`
 - `assets/originals/items`
 - `assets/originals/fonts`
+- `assets/originals/logos`
 - derivados en `assets/derived/*`
+
+Reglas de proteccion y alcance:
+- las roots base `assets/originals`, `assets/originals/backgrounds`, `assets/originals/items`, `assets/originals/fonts` y `assets/originals/logos` estan bloqueadas (sin rename/move/delete)
+- los selectores de assets estan filtrados por root (fondos/items/fuentes/logos solo listan su root correspondiente)
 
 ## Reescritura de rutas
 ### Import
 - rutas legacy o de slugs externos se remapean en workflows de import
 - rutas `/projects/<slug>/assets/...` se normalizan al slug activo
+- rutas de logo legacy/no administradas se sanitizan; `logoSrc` se limpia si no resuelve bajo `originals/logos`
 
 ### Save
 - el zip de save preserva originals como source-of-truth editable

@@ -1,10 +1,10 @@
 # 08 - Estado Actual: Snapshot y Delta
 
-## Snapshot baseline (al 2026-02-17)
+## Snapshot baseline (al 2026-02-20)
 
 ### Contexto branch + commit
-- Branch de trabajo: `codex/refactor-isolation`
-- Commit observado durante documentacion: `16a3a25`
+- Branch de trabajo: `main`
+- Commit observado durante documentacion: `81c7d34`
 
 ### Estado de arquitectura
 - Se mantiene composicion por shells delgados:
@@ -26,31 +26,23 @@ Desde `src/App.architecture.test.ts` + medicion actual:
 
 ### Estado de gates (ultima corrida verificada)
 - `npm run build`: PASS
-- `npm test`: PASS (`62` files, `183` tests)
-- `npm run test:e2e`: FAIL (corrida container-first: `33 passed`, `3 skipped`, `6 failed`)
-- `PATH="/Users/keneth4/.nvm/versions/node/v25.6.1/bin:$PATH" npm run test:e2e:local`: FAIL (`36 passed`, `1 skipped`, `5 failed`)
-- `npm run test:perf`: PASS (gate perf en ruta container-first)
-
-Areas e2e actualmente fallando:
-- reactividad de seccion/item en Jukebox (`tests/e2e/jukebox-import-reactivity.spec.ts`)
-- paridad wheel + sensibilidad en Jukebox (`tests/e2e/jukebox-scroll-parity.spec.ts`)
-- assertion de cambio de seccion al cambiar template en Project tab (`tests/e2e/app.spec.ts`)
-- spec de performance fluidity durante corrida e2e completa en contenedor (`tests/e2e/performance-fluidity.spec.ts`)
+- `npm test`: PASS (`67` files, `230` tests)
+- `npm run test:e2e`: no re-ejecutado en este sync documental
+- `npm run test:perf`: no re-ejecutado en este sync documental
 
 ## Delta: superficie in-flight del working tree
-El delta in-flight de esta pasada es solo alineacion documental:
-- `README.md`
-- `docs/en/03-architecture-runtime-deep-dive.md`
-- `docs/en/07-coding-practices-and-extension-playbook.md`
+El delta in-flight de esta pasada incluye alineacion documental:
+- `docs/en/04-data-model-and-assets.md`
+- `docs/en/06-testing-and-gates.md`
 - `docs/en/08-current-state-snapshot-and-delta.md`
-- `docs/es/03-arquitectura-runtime-detalle.md`
-- `docs/es/07-practicas-de-codigo-y-playbook.md`
+- `docs/es/04-modelo-de-datos-y-assets.md`
+- `docs/es/06-pruebas-y-gates.md`
 - `docs/es/08-estado-actual-snapshot-y-delta.md`
 
 ### Riesgos residuales conocidos
-- Sigue abierto el cierre de paridad e2e en rutas de interaccion Jukebox tras los cambios de sensibilidad/recoil.
+- El estado completo de e2e/perf queda pendiente hasta re-ejecutar esos suites en este entorno.
 - La variabilidad de recursos del host puede gatillar fallas de percentiles en perf durante corridas e2e completas.
-- El fallback local de `npm run test:e2e` puede fallar si el Node resuelto por shell no cumple el minimo ESM de Playwright.
+- El fallback local puede fallar cuando el Node resuelto por shell no coincide con el path esperado por Playwright.
 
 ## Referencias operativas
 - Guardrails de arquitectura: `src/App.architecture.test.ts`
