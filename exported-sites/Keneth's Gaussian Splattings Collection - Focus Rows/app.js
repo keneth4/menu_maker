@@ -45,7 +45,7 @@ const sectionBackgroundByCategoryId = new Map(
 );
 const normalizeBackgroundCarouselSeconds = (value) => {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return 9;
+  if (!Number.isFinite(parsed)) return 10;
   return Math.min(60, Math.max(2, Math.round(parsed)));
 };
 const backgroundRotationMs = normalizeBackgroundCarouselSeconds(DATA.meta.backgroundCarouselSeconds) * 1000;
@@ -178,14 +178,11 @@ const withResolvedFontFamily = (config) =>
 const getInterfaceFontConfig = () =>
   withResolvedFontFamily(normalizeFontConfig({ family: fontFamily, source: fontSource }));
 const getRoleFontConfig = (role) => {
-  const identityBaseFont =
-    role === "restaurant" || role === "title"
-      ? getRoleFontConfig("identity")
-      : getInterfaceFontConfig();
+  const interfaceFont = getInterfaceFontConfig();
   const roleFont = normalizeFontConfig(fontRoles?.[role]);
   return withResolvedFontFamily({
-    family: roleFont.family || identityBaseFont.family,
-    source: roleFont.source || identityBaseFont.source
+    family: roleFont.family || interfaceFont.family,
+    source: roleFont.source || interfaceFont.source
   });
 };
 const getItemFontConfig = (item) => {
@@ -208,7 +205,6 @@ const collectRuntimeFontConfigs = () => {
     configs.push(normalized);
   };
   pushConfig(getInterfaceFontConfig());
-  pushConfig(getRoleFontConfig("identity"));
   pushConfig(getRoleFontConfig("restaurant"));
   pushConfig(getRoleFontConfig("title"));
   pushConfig(getRoleFontConfig("section"));
@@ -257,7 +253,6 @@ const ensureFont = () => {
 };
 const getPreviewFontVars = () => {
   const interfaceFont = getInterfaceFontConfig();
-  const identityFont = getRoleFontConfig("identity");
   const restaurantFont = getRoleFontConfig("restaurant");
   const titleFont = getRoleFontConfig("title");
   const sectionFont = getRoleFontConfig("section");
@@ -268,7 +263,7 @@ const getPreviewFontVars = () => {
     ";--menu-font-ui:" +
     getFontStack(interfaceFont.family) +
     ";--menu-font-identity:" +
-    getFontStack(identityFont.family) +
+    getFontStack(interfaceFont.family) +
     ";--menu-font-restaurant:" +
     getFontStack(restaurantFont.family) +
     ";--menu-font-title:" +
@@ -512,7 +507,7 @@ const getInteractiveDetailAsset = (item) => {
 };
 const supportsInteractiveMedia = () =>
   typeof window.ImageDecoder === "function" && typeof createImageBitmap === "function";
-const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "cw" ? -1 : 1);
+const getDishRotateDirection = (dish) => (dish?.media?.rotationDirection === "ccw" ? 1 : -1);
 const INTERACTIVE_CENTER_SAMPLE_TARGET = 6;
   const readForegroundCenterFromBitmap = (bitmap) => {
     const maxSize = 140;
@@ -1811,14 +1806,13 @@ const render = () => {
   const preview = app.querySelector(".menu-preview");
   if (preview) {
     const interfaceFont = getInterfaceFontConfig();
-    const identityFont = getRoleFontConfig("identity");
     const restaurantFont = getRoleFontConfig("restaurant");
     const titleFont = getRoleFontConfig("title");
     const sectionFont = getRoleFontConfig("section");
     const itemFont = getRoleFontConfig("item");
     preview.style.setProperty("--menu-font", getFontStack(interfaceFont.family));
     preview.style.setProperty("--menu-font-ui", getFontStack(interfaceFont.family));
-    preview.style.setProperty("--menu-font-identity", getFontStack(identityFont.family));
+    preview.style.setProperty("--menu-font-identity", getFontStack(interfaceFont.family));
     preview.style.setProperty("--menu-font-restaurant", getFontStack(restaurantFont.family));
     preview.style.setProperty("--menu-font-title", getFontStack(titleFont.family));
     preview.style.setProperty("--menu-font-section", getFontStack(sectionFont.family));
